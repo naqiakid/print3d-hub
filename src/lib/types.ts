@@ -1,11 +1,17 @@
+export type FilamentMaterial = 'pla' | 'petg' | 'abs' | 'tpu' | 'nylon' | 'pc'
+
 export type FilamentCosts = {
-  rigid?: number
-  flexible?: number
-  tough?: number
+  pla?: number
+  petg?: number
+  abs?: number
+  tpu?: number
+  nylon?: number
+  pc?: number
 }
 
 export type PrintType = 'everyday' | 'strong' | 'colorful'
-export type MaterialFeel = 'rigid' | 'flexible' | 'tough'
+/** @deprecated use FilamentMaterial */
+export type MaterialFeel = FilamentMaterial
 export type PrintSize = 'small' | 'medium' | 'large'
 export type PrintQuality = 'draft' | 'standard' | 'premium'
 export type RequestStatus =
@@ -26,7 +32,7 @@ export type Printer = {
   description: string
   printer_model: string
   print_types: PrintType[]
-  materials: MaterialFeel[]
+  materials: FilamentMaterial[]
   max_size: PrintSize
   price_min: number
   price_max: number
@@ -55,7 +61,7 @@ export type PrintRequest = {
   description: string
   file_url: string | null
   print_type: PrintType
-  material: MaterialFeel
+  material: FilamentMaterial
   size: PrintSize
   quality: PrintQuality
   deadline: string
@@ -64,6 +70,20 @@ export type PrintRequest = {
   quoted_price: number | null
   quoted_by_date: string | null
   quote_message: string | null
+  created_at: string
+}
+
+export type PrintProfile = {
+  id: string
+  printer_id: string
+  name: string
+  nozzle_mm: number
+  infill_draft: number
+  infill_standard: number
+  infill_premium: number
+  supports_available: boolean
+  ironing_available: boolean
+  is_default: boolean
   created_at: string
 }
 
@@ -90,16 +110,22 @@ export const PRINT_TYPE_DESCRIPTIONS: Record<PrintType, string> = {
   colorful: 'Multi-color designs and art',
 }
 
-export const MATERIAL_LABELS: Record<MaterialFeel, string> = {
-  rigid: 'Rigid',
-  flexible: 'Flexible',
-  tough: 'Tough',
+export const MATERIAL_LABELS: Record<FilamentMaterial, string> = {
+  pla:   'PLA',
+  petg:  'PETG',
+  abs:   'ABS',
+  tpu:   'TPU',
+  nylon: 'Nylon',
+  pc:    'PC',
 }
 
-export const MATERIAL_DESCRIPTIONS: Record<MaterialFeel, string> = {
-  rigid: 'Hard standard plastic (PLA, PETG, ABS)',
-  flexible: 'Bendy, rubber-like (TPU)',
-  tough: 'Impact & heat resistant (Nylon, PC)',
+export const MATERIAL_DESCRIPTIONS: Record<FilamentMaterial, string> = {
+  pla:   'Easiest to print · great for everyday items, decor & prototypes',
+  petg:  'Moisture-resistant · functional parts, food-safe containers',
+  abs:   'Heat & impact resistant · enclosures, durable parts',
+  tpu:   'Flexible rubber-like · phone cases, gaskets, wearables',
+  nylon: 'High-strength & wear-resistant · gears, hinges, load-bearing parts',
+  pc:    'Engineering-grade · highest heat & impact resistance',
 }
 
 export const SIZE_LABELS: Record<PrintSize, string> = {

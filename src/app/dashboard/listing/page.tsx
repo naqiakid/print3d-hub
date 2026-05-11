@@ -1,20 +1,34 @@
 import Link from 'next/link'
-import { ArrowLeft, ToggleLeft, ToggleRight } from 'lucide-react'
-import { printers } from '@/lib/data'
+import { redirect } from 'next/navigation'
+import { ArrowLeft } from 'lucide-react'
+import { createClient } from '@/lib/supabase/server'
+import type { Printer } from '@/lib/types'
 import { PRINT_TYPE_LABELS, MATERIAL_LABELS, SIZE_LABELS } from '@/lib/types'
+import AvailabilityToggle from '@/components/AvailabilityToggle'
 
-const MY_PRINTER_ID = '1'
+export default async function ListingPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-export default function ListingPage() {
-  const printer = printers.find((p) => p.id === MY_PRINTER_ID)!
+  const { data: printerData } = await supabase
+    .from('printers')
+    .select('*')
+    .eq('owner_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!printerData) redirect('/register')
+  const printer = printerData as unknown as Printer
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
       <Link
         href="/dashboard"
-        className="mb-8 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"
+        className="mb-8 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
       >
-        <ArrowLeft className="h-4 w-4" /> Back to dashboard
+        <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
       </Link>
 
       <h1 className="mb-6 text-2xl font-bold text-slate-900">Manage Listing</h1>
@@ -29,16 +43,10 @@ export default function ListingPage() {
               : 'Your listing is hidden from customers'}
           </p>
         </div>
-        <button className="transition hover:opacity-80">
-          {printer.available ? (
-            <ToggleRight className="h-10 w-10 text-green-500" />
-          ) : (
-            <ToggleLeft className="h-10 w-10 text-slate-300" />
-          )}
-        </button>
+        <AvailabilityToggle printerId={printer.id} initial={printer.available} />
       </div>
 
-      {/* Listing preview */}
+      {/* Listing details */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
         <div className="flex items-start justify-between">
           <div>
@@ -47,7 +55,7 @@ export default function ListingPage() {
           </div>
           <Link
             href={`/printers/${printer.id}`}
-            className="text-xs text-orange-500 hover:text-orange-600"
+            className="text-xs text-orange-500 hover:text-orange-600 transition"
           >
             View public page →
           </Link>
@@ -74,27 +82,57 @@ export default function ListingPage() {
 
         <div className="grid grid-cols-2 gap-3 text-sm border-t border-slate-100 pt-4">
           <div>
-            <span className="text-slate-400 block text-xs">Max size</span>
+            <span className="block text-xs text-slate-400">Max size</span>
             <span className="font-medium text-slate-900">{SIZE_LABELS[printer.max_size]}</span>
           </div>
           <div>
-            <span className="text-slate-400 block text-xs">Price range</span>
+            <span className="block text-xs text-slate-400">Price range</span>
             <span className="font-medium text-slate-900">RM{printer.price_min}–RM{printer.price_max}</span>
           </div>
           <div>
-            <span className="text-slate-400 block text-xs">Turnaround</span>
+            <span className="block text-xs text-slate-400">Turnaround</span>
             <span className="font-medium text-slate-900">{printer.turnaround}</span>
           </div>
           <div>
-            <span className="text-slate-400 block text-xs">WhatsApp</span>
+            <span className="block text-xs text-slate-400">WhatsApp</span>
             <span className="font-medium text-slate-900">{printer.contact_phone}</span>
           </div>
         </div>
 
-        <button className="w-full rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
-          Edit details
-        </button>
+        <div className="flex gap-3 border-t border-slate-100 pt-4">
+          <Link
+            href="/dashboard/profiles"
+            className="flex-1 rounded-xl border border-slate-200 py-2.5 text-center text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+          >
+            Manage profiles
+          </Link>
+        </div>
       </div>
+
+      {/* Cost settings summary */}
+      {printer.filament_costs && (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
+          <h3 className="font-semibold text-slate-900">Cost settings</h3>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <span className="block text-xs text-slate-400">Electricity rate</span>
+              <span className="font-medium text-slate-900">RM{printer.electricity_rate}/kWh</span>
+            </div>
+            <div>
+              <span className="block text-xs text-slate-400">Markup</span>
+              <span className="font-medium text-slate-900">{printer.markup_percent}%</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(printer.filament_costs).map(([mat, cost]) => (
+              <span key={mat} className="rounded-lg bg-slate-50 px-3 py-1.5 text-xs">
+                <span className="font-semibold uppercase text-slate-700">{mat}</span>
+                <span className="ml-1.5 text-slate-500">RM{cost}/kg</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

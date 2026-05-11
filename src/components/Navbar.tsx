@@ -1,8 +1,13 @@
 import Link from 'next/link'
 import { Printer } from 'lucide-react'
 import NavLinks from './NavLinks'
+import UserMenu from './UserMenu'
+import { createClient } from '@/lib/supabase/server'
 
-export default function Navbar() {
+export default async function Navbar() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
@@ -18,18 +23,32 @@ export default function Navbar() {
         <NavLinks />
 
         <div className="flex items-center gap-2">
-          <Link
-            href="/login"
-            className="hidden text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors sm:block"
-          >
-            Log in
-          </Link>
-          <Link
-            href="/register"
-            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600"
-          >
-            List Your Printer
-          </Link>
+          {user ? (
+            <>
+              <Link
+                href="/dashboard"
+                className="hidden text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors sm:block"
+              >
+                Dashboard
+              </Link>
+              <UserMenu email={user.email ?? ''} />
+            </>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="hidden text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors sm:block"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/register"
+                className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600"
+              >
+                List Your Printer
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </header>

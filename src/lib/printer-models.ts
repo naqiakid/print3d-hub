@@ -1,4 +1,4 @@
-import type { PrintType, MaterialFeel, PrintSize } from './types'
+import type { PrintType, FilamentMaterial, PrintSize } from './types'
 
 export type PrinterModelPreset = {
   id: string
@@ -7,7 +7,7 @@ export type PrinterModelPreset = {
   build_volume: string
   max_size: PrintSize
   print_types: PrintType[]
-  materials: MaterialFeel[]
+  materials: FilamentMaterial[]
   power_watts: number
   note?: string
 }
@@ -16,6 +16,8 @@ export type PrinterModelPreset = {
 // Sources: Bambu Lab Wiki, Prusa KB, reviewer Blitzwolf plug measurements (3DPrintBeginner, ThePhonograph.net).
 export const PRINTER_MODELS: PrinterModelPreset[] = [
   // ── Bambu Lab ──────────────────────────────────────────────
+  // ── Bambu Lab ──────────────────────────────────────────────
+  // X1C / P1S: fully enclosed → all materials
   {
     id: 'bambu-x1c',
     brand: 'Bambu Lab',
@@ -23,8 +25,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '256 × 256 × 256 mm',
     max_size: 'large',
     print_types: ['everyday', 'strong'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 120,  // ~100–135W measured (forum watt-meter + Bambu wiki)
+    materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
+    power_watts: 120,
   },
   {
     id: 'bambu-x1c-ams',
@@ -33,8 +35,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '256 × 256 × 256 mm',
     max_size: 'large',
     print_types: ['everyday', 'strong', 'colorful'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 130,  // X1C + ~10W AMS overhead during active feeding
+    materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
+    power_watts: 130,
     note: 'Multi-color via AMS',
   },
   {
@@ -44,8 +46,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '256 × 256 × 256 mm',
     max_size: 'large',
     print_types: ['everyday', 'strong'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 115,  // ~100–130W measured (forum + YouTube watt-meter); enclosed similar to X1C
+    materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
+    power_watts: 115,
   },
   {
     id: 'bambu-p1s-ams',
@@ -54,10 +56,11 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '256 × 256 × 256 mm',
     max_size: 'large',
     print_types: ['everyday', 'strong', 'colorful'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 130,  // P1S + ~10–15W AMS overhead
+    materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
+    power_watts: 130,
     note: 'Multi-color via AMS',
   },
+  // P1P: open frame → no ABS/Nylon/PC reliably
   {
     id: 'bambu-p1p',
     brand: 'Bambu Lab',
@@ -65,9 +68,10 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '256 × 256 × 256 mm',
     max_size: 'large',
     print_types: ['everyday', 'strong'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 60,   // ~55–70W measured (open frame, DC bed, forum energy monitor)
+    materials: ['pla', 'petg', 'tpu'],
+    power_watts: 60,
   },
+  // A1 / A1 Mini: open frame, no high-temp support
   {
     id: 'bambu-a1',
     brand: 'Bambu Lab',
@@ -75,8 +79,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '256 × 256 × 256 mm',
     max_size: 'large',
     print_types: ['everyday'],
-    materials: ['rigid', 'flexible'],
-    power_watts: 95,   // Official Bambu Wiki FAQ: 95W average PLA
+    materials: ['pla', 'petg', 'tpu'],
+    power_watts: 95,
   },
   {
     id: 'bambu-a1-combo',
@@ -85,8 +89,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '256 × 256 × 256 mm',
     max_size: 'large',
     print_types: ['everyday', 'colorful'],
-    materials: ['rigid', 'flexible'],
-    power_watts: 105,  // A1 95W + ~5–10W AMS Lite overhead
+    materials: ['pla', 'petg', 'tpu'],
+    power_watts: 105,
     note: 'Multi-color via AMS Lite',
   },
   {
@@ -96,8 +100,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '180 × 180 × 180 mm',
     max_size: 'medium',
     print_types: ['everyday'],
-    materials: ['rigid', 'flexible'],
-    power_watts: 60,   // Official Bambu Wiki FAQ: 57W average PLA (rounded)
+    materials: ['pla', 'petg'],
+    power_watts: 60,
   },
   {
     id: 'bambu-a1-mini-combo',
@@ -106,12 +110,13 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '180 × 180 × 180 mm',
     max_size: 'medium',
     print_types: ['everyday', 'colorful'],
-    materials: ['rigid', 'flexible'],
-    power_watts: 65,   // A1 Mini 57W + ~5–10W AMS Lite overhead
+    materials: ['pla', 'petg'],
+    power_watts: 65,
     note: 'Multi-color via AMS Lite',
   },
 
   // ── Prusa ──────────────────────────────────────────────────
+  // MK4S / MK3S+: open frame but quality hotend → PLA, PETG, ABS (with care), TPU, Nylon
   {
     id: 'prusa-mk4s',
     brand: 'Prusa',
@@ -119,8 +124,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '250 × 210 × 220 mm',
     max_size: 'large',
     print_types: ['everyday', 'strong'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 90,   // Prusa KB: 80W PLA / 120W ABS; ~90W typical mixed use
+    materials: ['pla', 'petg', 'abs', 'tpu', 'nylon'],
+    power_watts: 90,
   },
   {
     id: 'prusa-mk3s',
@@ -129,9 +134,10 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '250 × 210 × 210 mm',
     max_size: 'large',
     print_types: ['everyday', 'strong'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 90,   // Same PSU/bed as MK4S; Prusa KB + forum measurements
+    materials: ['pla', 'petg', 'abs', 'tpu', 'nylon'],
+    power_watts: 90,
   },
+  // Mini+: compact open frame
   {
     id: 'prusa-mini',
     brand: 'Prusa',
@@ -139,9 +145,10 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '180 × 180 × 180 mm',
     max_size: 'medium',
     print_types: ['everyday'],
-    materials: ['rigid', 'flexible'],
-    power_watts: 65,   // Forum watt-meter: ~60–70W typical PLA; 150W PSU ceiling
+    materials: ['pla', 'petg', 'tpu'],
+    power_watts: 65,
   },
+  // XL: large format, can be enclosed → all materials
   {
     id: 'prusa-xl',
     brand: 'Prusa',
@@ -149,12 +156,13 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '360 × 360 × 360 mm',
     max_size: 'large',
     print_types: ['everyday', 'strong', 'colorful'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 165,  // Forum: 150–180W (single tool, 1–2 bed tiles active)
+    materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
+    power_watts: 165,
     note: 'Multi-tool multi-color',
   },
 
   // ── Creality ───────────────────────────────────────────────
+  // Ender 3 / CR-10: open frame
   {
     id: 'creality-ender3-v3',
     brand: 'Creality',
@@ -162,8 +170,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '220 × 220 × 250 mm',
     max_size: 'large',
     print_types: ['everyday'],
-    materials: ['rigid', 'flexible'],
-    power_watts: 125,  // ~120–130W (Ender 3 architecture, 350W PSU; no V3 KE-specific measurement)
+    materials: ['pla', 'petg', 'tpu'],
+    power_watts: 125,
   },
   {
     id: 'creality-ender3-v3-se',
@@ -172,9 +180,10 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '220 × 220 × 250 mm',
     max_size: 'large',
     print_types: ['everyday'],
-    materials: ['rigid', 'flexible'],
-    power_watts: 110,  // SE runs slower, lower bed duty cycle; ~100–120W estimate
+    materials: ['pla', 'petg', 'tpu'],
+    power_watts: 110,
   },
+  // K1C / K1 Max: enclosed with active filtration → all materials
   {
     id: 'creality-k1c',
     brand: 'Creality',
@@ -182,8 +191,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '220 × 220 × 250 mm',
     max_size: 'large',
     print_types: ['everyday', 'strong'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 175,  // ThePhonograph.net Blitzwolf measurement: ~150–200W during stable print
+    materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
+    power_watts: 175,
     note: 'Carbon fibre capable',
   },
   {
@@ -193,8 +202,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '300 × 300 × 300 mm',
     max_size: 'large',
     print_types: ['everyday', 'strong'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 225,  // ~200–250W (larger AC bed; inferred — no clean measurement found)
+    materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
+    power_watts: 225,
   },
   {
     id: 'creality-cr10',
@@ -203,8 +212,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '300 × 300 × 400 mm',
     max_size: 'large',
     print_types: ['everyday'],
-    materials: ['rigid', 'flexible'],
-    power_watts: 75,   // 3DPrintBeginner Blitzwolf: stabilises to ~75W after heatup
+    materials: ['pla', 'petg', 'tpu'],
+    power_watts: 75,
   },
 
   // ── AnkerMake ──────────────────────────────────────────────
@@ -215,11 +224,12 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '220 × 220 × 250 mm',
     max_size: 'large',
     print_types: ['everyday'],
-    materials: ['rigid', 'flexible'],
-    power_watts: 85,   // 3DPrintBeginner Blitzwolf: stabilises to ~85W during printing
+    materials: ['pla', 'petg', 'tpu'],
+    power_watts: 85,
   },
 
   // ── Voron ──────────────────────────────────────────────────
+  // All Voron builds are fully enclosed → all materials
   {
     id: 'voron-24',
     brand: 'Voron',
@@ -227,8 +237,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '300 × 300 × 300 mm',
     max_size: 'large',
     print_types: ['everyday', 'strong'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 165,  // 300mm build ~150–180W (extrapolated from 350mm forum measurements)
+    materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
+    power_watts: 165,
     note: 'Enclosed, high-temp capable',
   },
   {
@@ -238,8 +248,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '250 × 250 × 250 mm',
     max_size: 'large',
     print_types: ['everyday', 'strong'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 170,  // 3DPrintBeginner FYSETC kit Blitzwolf: ~170W stable printing
+    materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
+    power_watts: 170,
     note: 'Enclosed, high-temp capable',
   },
   {
@@ -249,8 +259,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     build_volume: '120 × 120 × 120 mm',
     max_size: 'medium',
     print_types: ['everyday', 'strong'],
-    materials: ['rigid', 'flexible', 'tough'],
-    power_watts: 50,   // 120mm build; 100W bed heater at ~30–40% duty + electronics ~50W total
+    materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
+    power_watts: 50,
     note: 'Compact enclosed build',
   },
 ]

@@ -3,8 +3,80 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from './supabase/server'
-import type { RequestStatus, PrintType, MaterialFeel, PrintSize, FilamentCosts } from './types'
+import type { RequestStatus, PrintType, FilamentMaterial, PrintSize, FilamentCosts } from './types'
 import { calculatePriceRange } from './pricing'
+
+// ─── Print Profile CRUD ─────────────────────────────────────
+
+export async function createProfile(data: {
+  printer_id: string
+  name: string
+  nozzle_mm: number
+  infill_draft: number
+  infill_standard: number
+  infill_premium: number
+  supports_available: boolean
+  ironing_available: boolean
+  is_default: boolean
+}): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  if (data.is_default) {
+    await supabase
+      .from('print_profiles')
+      .update({ is_default: false })
+      .eq('printer_id', data.printer_id)
+  }
+
+  const { error } = await supabase.from('print_profiles').insert(data)
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/profiles')
+}
+
+export async function updateProfile(
+  id: string,
+  printer_id: string,
+  data: {
+    name: string
+    nozzle_mm: number
+    infill_draft: number
+    infill_standard: number
+    infill_premium: number
+    supports_available: boolean
+    ironing_available: boolean
+    is_default: boolean
+  }
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  if (data.is_default) {
+    await supabase
+      .from('print_profiles')
+      .update({ is_default: false })
+      .eq('printer_id', printer_id)
+  }
+
+  const { error } = await supabase
+    .from('print_profiles')
+    .update(data)
+    .eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/profiles')
+}
+
+export async function deleteProfile(id: string): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase.from('print_profiles').delete().eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/profiles')
+}
 
 export async function registerPrinter(data: {
   name: string
@@ -12,13 +84,12 @@ export async function registerPrinter(data: {
   printer_model: string
   printer_model_id: string
   print_types: PrintType[]
-  materials: MaterialFeel[]
+  materials: FilamentMaterial[]
   max_size: PrintSize
   turnaround: string
   contact_phone: string
   power_watts: number
   filament_costs: FilamentCosts
-  grams_per_roll: number
   electricity_rate: number
   markup_percent: number
 }): Promise<{ error: string } | undefined> {
@@ -32,7 +103,6 @@ export async function registerPrinter(data: {
     materials: data.materials,
     filament_costs: data.filament_costs,
     power_watts: data.power_watts,
-    grams_per_roll: data.grams_per_roll,
     electricity_rate: data.electricity_rate,
     markup_percent: data.markup_percent,
   })
@@ -49,7 +119,6 @@ export async function registerPrinter(data: {
     contact_phone: data.contact_phone,
     power_watts: data.power_watts,
     filament_costs: data.filament_costs,
-    grams_per_roll: data.grams_per_roll,
     electricity_rate: data.electricity_rate,
     markup_percent: data.markup_percent,
     price_min,
@@ -122,6 +191,33 @@ export async function sendQuote(
 
   if (error) return { error: error.message }
   revalidatePath('/dashboard')
+}
+
+export async function updateAvailability(
+  printerId: string,
+  available: boolean,
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('printers')
+    .update({ available })
+    .eq('id', printerId)
+    .eq('owner_id', user.id)
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard')
+  revalidatePath('/dashboard/listing')
+}
+
+export async function updatePassword(
+  newPassword: string,
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { error } = await supabase.auth.updateUser({ password: newPassword })
+  if (error) return { error: error.message }
 }
 
 export async function logout(): Promise<void> {

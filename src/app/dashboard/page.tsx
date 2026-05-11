@@ -16,7 +16,9 @@ export default async function DashboardPage() {
     .from('printers')
     .select('*')
     .eq('owner_id', user.id)
-    .single()
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
   if (!printerData) {
     return (
@@ -80,6 +82,12 @@ export default async function DashboardPage() {
           >
             {printer.available ? 'Available' : 'Busy'}
           </span>
+          <Link
+            href="/dashboard/profiles"
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+          >
+            Profiles
+          </Link>
           <Link
             href="/dashboard/listing"
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"

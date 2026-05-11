@@ -32,8 +32,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
           quality: request.quality,
           material: request.material,
           power_watts: printer.power_watts ?? 150,
-          cost_per_roll: printer.filament_costs[request.material]!,
-          grams_per_roll: printer.grams_per_roll ?? 1000,
+          cost_per_kg: printer.filament_costs[request.material]!,
           electricity_rate: printer.electricity_rate ?? 0.57,
           markup_percent: printer.markup_percent ?? 30,
         })

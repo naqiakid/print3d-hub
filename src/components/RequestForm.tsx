@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { CheckCircle, Upload } from 'lucide-react'
-import type { Printer, PrintType, MaterialFeel, PrintSize, PrintQuality } from '@/lib/types'
+import type { Printer, PrintType, FilamentMaterial, PrintSize, PrintQuality } from '@/lib/types'
 import {
   PRINT_TYPE_LABELS,
   PRINT_TYPE_DESCRIPTIONS,
@@ -22,7 +22,7 @@ export default function RequestForm({ printer }: { printer: Printer }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   const [printType, setPrintType] = useState<PrintType | ''>('')
-  const [material, setMaterial] = useState<MaterialFeel | ''>('')
+  const [material, setMaterial] = useState<FilamentMaterial | ''>('')
   const [size, setSize] = useState<PrintSize | ''>('')
   const [quality, setQuality] = useState<PrintQuality | ''>('')
 
@@ -85,8 +85,7 @@ export default function RequestForm({ printer }: { printer: Printer }) {
           quality,
           material,
           power_watts: printer.power_watts ?? 150,
-          cost_per_roll: printer.filament_costs[material]!,
-          grams_per_roll: printer.grams_per_roll ?? 1000,
+          cost_per_kg: printer.filament_costs[material]!,
           electricity_rate: printer.electricity_rate ?? 0.57,
           markup_percent: printer.markup_percent ?? 30,
         })

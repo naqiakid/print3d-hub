@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import { Check } from 'lucide-react'
-import type { PrintType, MaterialFeel, FilamentCosts } from '@/lib/types'
+import type { PrintType, FilamentMaterial, FilamentCosts } from '@/lib/types'
 import { PRINT_TYPE_LABELS, MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, SIZE_LABELS } from '@/lib/types'
 import { PRINTER_MODELS, BRANDS, type PrinterModelPreset } from '@/lib/printer-models'
 import {
   DEFAULT_ELECTRICITY_RATE,
-  DEFAULT_GRAMS_PER_ROLL,
   DEFAULT_MARKUP_PERCENT,
+  DEFAULT_FILAMENT_COST_PER_KG,
   calculatePriceRange,
 } from '@/lib/pricing'
 import { registerPrinter } from '@/lib/actions'
@@ -27,15 +27,17 @@ export default function RegisterWizard() {
   const [selectedPreset, setSelectedPreset] = useState<PrinterModelPreset | null>(null)
   const [activeBrand, setActiveBrand] = useState(BRANDS[0])
   const [printTypes, setPrintTypes] = useState<PrintType[]>([])
-  const [materials, setMaterials] = useState<MaterialFeel[]>([])
+  const [materials, setMaterials] = useState<FilamentMaterial[]>([])
 
   // Step 1 — Cost Setup
-  const [filamentCosts, setFilamentCosts] = useState<Record<MaterialFeel, string>>({
-    rigid: '',
-    flexible: '',
-    tough: '',
+  const [filamentCosts, setFilamentCosts] = useState<Record<FilamentMaterial, string>>({
+    pla:   String(DEFAULT_FILAMENT_COST_PER_KG.pla),
+    petg:  String(DEFAULT_FILAMENT_COST_PER_KG.petg),
+    abs:   String(DEFAULT_FILAMENT_COST_PER_KG.abs),
+    tpu:   String(DEFAULT_FILAMENT_COST_PER_KG.tpu),
+    nylon: String(DEFAULT_FILAMENT_COST_PER_KG.nylon),
+    pc:    String(DEFAULT_FILAMENT_COST_PER_KG.pc),
   })
-  const [gramsPerRoll, setGramsPerRoll] = useState(String(DEFAULT_GRAMS_PER_ROLL))
   const [electricityRate, setElectricityRate] = useState(String(DEFAULT_ELECTRICITY_RATE))
   const [markupPercent, setMarkupPercent] = useState(String(DEFAULT_MARKUP_PERCENT))
 
@@ -55,15 +57,15 @@ export default function RegisterWizard() {
     setPrintTypes((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]))
   }
 
-  function toggleMaterial(m: MaterialFeel) {
+  function toggleMaterial(m: FilamentMaterial) {
     setMaterials((p) => (p.includes(m) ? p.filter((x) => x !== m) : [...p, m]))
   }
 
   const step0Valid = selectedPreset && printTypes.length > 0 && materials.length > 0
 
   const step1Valid =
+    materials.length > 0 &&
     materials.every((m) => Number(filamentCosts[m]) > 0) &&
-    Number(gramsPerRoll) > 0 &&
     Number(electricityRate) > 0
 
   const step2Valid = serviceName && turnaround && phone
@@ -83,7 +85,6 @@ export default function RegisterWizard() {
       materials,
       filament_costs: buildFilamentCosts(),
       power_watts: selectedPreset.power_watts,
-      grams_per_roll: Number(gramsPerRoll),
       electricity_rate: Number(electricityRate),
       markup_percent: Number(markupPercent),
     })
@@ -105,7 +106,6 @@ export default function RegisterWizard() {
       contact_phone: phone,
       power_watts: selectedPreset.power_watts,
       filament_costs: buildFilamentCosts(),
-      grams_per_roll: Number(gramsPerRoll),
       electricity_rate: Number(electricityRate),
       markup_percent: Number(markupPercent),
     })
@@ -243,7 +243,7 @@ export default function RegisterWizard() {
               <div>
                 <p className="mb-2 text-xs font-medium text-slate-600">Materials you have in stock</p>
                 <div className="flex flex-wrap gap-2">
-                  {(['rigid', 'flexible', 'tough'] as MaterialFeel[]).map((m) => {
+                  {(['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'] as FilamentMaterial[]).map((m) => {
                     const included = selectedPreset.materials.includes(m)
                     const active = materials.includes(m)
                     return (
@@ -286,43 +286,71 @@ export default function RegisterWizard() {
       {step === 1 && selectedPreset && (
         <div className="space-y-5">
           <p className="text-sm text-slate-500">
-            Enter your filament costs so the platform can calculate fair, consistent prices for every job.
+            Select the materials you offer and enter your average filament cost per kilogram. At least one material is required.
           </p>
 
-          {/* Filament costs per material */}
+          {/* Material rows */}
           <div className="space-y-3">
-            <p className="text-sm font-medium text-slate-700">Filament cost per roll (RM)</p>
-            {materials.map((m) => (
-              <div key={m} className="flex items-center gap-3">
-                <span className="w-24 shrink-0 text-sm text-slate-600">{MATERIAL_LABELS[m]}</span>
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">RM</span>
-                  <input
-                    type="number"
-                    value={filamentCosts[m]}
-                    onChange={(e) => setFilamentCosts((prev) => ({ ...prev, [m]: e.target.value }))}
-                    placeholder="50"
-                    min="1"
-                    className={`${inputClass} pl-10`}
-                  />
+            <p className="text-sm font-medium text-slate-700">Materials & filament cost (RM/kg)</p>
+            {(['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'] as FilamentMaterial[]).map((m) => {
+              const supported = selectedPreset.materials.includes(m)
+              const enabled = materials.includes(m)
+              return (
+                <div
+                  key={m}
+                  className={`rounded-xl border p-4 transition ${
+                    !supported
+                      ? 'border-slate-100 bg-slate-50 opacity-40'
+                      : enabled
+                      ? 'border-orange-300 bg-orange-50/40'
+                      : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={!supported}
+                      onClick={() => supported && toggleMaterial(m)}
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition ${
+                        enabled && supported
+                          ? 'border-orange-500 bg-orange-500'
+                          : 'border-slate-300 bg-white'
+                      }`}
+                    >
+                      {enabled && supported && <Check className="h-3 w-3 text-white" />}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium ${enabled && supported ? 'text-slate-800' : 'text-slate-400'}`}>
+                        {MATERIAL_LABELS[m]}
+                      </p>
+                      <p className="text-xs text-slate-400">{MATERIAL_DESCRIPTIONS[m]}</p>
+                    </div>
+                    <div className="shrink-0 w-32">
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">RM</span>
+                        <input
+                          type="number"
+                          disabled={!supported || !enabled}
+                          value={filamentCosts[m]}
+                          onChange={(e) => setFilamentCosts((prev) => ({ ...prev, [m]: e.target.value }))}
+                          min="1"
+                          className={`${inputClass} pl-10 ${(!supported || !enabled) ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        />
+                      </div>
+                      {supported && enabled && Number(filamentCosts[m]) === DEFAULT_FILAMENT_COST_PER_KG[m] && (
+                        <p className="mt-0.5 text-center text-xs text-slate-400">market rate</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
+            {materials.length === 0 && (
+              <p className="text-xs text-red-500">Select at least one material to continue.</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Grams per roll</label>
-              <input
-                type="number"
-                value={gramsPerRoll}
-                onChange={(e) => setGramsPerRoll(e.target.value)}
-                placeholder="1000"
-                min="1"
-                className={inputClass}
-              />
-              <p className="mt-1 text-xs text-slate-400">Usually 1000g</p>
-            </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Electricity rate</label>
               <div className="relative">
@@ -339,22 +367,21 @@ export default function RegisterWizard() {
               </div>
               <p className="mt-1 text-xs text-slate-400">Per kWh</p>
             </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Overhead & profit %</label>
-            <div className="relative">
-              <input
-                type="number"
-                value={markupPercent}
-                onChange={(e) => setMarkupPercent(e.target.value)}
-                placeholder="30"
-                min="0"
-                className={`${inputClass} pr-8`}
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">%</span>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Overhead & profit %</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={markupPercent}
+                  onChange={(e) => setMarkupPercent(e.target.value)}
+                  placeholder="30"
+                  min="0"
+                  className={`${inputClass} pr-8`}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">%</span>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">On top of filament + electricity</p>
             </div>
-            <p className="mt-1 text-xs text-slate-400">Applied on top of filament + electricity costs</p>
           </div>
 
           {/* Live price preview */}
@@ -365,10 +392,10 @@ export default function RegisterWizard() {
                 RM {range.price_min} – RM {range.price_max}
               </p>
             ) : (
-              <p className="text-sm text-slate-400">Fill in costs above to see your price range</p>
+              <p className="text-sm text-slate-400">Fill in material costs above to see your price range</p>
             )}
             <p className="mt-1 text-xs text-slate-400">
-              Based on small draft → large premium print · {selectedPreset.power_watts}W · {gramsPerRoll}g roll
+              Based on small draft → large premium print · {selectedPreset.power_watts}W
             </p>
           </div>
 
