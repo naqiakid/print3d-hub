@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, Star, Clock, Ruler, Phone } from 'lucide-react'
-import { getPrinterById, printers } from '@/lib/data'
+import { createClient } from '@/lib/supabase/server'
+import type { Printer } from '@/lib/types'
 import {
   PRINT_TYPE_LABELS,
   PRINT_TYPE_DESCRIPTIONS,
@@ -10,18 +11,17 @@ import {
   SIZE_LABELS,
 } from '@/lib/types'
 
-export function generateStaticParams() {
-  return printers.map((p) => ({ id: p.id }))
-}
-
 export default async function PrinterDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const printer = getPrinterById(id)
-  if (!printer) notFound()
+  const supabase = await createClient()
+
+  const { data } = await supabase.from('printers').select('*').eq('id', id).single()
+  if (!data) notFound()
+  const printer = data as unknown as Printer
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
@@ -168,7 +168,7 @@ export default async function PrinterDetailPage({
         </div>
       </div>
 
-      {/* ── Reviews placeholder ── */}
+      {/* ── Reviews ── */}
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold text-slate-900">
           Reviews

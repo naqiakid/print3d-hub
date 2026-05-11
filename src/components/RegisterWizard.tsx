@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle } from 'lucide-react'
 import type { PrintType, MaterialFeel, PrintSize } from '@/lib/types'
 import { PRINT_TYPE_LABELS, PRINT_TYPE_DESCRIPTIONS, MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, SIZE_LABELS } from '@/lib/types'
+import { registerPrinter } from '@/lib/actions'
 
 const PRINTER_MODELS = [
   'Bambu Lab X1C', 'Bambu Lab X1C AMS', 'Bambu Lab P1S', 'Bambu Lab P1S AMS',
@@ -19,8 +19,8 @@ const inputClass =
 
 export default function RegisterWizard() {
   const [step, setStep] = useState(0)
-  const [done, setDone] = useState(false)
   const [pending, setPending] = useState(false)
+  const [publishError, setPublishError] = useState('')
 
   // Step 0 — Printer
   const [model, setModel] = useState('')
@@ -47,27 +47,26 @@ export default function RegisterWizard() {
   const step1Valid = serviceName && priceMin && priceMax && turnaround && phone
 
   async function handlePublish() {
+    if (!maxSize) return
     setPending(true)
-    await new Promise((r) => setTimeout(r, 1000))
-    setPending(false)
-    setDone(true)
-  }
-
-  if (done) {
-    return (
-      <div className="flex flex-col items-center py-12 text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-          <CheckCircle className="h-8 w-8 text-green-600" />
-        </div>
-        <h2 className="mb-2 text-xl font-bold text-slate-900">You&apos;re live!</h2>
-        <p className="max-w-sm text-sm text-slate-600">
-          <strong>{serviceName}</strong> is now listed on Print3DHub. Customers in your area can find and request prints from you.
-        </p>
-        <a href="/dashboard" className="mt-6 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white hover:bg-orange-600 transition-colors">
-          Go to Dashboard
-        </a>
-      </div>
-    )
+    setPublishError('')
+    const result = await registerPrinter({
+      name: serviceName,
+      description,
+      printer_model: model,
+      print_types: printTypes,
+      materials,
+      max_size: maxSize,
+      price_min: Number(priceMin),
+      price_max: Number(priceMax),
+      turnaround,
+      contact_phone: phone,
+    })
+    if (result?.error) {
+      setPublishError(result.error)
+      setPending(false)
+    }
+    // on success, registerPrinter redirects to /dashboard server-side
   }
 
   return (
@@ -338,6 +337,10 @@ export default function RegisterWizard() {
           <p className="text-xs text-slate-400 text-center">
             Your listing will go live immediately. You can edit it anytime from your dashboard.
           </p>
+
+          {publishError && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{publishError}</p>
+          )}
 
           <div className="flex gap-3">
             <button

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
@@ -11,14 +12,42 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
     setError('')
     setPending(true)
-    await new Promise((r) => setTimeout(r, 800))
-    setPending(false)
-    // TODO: connect to Supabase Auth
+
+    const form = e.currentTarget
+    const email = (form.elements.namedItem('email') as HTMLInputElement).value
+    const password = (form.elements.namedItem('password') as HTMLInputElement).value
+    const supabase = createClient()
+
+    if (mode === 'signup') {
+      const name = (form.elements.namedItem('name') as HTMLInputElement).value
+      const { error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { name } },
+      })
+      if (authError) {
+        setError(authError.message)
+        setPending(false)
+        return
+      }
+    } else {
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      if (authError) {
+        setError(authError.message)
+        setPending(false)
+        return
+      }
+    }
+
     router.push('/dashboard')
+    router.refresh()
   }
 
   return (

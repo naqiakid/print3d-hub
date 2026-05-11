@@ -1,30 +1,67 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { Star, Package, CheckCircle, Clock } from 'lucide-react'
-import { printers, mockRequests } from '@/lib/data'
-import { STATUS_LABELS, STATUS_COLORS } from '@/lib/types'
-import type { RequestStatus } from '@/lib/types'
+import { createClient } from '@/lib/supabase/server'
+import type { Printer, PrintRequest, RequestStatus } from '@/lib/types'
 import RequestCard from '@/components/RequestCard'
 
-// For the demo, we show the first printer's data as "the logged-in owner"
-const MY_PRINTER_ID = '1'
+export default async function DashboardPage() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-export default function DashboardPage() {
-  const printer = printers.find((p) => p.id === MY_PRINTER_ID)!
-  const requests = mockRequests.filter((r) => r.printer_id === MY_PRINTER_ID)
+  const { data: printerData } = await supabase
+    .from('printers')
+    .select('*')
+    .eq('owner_id', user.id)
+    .single()
+
+  if (!printerData) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+        <h1 className="mb-2 text-2xl font-bold text-slate-900">Welcome to your dashboard</h1>
+        <p className="mb-8 text-slate-500">You haven&apos;t listed your printer yet.</p>
+        <Link
+          href="/register"
+          className="inline-block rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+        >
+          List Your Printer →
+        </Link>
+      </div>
+    )
+  }
+
+  const printer = printerData as unknown as Printer
+
+  const { data: requestData } = await supabase
+    .from('requests')
+    .select('*')
+    .eq('printer_id', printer.id)
+    .order('created_at', { ascending: false })
+
+  const requests = (requestData ?? []) as unknown as PrintRequest[]
 
   const newCount = requests.filter((r) => r.status === 'new').length
   const activeCount = requests.filter((r) =>
-    ['accepted', 'printing'].includes(r.status)
+    ['accepted', 'printing'].includes(r.status),
   ).length
   const doneCount = requests.filter((r) =>
-    ['collected', 'reviewed'].includes(r.status)
+    ['collected', 'reviewed'].includes(r.status),
   ).length
 
   const tabs: { label: string; statuses: RequestStatus[] }[] = [
     { label: 'New', statuses: ['new'] },
     { label: 'In Progress', statuses: ['quoted', 'accepted', 'printing'] },
     { label: 'Ready / Done', statuses: ['done', 'collected', 'reviewed'] },
-    { label: 'All', statuses: ['new', 'quoted', 'accepted', 'printing', 'done', 'collected', 'reviewed', 'declined', 'cancelled'] },
+    {
+      label: 'All',
+      statuses: [
+        'new', 'quoted', 'accepted', 'printing', 'done',
+        'collected', 'reviewed', 'declined', 'cancelled',
+      ],
+    },
   ]
 
   return (
@@ -105,7 +142,7 @@ export default function DashboardPage() {
           })}
         </div>
 
-        {/* Request list — showing all for demo */}
+        {/* Request list */}
         <div className="space-y-3">
           {requests.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center">
@@ -115,9 +152,7 @@ export default function DashboardPage() {
               </p>
             </div>
           ) : (
-            requests.map((request) => (
-              <RequestCard key={request.id} request={request} />
-            ))
+            requests.map((request) => <RequestCard key={request.id} request={request} />)
           )}
         </div>
       </div>

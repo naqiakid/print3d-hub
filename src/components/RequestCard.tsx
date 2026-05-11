@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { Calendar, FileText, MessageSquare } from 'lucide-react'
-import type { PrintRequest } from '@/lib/types'
+import type { PrintRequest, RequestStatus } from '@/lib/types'
 import {
   STATUS_LABELS,
   STATUS_COLORS,
@@ -11,32 +11,37 @@ import {
   SIZE_LABELS,
   QUALITY_LABELS,
 } from '@/lib/types'
+import { updateRequestStatus, sendQuote } from '@/lib/actions'
+
+const inputClass =
+  'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
 
 export default function RequestCard({ request }: { request: PrintRequest }) {
   const [expanded, setExpanded] = useState(false)
+  const [showQuoteForm, setShowQuoteForm] = useState(false)
+  const [quotePrice, setQuotePrice] = useState('')
+  const [quoteDate, setQuoteDate] = useState('')
+  const [quoteMessage, setQuoteMessage] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [isPending, startTransition] = useTransition()
 
-  const nextActions: Record<string, { label: string; color: string }[]> = {
-    new: [
-      { label: 'Send Quote', color: 'bg-orange-500 text-white hover:bg-orange-600' },
-      { label: 'Decline', color: 'bg-slate-100 text-slate-600 hover:bg-slate-200' },
-    ],
-    quoted: [],
-    accepted: [
-      { label: 'Mark as Printing', color: 'bg-purple-500 text-white hover:bg-purple-600' },
-    ],
-    printing: [
-      { label: 'Mark as Done', color: 'bg-teal-500 text-white hover:bg-teal-600' },
-    ],
-    done: [
-      { label: 'Mark as Collected', color: 'bg-green-500 text-white hover:bg-green-600' },
-    ],
-    collected: [],
-    reviewed: [],
-    declined: [],
-    cancelled: [],
+  function handleStatusUpdate(newStatus: RequestStatus) {
+    setActionError('')
+    startTransition(async () => {
+      const result = await updateRequestStatus(request.id, newStatus)
+      if (result?.error) setActionError(result.error)
+    })
   }
 
-  const actions = nextActions[request.status] ?? []
+  function handleSendQuote() {
+    if (!quotePrice || !quoteDate) return
+    setActionError('')
+    startTransition(async () => {
+      const result = await sendQuote(request.id, Number(quotePrice), quoteDate, quoteMessage)
+      if (result?.error) setActionError(result.error)
+      else setShowQuoteForm(false)
+    })
+  }
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -130,17 +135,113 @@ export default function RequestCard({ request }: { request: PrintRequest }) {
             {request.customer_email} · {request.customer_phone}
           </div>
 
-          {/* Actions */}
-          {actions.length > 0 && (
-            <div className="flex gap-2 pt-1">
-              {actions.map(({ label, color }) => (
+          {/* Inline quote form */}
+          {showQuoteForm && (
+            <div className="rounded-xl border border-orange-100 bg-orange-50 p-4 space-y-3">
+              <p className="text-sm font-semibold text-slate-800">Send a quote</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Price (RM)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="35"
+                    value={quotePrice}
+                    onChange={(e) => setQuotePrice(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Ready by</label>
+                  <input
+                    type="date"
+                    value={quoteDate}
+                    onChange={(e) => setQuoteDate(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Message (optional)</label>
+                <input
+                  type="text"
+                  placeholder="Any notes for the customer..."
+                  value={quoteMessage}
+                  onChange={(e) => setQuoteMessage(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <div className="flex gap-2">
                 <button
-                  key={label}
-                  className={`rounded-xl px-4 py-2 text-sm font-medium transition ${color}`}
+                  onClick={handleSendQuote}
+                  disabled={!quotePrice || !quoteDate || isPending}
+                  className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-600 disabled:opacity-50"
                 >
-                  {label}
+                  {isPending ? 'Sending...' : 'Send Quote'}
                 </button>
-              ))}
+                <button
+                  onClick={() => setShowQuoteForm(false)}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Error */}
+          {actionError && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{actionError}</p>
+          )}
+
+          {/* Action buttons */}
+          {!showQuoteForm && (
+            <div className="flex gap-2 pt-1">
+              {request.status === 'new' && (
+                <>
+                  <button
+                    onClick={() => setShowQuoteForm(true)}
+                    disabled={isPending}
+                    className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-600 disabled:opacity-50"
+                  >
+                    Send Quote
+                  </button>
+                  <button
+                    onClick={() => handleStatusUpdate('declined')}
+                    disabled={isPending}
+                    className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-200 disabled:opacity-50"
+                  >
+                    {isPending ? '...' : 'Decline'}
+                  </button>
+                </>
+              )}
+              {request.status === 'accepted' && (
+                <button
+                  onClick={() => handleStatusUpdate('printing')}
+                  disabled={isPending}
+                  className="rounded-xl bg-purple-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-purple-600 disabled:opacity-50"
+                >
+                  {isPending ? '...' : 'Mark as Printing'}
+                </button>
+              )}
+              {request.status === 'printing' && (
+                <button
+                  onClick={() => handleStatusUpdate('done')}
+                  disabled={isPending}
+                  className="rounded-xl bg-teal-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-600 disabled:opacity-50"
+                >
+                  {isPending ? '...' : 'Mark as Done'}
+                </button>
+              )}
+              {request.status === 'done' && (
+                <button
+                  onClick={() => handleStatusUpdate('collected')}
+                  disabled={isPending}
+                  className="rounded-xl bg-green-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-green-600 disabled:opacity-50"
+                >
+                  {isPending ? '...' : 'Mark as Collected'}
+                </button>
+              )}
             </div>
           )}
         </div>

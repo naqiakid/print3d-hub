@@ -1,13 +1,21 @@
 import type { Metadata } from 'next'
 import PrinterCard from '@/components/PrinterCard'
-import { printers } from '@/lib/data'
+import { createClient } from '@/lib/supabase/server'
+import type { Printer } from '@/lib/types'
 
 export const metadata: Metadata = {
   title: 'Browse Printers | Print3DHub',
   description: 'Find 3D printing services near you',
 }
 
-export default function PrintersPage() {
+export default async function PrintersPage() {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('printers')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  const printers = (data ?? []) as unknown as Printer[]
   const available = printers.filter((p) => p.available)
   const busy = printers.filter((p) => !p.available)
 
@@ -16,9 +24,16 @@ export default function PrintersPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900">Browse Printers</h1>
         <p className="mt-1 text-slate-600">
-          {printers.length} printing services · sorted by distance
+          {printers.length} printing service{printers.length !== 1 ? 's' : ''} · sorted by distance
         </p>
       </div>
+
+      {printers.length === 0 && (
+        <div className="flex flex-col items-center py-24 text-center">
+          <p className="text-lg font-medium text-slate-500">No printers listed yet</p>
+          <p className="mt-1 text-sm text-slate-400">Be the first to list your 3D printer!</p>
+        </div>
+      )}
 
       {available.length > 0 && (
         <section className="mb-12">

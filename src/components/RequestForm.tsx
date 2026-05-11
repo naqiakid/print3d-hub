@@ -11,6 +11,7 @@ import {
   SIZE_LABELS,
   QUALITY_LABELS,
 } from '@/lib/types'
+import { submitRequest } from '@/lib/actions'
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
@@ -18,17 +19,38 @@ const inputClass =
 export default function RequestForm({ printer }: { printer: Printer }) {
   const [submitted, setSubmitted] = useState(false)
   const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
   const [printType, setPrintType] = useState<PrintType | ''>('')
   const [material, setMaterial] = useState<MaterialFeel | ''>('')
   const [size, setSize] = useState<PrintSize | ''>('')
   const [quality, setQuality] = useState<PrintQuality | ''>('')
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!printType || !material || !size || !quality) return
+    setError('')
     setPending(true)
-    await new Promise((r) => setTimeout(r, 1000))
+
+    const form = e.currentTarget
+    const result = await submitRequest({
+      printer_id: printer.id,
+      customer_name: (form.elements.namedItem('name') as HTMLInputElement).value,
+      customer_email: (form.elements.namedItem('email') as HTMLInputElement).value,
+      customer_phone: (form.elements.namedItem('phone') as HTMLInputElement).value,
+      description: (form.elements.namedItem('description') as HTMLTextAreaElement).value,
+      print_type: printType,
+      material,
+      size,
+      quality,
+      deadline: (form.elements.namedItem('deadline') as HTMLInputElement).value,
+      notes: (form.elements.namedItem('notes') as HTMLInputElement).value ?? '',
+    })
+
     setPending(false)
+    if (result?.error) {
+      setError(result.error)
+      return
+    }
     setSubmitted(true)
   }
 
@@ -92,7 +114,7 @@ export default function RequestForm({ printer }: { printer: Printer }) {
           placeholder="Describe what you need. e.g. A small phone stand for my desk, roughly 10cm tall..."
           className={`${inputClass} resize-none`}
         />
-        {/* File upload */}
+        {/* File upload — stored locally for now, Supabase Storage in Phase 4 */}
         <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 hover:border-orange-300 hover:bg-orange-50 transition">
           <Upload className="h-4 w-4" />
           <span>Upload file (STL / OBJ / 3MF) — optional</span>
@@ -221,6 +243,8 @@ export default function RequestForm({ printer }: { printer: Printer }) {
           <input id="notes" name="notes" type="text" placeholder="Colour preference, quantity..." className={inputClass} />
         </div>
       </div>
+
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
 
       <button
         type="submit"
