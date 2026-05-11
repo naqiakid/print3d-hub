@@ -152,7 +152,7 @@ export default async function DashboardPage() {
               </p>
             </div>
           ) : (
-            requests.map((request) => <RequestCard key={request.id} request={request} />)
+            requests.map((request) => <RequestCard key={request.id} request={request} printer={printer} />)
           )}
         </div>
       </div>

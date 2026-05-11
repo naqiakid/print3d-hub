@@ -12,6 +12,7 @@ import {
   QUALITY_LABELS,
 } from '@/lib/types'
 import { submitRequest } from '@/lib/actions'
+import { calculateEstimate, formatRM } from '@/lib/pricing'
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
@@ -76,6 +77,20 @@ export default function RequestForm({ printer }: { printer: Printer }) {
   }
 
   const allSelected = printType && material && size && quality
+
+  const estimate =
+    allSelected && material && printer.filament_costs && printer.filament_costs[material]
+      ? calculateEstimate({
+          size,
+          quality,
+          material,
+          power_watts: printer.power_watts ?? 150,
+          cost_per_roll: printer.filament_costs[material]!,
+          grams_per_roll: printer.grams_per_roll ?? 1000,
+          electricity_rate: printer.electricity_rate ?? 0.57,
+          markup_percent: printer.markup_percent ?? 30,
+        })
+      : null
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -227,6 +242,19 @@ export default function RequestForm({ printer }: { printer: Printer }) {
           </div>
         </div>
       </div>
+
+      {/* Price estimate */}
+      {estimate && (
+        <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4">
+          <p className="text-xs font-medium text-slate-500 mb-1">Estimated price for this job</p>
+          <p className="text-2xl font-bold text-orange-600">{formatRM(estimate.suggested_price)}</p>
+          <div className="mt-2 space-y-0.5 text-xs text-slate-500">
+            <p>Filament: ~{estimate.weight_g}g · {formatRM(estimate.filament_cost)}</p>
+            <p>Electricity: ~{estimate.hours}h · {formatRM(estimate.electricity_cost)}</p>
+          </div>
+          <p className="mt-2 text-xs text-slate-400">Final price set by the owner in their quote.</p>
+        </div>
+      )}
 
       {/* Deadline + Notes */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

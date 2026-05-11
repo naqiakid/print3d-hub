@@ -3,19 +3,24 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from './supabase/server'
-import type { RequestStatus, PrintType, MaterialFeel, PrintSize } from './types'
+import type { RequestStatus, PrintType, MaterialFeel, PrintSize, FilamentCosts } from './types'
+import { calculatePriceRange } from './pricing'
 
 export async function registerPrinter(data: {
   name: string
   description: string
   printer_model: string
+  printer_model_id: string
   print_types: PrintType[]
   materials: MaterialFeel[]
   max_size: PrintSize
-  price_min: number
-  price_max: number
   turnaround: string
   contact_phone: string
+  power_watts: number
+  filament_costs: FilamentCosts
+  grams_per_roll: number
+  electricity_rate: number
+  markup_percent: number
 }): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
   const {
@@ -23,9 +28,32 @@ export async function registerPrinter(data: {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  const { price_min, price_max } = calculatePriceRange({
+    materials: data.materials,
+    filament_costs: data.filament_costs,
+    power_watts: data.power_watts,
+    grams_per_roll: data.grams_per_roll,
+    electricity_rate: data.electricity_rate,
+    markup_percent: data.markup_percent,
+  })
+
   const { error } = await supabase.from('printers').insert({
     owner_id: user.id,
-    ...data,
+    name: data.name,
+    description: data.description,
+    printer_model: data.printer_model,
+    print_types: data.print_types,
+    materials: data.materials,
+    max_size: data.max_size,
+    turnaround: data.turnaround,
+    contact_phone: data.contact_phone,
+    power_watts: data.power_watts,
+    filament_costs: data.filament_costs,
+    grams_per_roll: data.grams_per_roll,
+    electricity_rate: data.electricity_rate,
+    markup_percent: data.markup_percent,
+    price_min,
+    price_max,
   })
 
   if (error) return { error: error.message }

@@ -1,3 +1,9 @@
+export type FilamentCosts = {
+  rigid?: number
+  flexible?: number
+  tough?: number
+}
+
 export type PrintType = 'everyday' | 'strong' | 'colorful'
 export type MaterialFeel = 'rigid' | 'flexible' | 'tough'
 export type PrintSize = 'small' | 'medium' | 'large'
@@ -33,6 +39,11 @@ export type Printer = {
   rating: number
   review_count: number
   created_at: string
+  electricity_rate: number | null
+  filament_costs: FilamentCosts | null
+  markup_percent: number | null
+  power_watts: number | null
+  grams_per_roll: number | null
 }
 
 export type PrintRequest = {
@@ -68,9 +79,9 @@ export type Review = {
 // ─── Display helpers ────────────────────────────────────────────
 
 export const PRINT_TYPE_LABELS: Record<PrintType, string> = {
-  everyday: '🔧 Everyday',
-  strong: '💪 Strong',
-  colorful: '🌈 Colorful',
+  everyday: ' Everyday',
+  strong: ' Strong',
+  colorful: ' Colorful',
 }
 
 export const PRINT_TYPE_DESCRIPTIONS: Record<PrintType, string> = {

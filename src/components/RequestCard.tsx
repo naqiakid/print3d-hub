@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Calendar, FileText, MessageSquare } from 'lucide-react'
-import type { PrintRequest, RequestStatus } from '@/lib/types'
+import type { PrintRequest, RequestStatus, Printer } from '@/lib/types'
 import {
   STATUS_LABELS,
   STATUS_COLORS,
@@ -12,18 +12,36 @@ import {
   QUALITY_LABELS,
 } from '@/lib/types'
 import { updateRequestStatus, sendQuote } from '@/lib/actions'
+import { calculateEstimate, formatRM } from '@/lib/pricing'
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
 
-export default function RequestCard({ request }: { request: PrintRequest }) {
+export default function RequestCard({ request, printer }: { request: PrintRequest; printer: Printer }) {
   const [expanded, setExpanded] = useState(false)
   const [showQuoteForm, setShowQuoteForm] = useState(false)
-  const [quotePrice, setQuotePrice] = useState('')
   const [quoteDate, setQuoteDate] = useState('')
   const [quoteMessage, setQuoteMessage] = useState('')
   const [actionError, setActionError] = useState('')
   const [isPending, startTransition] = useTransition()
+
+  const estimate =
+    printer.filament_costs && printer.filament_costs[request.material]
+      ? calculateEstimate({
+          size: request.size,
+          quality: request.quality,
+          material: request.material,
+          power_watts: printer.power_watts ?? 150,
+          cost_per_roll: printer.filament_costs[request.material]!,
+          grams_per_roll: printer.grams_per_roll ?? 1000,
+          electricity_rate: printer.electricity_rate ?? 0.57,
+          markup_percent: printer.markup_percent ?? 30,
+        })
+      : null
+
+  const [quotePrice, setQuotePrice] = useState(
+    estimate ? String(estimate.suggested_price) : '',
+  )
 
   function handleStatusUpdate(newStatus: RequestStatus) {
     setActionError('')
@@ -139,6 +157,15 @@ export default function RequestCard({ request }: { request: PrintRequest }) {
           {showQuoteForm && (
             <div className="rounded-xl border border-orange-100 bg-orange-50 p-4 space-y-3">
               <p className="text-sm font-semibold text-slate-800">Send a quote</p>
+              {estimate && (
+                <div className="rounded-lg bg-white border border-orange-100 px-3 py-2 text-xs text-slate-500 space-y-0.5">
+                  <p>Filament: ~{estimate.weight_g}g · {formatRM(estimate.filament_cost)}</p>
+                  <p>Electricity: ~{estimate.hours}h · {formatRM(estimate.electricity_cost)}</p>
+                  <p className="font-medium text-slate-700">
+                    Base: {formatRM(estimate.base_cost)} → Suggested: {formatRM(estimate.suggested_price)}
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-600">Price (RM)</label>
@@ -200,7 +227,10 @@ export default function RequestCard({ request }: { request: PrintRequest }) {
               {request.status === 'new' && (
                 <>
                   <button
-                    onClick={() => setShowQuoteForm(true)}
+                    onClick={() => {
+                      setQuotePrice(estimate ? String(estimate.suggested_price) : '')
+                      setShowQuoteForm(true)
+                    }}
                     disabled={isPending}
                     className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-600 disabled:opacity-50"
                   >
