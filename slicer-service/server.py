@@ -28,7 +28,7 @@ DENSITY: dict[str, float] = {
 NOZZLE_MULT: dict[float, float] = {0.2: 2.0, 0.4: 1.0, 0.6: 0.65, 0.8: 0.5}
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok"}
 
