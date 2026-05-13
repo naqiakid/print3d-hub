@@ -1,10 +1,7 @@
 import { notFound } from 'next/navigation'
-import { getPrinterById, printers } from '@/lib/data'
+import { createClient } from '@/lib/supabase/server'
+import type { Printer, PrintProfile } from '@/lib/types'
 import RequestForm from '@/components/RequestForm'
-
-export function generateStaticParams() {
-  return printers.map((p) => ({ printerId: p.id }))
-}
 
 export default async function RequestPage({
   params,
@@ -12,8 +9,24 @@ export default async function RequestPage({
   params: Promise<{ printerId: string }>
 }) {
   const { printerId } = await params
-  const printer = getPrinterById(printerId)
-  if (!printer) notFound()
+  const supabase = await createClient()
+
+  const { data: printerData } = await supabase
+    .from('printers')
+    .select('*')
+    .eq('id', printerId)
+    .maybeSingle()
+
+  if (!printerData) notFound()
+  const printer = printerData as unknown as Printer
+
+  const { data: profilesData } = await supabase
+    .from('print_profiles')
+    .select('*')
+    .eq('printer_id', printerId)
+    .order('is_default', { ascending: false })
+
+  const profiles = (profilesData ?? []) as unknown as PrintProfile[]
 
   if (!printer.available) {
     return (
@@ -37,7 +50,7 @@ export default async function RequestPage({
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <RequestForm printer={printer} />
+        <RequestForm printer={printer} profiles={profiles} />
       </div>
 
       <p className="mt-4 text-center text-xs text-slate-400">

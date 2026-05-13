@@ -119,13 +119,25 @@ export default function RequestCard({ request, printer }: { request: PrintReques
             </div>
           )}
 
+          {/* STL slice data */}
+          {(request.weight_g || request.print_hours) && (
+            <div className="flex items-center gap-3 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-xs text-slate-600">
+              {request.weight_g && <span>~{request.weight_g}g filament</span>}
+              {request.weight_g && request.print_hours && <span className="text-slate-300">·</span>}
+              {request.print_hours && <span>~{request.print_hours}h print time</span>}
+              <span className="ml-auto text-slate-400">from STL</span>
+            </div>
+          )}
+
           {/* File */}
-          {request.file_url && (
+          {(request.file_url || request.stl_url) && (
             <a
-              href={request.file_url}
+              href={request.stl_url ?? request.file_url ?? '#'}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-500 hover:text-orange-600"
             >
-              <FileText className="h-4 w-4" /> Download file
+              <FileText className="h-4 w-4" /> Download STL
             </a>
           )}
 

@@ -171,7 +171,7 @@ export default function ProfileManager({
               {/* Delete confirm */}
               {confirmDelete === p.id && (
                 <div className="mt-3 flex items-center gap-3 rounded-lg bg-red-50 px-3 py-2 text-sm">
-                  <span className="flex-1 text-red-700">Delete "{p.name}"?</span>
+                  <span className="flex-1 text-red-700">Delete &quot;{p.name}&quot;?</span>
                   <button
                     onClick={() => handleDelete(p.id)}
                     disabled={isPending}

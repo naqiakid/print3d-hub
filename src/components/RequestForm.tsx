@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { CheckCircle, Upload } from 'lucide-react'
-import type { Printer, PrintType, FilamentMaterial, PrintSize, PrintQuality } from '@/lib/types'
+import { useState, useCallback, lazy, Suspense } from 'react'
+import { CheckCircle, Upload, X, Loader2 } from 'lucide-react'
+import type { Printer, PrintProfile, PrintType, FilamentMaterial, PrintSize, PrintQuality } from '@/lib/types'
 import {
   PRINT_TYPE_LABELS,
   PRINT_TYPE_DESCRIPTIONS,
@@ -11,20 +11,103 @@ import {
   SIZE_LABELS,
   QUALITY_LABELS,
 } from '@/lib/types'
-import { submitRequest } from '@/lib/actions'
+import { submitRequest, sliceSTL } from '@/lib/actions'
 import { calculateEstimate, formatRM } from '@/lib/pricing'
+import { createClient } from '@/lib/supabase/client'
+
+const STLViewer = lazy(() => import('./STLViewer'))
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
 
-export default function RequestForm({ printer }: { printer: Printer }) {
+type SliceResult = { weight_g: number; print_hours: number }
+
+export default function RequestForm({
+  printer,
+  profiles,
+}: {
+  printer: Printer
+  profiles: PrintProfile[]
+}) {
   const [submitted, setSubmitted] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
+
   const [printType, setPrintType] = useState<PrintType | ''>('')
   const [material, setMaterial] = useState<FilamentMaterial | ''>('')
   const [size, setSize] = useState<PrintSize | ''>('')
   const [quality, setQuality] = useState<PrintQuality | ''>('')
+
+  // STL upload state
+  const [stlFile, setStlFile] = useState<File | null>(null)
+  const [stlUrl, setStlUrl] = useState<string | null>(null)
+  const [slicing, setSlicing] = useState(false)
+  const [sliceResult, setSliceResult] = useState<SliceResult | null>(null)
+  const [sliceError, setSliceError] = useState('')
+
+  const defaultProfile = profiles.find((p) => p.is_default) ?? profiles[0] ?? null
+
+  const handleStlSelect = useCallback(
+    async (file: File) => {
+      setStlFile(file)
+      setSliceResult(null)
+      setSliceError('')
+      setSlicing(true)
+
+      // Upload to Supabase Storage
+      const supabase = createClient()
+      const path = `anonymous/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('stl-files')
+        .upload(path, file)
+
+      if (uploadError || !uploadData) {
+        setSliceError('Upload failed: ' + (uploadError?.message ?? 'unknown error'))
+        setSlicing(false)
+        return
+      }
+
+      const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
+      const publicUrl = urlData.publicUrl
+      setStlUrl(publicUrl)
+
+      // Call slicer service via server action
+      const mat = material || 'pla'
+      const nozzle = defaultProfile?.nozzle_mm ?? 0.4
+      const infill =
+        defaultProfile
+          ? quality === 'draft'
+            ? defaultProfile.infill_draft
+            : quality === 'premium'
+            ? defaultProfile.infill_premium
+            : defaultProfile.infill_standard
+          : 20
+
+      const result = await sliceSTL(publicUrl, mat, nozzle, infill)
+      setSlicing(false)
+
+      if ('error' in result) {
+        setSliceError(result.error === 'Slicer service not configured'
+          ? 'Live analysis not available — using size estimate below.'
+          : result.error)
+      } else {
+        setSliceResult(result)
+      }
+    },
+    [material, quality, defaultProfile],
+  )
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) handleStlSelect(file)
+  }
+
+  function clearStl() {
+    setStlFile(null)
+    setStlUrl(null)
+    setSliceResult(null)
+    setSliceError('')
+  }
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -45,6 +128,9 @@ export default function RequestForm({ printer }: { printer: Printer }) {
       quality,
       deadline: (form.elements.namedItem('deadline') as HTMLInputElement).value,
       notes: (form.elements.namedItem('notes') as HTMLInputElement).value ?? '',
+      stl_url: stlUrl,
+      weight_g: sliceResult?.weight_g ?? null,
+      print_hours: sliceResult?.print_hours ?? null,
     })
 
     setPending(false)
@@ -78,14 +164,32 @@ export default function RequestForm({ printer }: { printer: Printer }) {
 
   const allSelected = printType && material && size && quality
 
-  const estimate =
-    allSelected && material && printer.filament_costs && printer.filament_costs[material]
+  // Price from slicer if available, else from size estimate
+  const filamentCostPerKg =
+    material && printer.filament_costs ? printer.filament_costs[material as FilamentMaterial] : undefined
+
+  const slicerPrice =
+    sliceResult && filamentCostPerKg
+      ? (() => {
+          const filament_cost = (sliceResult.weight_g / 1000) * filamentCostPerKg
+          const electricity_cost =
+            sliceResult.print_hours *
+            ((printer.power_watts ?? 150) / 1000) *
+            (printer.electricity_rate ?? 0.57)
+          const base_cost = filament_cost + electricity_cost
+          const suggested_price = base_cost * (1 + (printer.markup_percent ?? 30) / 100)
+          return { filament_cost, electricity_cost, suggested_price }
+        })()
+      : null
+
+  const fallbackEstimate =
+    allSelected && material && filamentCostPerKg
       ? calculateEstimate({
-          size,
-          quality,
-          material,
+          size: size as PrintSize,
+          quality: quality as PrintQuality,
+          material: material as FilamentMaterial,
           power_watts: printer.power_watts ?? 150,
-          cost_per_kg: printer.filament_costs[material]!,
+          cost_per_kg: filamentCostPerKg,
           electricity_rate: printer.electricity_rate ?? 0.57,
           markup_percent: printer.markup_percent ?? 30,
         })
@@ -93,7 +197,7 @@ export default function RequestForm({ printer }: { printer: Printer }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Customer info */}
+      {/* Contact info */}
       <div>
         <h3 className="mb-3 text-sm font-semibold text-slate-700">Your contact details</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -128,12 +232,59 @@ export default function RequestForm({ printer }: { printer: Printer }) {
           placeholder="Describe what you need. e.g. A small phone stand for my desk, roughly 10cm tall..."
           className={`${inputClass} resize-none`}
         />
-        {/* File upload — stored locally for now, Supabase Storage in Phase 4 */}
-        <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 hover:border-orange-300 hover:bg-orange-50 transition">
-          <Upload className="h-4 w-4" />
-          <span>Upload file (STL / OBJ / 3MF) — optional</span>
-          <input name="file" type="file" accept=".stl,.obj,.3mf" className="hidden" />
-        </label>
+
+        {/* STL upload */}
+        {!stlFile ? (
+          <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 hover:border-orange-300 hover:bg-orange-50 transition">
+            <Upload className="h-4 w-4 shrink-0" />
+            <span>Upload STL file for 3D preview &amp; auto-pricing <span className="text-slate-400">(optional)</span></span>
+            <input
+              type="file"
+              accept=".stl"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          </label>
+        ) : (
+          <div className="mt-2 space-y-2">
+            {/* 3D preview */}
+            <div className="relative rounded-xl overflow-hidden border border-slate-200">
+              <Suspense fallback={
+                <div className="flex h-48 items-center justify-center bg-slate-50 text-sm text-slate-400">
+                  Loading 3D viewer...
+                </div>
+              }>
+                <STLViewer file={stlFile} />
+              </Suspense>
+              <button
+                type="button"
+                onClick={clearStl}
+                className="absolute top-2 right-2 rounded-full bg-white/80 p-1 text-slate-500 hover:text-slate-900 shadow-sm"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Slice status */}
+            {slicing && (
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Analysing model...
+              </div>
+            )}
+            {sliceResult && (
+              <div className="flex items-center gap-3 rounded-lg bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700">
+                <span>~{sliceResult.weight_g}g filament</span>
+                <span>·</span>
+                <span>~{sliceResult.print_hours}h print time</span>
+                {defaultProfile && <span className="text-green-500">({defaultProfile.nozzle_mm}mm nozzle)</span>}
+              </div>
+            )}
+            {sliceError && (
+              <p className="text-xs text-slate-400">{sliceError}</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Print type */}
@@ -164,9 +315,9 @@ export default function RequestForm({ printer }: { printer: Printer }) {
       {/* Material */}
       <div>
         <h3 className="mb-1 text-sm font-semibold text-slate-700">
-          Material feel <span className="text-red-500">*</span>
+          Material <span className="text-red-500">*</span>
         </h3>
-        <p className="mb-3 text-xs text-slate-400">How should it feel?</p>
+        <p className="mb-3 text-xs text-slate-400">What material should it be printed in?</p>
         <div className="flex flex-wrap gap-2">
           {printer.materials.map((m) => (
             <button
@@ -192,6 +343,11 @@ export default function RequestForm({ printer }: { printer: Printer }) {
           <h3 className="mb-1 text-sm font-semibold text-slate-700">
             Size <span className="text-red-500">*</span>
           </h3>
+          {sliceResult ? (
+            <p className="text-xs text-slate-400 mb-2">Inferred from your STL file</p>
+          ) : (
+            <p className="text-xs text-slate-400 mb-2">Approximate size</p>
+          )}
           <div className="flex flex-col gap-2">
             {(['small', 'medium', 'large'] as PrintSize[]).map((s) => {
               const allowed =
@@ -223,6 +379,7 @@ export default function RequestForm({ printer }: { printer: Printer }) {
           <h3 className="mb-1 text-sm font-semibold text-slate-700">
             Quality <span className="text-red-500">*</span>
           </h3>
+          <p className="text-xs text-slate-400 mb-2">Surface finish &amp; infill</p>
           <div className="flex flex-col gap-2">
             {(['draft', 'standard', 'premium'] as PrintQuality[]).map((q) => (
               <button
@@ -236,6 +393,15 @@ export default function RequestForm({ printer }: { printer: Printer }) {
                 }`}
               >
                 {QUALITY_LABELS[q]}
+                {defaultProfile && (
+                  <span className="ml-2 text-xs text-slate-400">
+                    {q === 'draft'
+                      ? defaultProfile.infill_draft
+                      : q === 'standard'
+                      ? defaultProfile.infill_standard
+                      : defaultProfile.infill_premium}% infill
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -243,15 +409,32 @@ export default function RequestForm({ printer }: { printer: Printer }) {
       </div>
 
       {/* Price estimate */}
-      {estimate && (
-        <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4">
-          <p className="text-xs font-medium text-slate-500 mb-1">Estimated price for this job</p>
-          <p className="text-2xl font-bold text-orange-600">{formatRM(estimate.suggested_price)}</p>
+      {slicerPrice && allSelected && (
+        <div className="rounded-xl border border-green-100 bg-green-50/60 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <p className="text-xs font-medium text-slate-500">Estimated price (from your STL)</p>
+            <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-700">accurate</span>
+          </div>
+          <p className="text-2xl font-bold text-green-700">{formatRM(slicerPrice.suggested_price)}</p>
           <div className="mt-2 space-y-0.5 text-xs text-slate-500">
-            <p>Filament: ~{estimate.weight_g}g · {formatRM(estimate.filament_cost)}</p>
-            <p>Electricity: ~{estimate.hours}h · {formatRM(estimate.electricity_cost)}</p>
+            <p>Filament: ~{sliceResult!.weight_g}g · {formatRM(slicerPrice.filament_cost)}</p>
+            <p>Electricity: ~{sliceResult!.print_hours}h · {formatRM(slicerPrice.electricity_cost)}</p>
           </div>
           <p className="mt-2 text-xs text-slate-400">Final price set by the owner in their quote.</p>
+        </div>
+      )}
+
+      {!slicerPrice && fallbackEstimate && (
+        <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4">
+          <p className="text-xs font-medium text-slate-500 mb-1">Estimated price for this job</p>
+          <p className="text-2xl font-bold text-orange-600">{formatRM(fallbackEstimate.suggested_price)}</p>
+          <div className="mt-2 space-y-0.5 text-xs text-slate-500">
+            <p>Filament: ~{fallbackEstimate.weight_g}g · {formatRM(fallbackEstimate.filament_cost)}</p>
+            <p>Electricity: ~{fallbackEstimate.hours}h · {formatRM(fallbackEstimate.electricity_cost)}</p>
+          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            Upload an STL for a more accurate estimate. Final price set by the owner.
+          </p>
         </div>
       )}
 

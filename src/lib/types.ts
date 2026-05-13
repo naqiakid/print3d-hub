@@ -60,6 +60,9 @@ export type PrintRequest = {
   customer_phone: string
   description: string
   file_url: string | null
+  stl_url: string | null
+  weight_g: number | null
+  print_hours: number | null
   print_type: PrintType
   material: FilamentMaterial
   size: PrintSize
@@ -84,6 +87,18 @@ export type PrintProfile = {
   supports_available: boolean
   ironing_available: boolean
   is_default: boolean
+  created_at: string
+}
+
+export type Filament = {
+  id: string
+  owner_id: string
+  material: FilamentMaterial
+  brand: string
+  color: string
+  color_hex: string
+  cost_per_kg: number
+  in_stock: boolean
   created_at: string
 }
 

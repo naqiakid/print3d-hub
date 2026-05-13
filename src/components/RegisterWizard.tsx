@@ -1,43 +1,61 @@
 'use client'
 
 import { useState } from 'react'
-import { Check } from 'lucide-react'
-import type { PrintType, FilamentMaterial, FilamentCosts } from '@/lib/types'
-import { PRINT_TYPE_LABELS, MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, SIZE_LABELS } from '@/lib/types'
+import { Check, Star, Trash2, Plus, X } from 'lucide-react'
+import type { PrintType } from '@/lib/types'
+import { PRINT_TYPE_LABELS, SIZE_LABELS } from '@/lib/types'
 import { PRINTER_MODELS, BRANDS, type PrinterModelPreset } from '@/lib/printer-models'
 import {
   DEFAULT_ELECTRICITY_RATE,
   DEFAULT_MARKUP_PERCENT,
-  DEFAULT_FILAMENT_COST_PER_KG,
-  calculatePriceRange,
+  DEFAULT_INFILL,
+  NOZZLE_OPTIONS,
 } from '@/lib/pricing'
 import { registerPrinter } from '@/lib/actions'
 
-const steps = ['Pick Printer', 'Cost Setup', 'Your Service', 'Review & Publish']
+const steps = ['Pick Printer', 'Costs', 'Your Service', 'Print Profiles', 'Review & Publish']
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
+
+// ─── Profile types ──────────────────────────────────────────
+
+type WizardProfile = {
+  _id: string
+  name: string
+  nozzle_mm: number
+  infill_draft: number
+  infill_standard: number
+  infill_premium: number
+  supports_available: boolean
+  ironing_available: boolean
+  is_default: boolean
+}
+
+const BLANK_PROFILE: Omit<WizardProfile, '_id'> = {
+  name: '',
+  nozzle_mm: 0.4,
+  infill_draft: DEFAULT_INFILL.draft,
+  infill_standard: DEFAULT_INFILL.standard,
+  infill_premium: DEFAULT_INFILL.premium,
+  supports_available: true,
+  ironing_available: false,
+  is_default: false,
+}
+
+// ─── Wizard ─────────────────────────────────────────────────
 
 export default function RegisterWizard() {
   const [step, setStep] = useState(0)
   const [pending, setPending] = useState(false)
   const [publishError, setPublishError] = useState('')
 
-  // Step 0 — Printer selection + spec confirmation
+  // Step 0 — Pick Printer
   const [selectedPreset, setSelectedPreset] = useState<PrinterModelPreset | null>(null)
   const [activeBrand, setActiveBrand] = useState(BRANDS[0])
   const [printTypes, setPrintTypes] = useState<PrintType[]>([])
-  const [materials, setMaterials] = useState<FilamentMaterial[]>([])
 
-  // Step 1 — Cost Setup
-  const [filamentCosts, setFilamentCosts] = useState<Record<FilamentMaterial, string>>({
-    pla:   String(DEFAULT_FILAMENT_COST_PER_KG.pla),
-    petg:  String(DEFAULT_FILAMENT_COST_PER_KG.petg),
-    abs:   String(DEFAULT_FILAMENT_COST_PER_KG.abs),
-    tpu:   String(DEFAULT_FILAMENT_COST_PER_KG.tpu),
-    nylon: String(DEFAULT_FILAMENT_COST_PER_KG.nylon),
-    pc:    String(DEFAULT_FILAMENT_COST_PER_KG.pc),
-  })
+  // Step 1 — Costs
   const [electricityRate, setElectricityRate] = useState(String(DEFAULT_ELECTRICITY_RATE))
   const [markupPercent, setMarkupPercent] = useState(String(DEFAULT_MARKUP_PERCENT))
 
@@ -47,48 +65,71 @@ export default function RegisterWizard() {
   const [turnaround, setTurnaround] = useState('')
   const [phone, setPhone] = useState('')
 
+  // Step 3 — Print Profiles
+  const [profiles, setProfiles] = useState<WizardProfile[]>([])
+  const [addingProfile, setAddingProfile] = useState(false)
+  const [profileForm, setProfileForm] = useState<Omit<WizardProfile, '_id'>>(BLANK_PROFILE)
+  const [profileError, setProfileError] = useState('')
+
   function selectPreset(preset: PrinterModelPreset) {
     setSelectedPreset(preset)
     setPrintTypes([...preset.print_types])
-    setMaterials([...preset.materials])
   }
 
   function togglePrintType(t: PrintType) {
     setPrintTypes((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]))
   }
 
-  function toggleMaterial(m: FilamentMaterial) {
-    setMaterials((p) => (p.includes(m) ? p.filter((x) => x !== m) : [...p, m]))
+  function setProfileField<K extends keyof Omit<WizardProfile, '_id'>>(
+    key: K,
+    value: Omit<WizardProfile, '_id'>[K],
+  ) {
+    setProfileForm((f) => ({ ...f, [key]: value }))
   }
 
-  const step0Valid = selectedPreset && printTypes.length > 0 && materials.length > 0
+  function openAddProfile() {
+    setProfileForm({
+      ...BLANK_PROFILE,
+      is_default: profiles.length === 0,
+    })
+    setProfileError('')
+    setAddingProfile(true)
+  }
 
-  const step1Valid =
-    materials.length > 0 &&
-    materials.every((m) => Number(filamentCosts[m]) > 0) &&
-    Number(electricityRate) > 0
-
-  const step2Valid = serviceName && turnaround && phone
-
-  function buildFilamentCosts(): FilamentCosts {
-    const costs: FilamentCosts = {}
-    for (const m of materials) {
-      const v = Number(filamentCosts[m])
-      if (v > 0) costs[m] = v
+  function saveProfile() {
+    if (!profileForm.name.trim()) {
+      setProfileError('Profile name is required.')
+      return
     }
-    return costs
+    const newProfile: WizardProfile = {
+      ...profileForm,
+      _id: crypto.randomUUID(),
+    }
+    setProfiles((prev) => {
+      const updated = profileForm.is_default
+        ? prev.map((p) => ({ ...p, is_default: false }))
+        : prev
+      return [...updated, newProfile]
+    })
+    setAddingProfile(false)
+    setProfileError('')
   }
 
-  function liveRange() {
-    if (!selectedPreset || !step1Valid) return null
-    return calculatePriceRange({
-      materials,
-      filament_costs: buildFilamentCosts(),
-      power_watts: selectedPreset.power_watts,
-      electricity_rate: Number(electricityRate),
-      markup_percent: Number(markupPercent),
+  function removeProfile(id: string) {
+    setProfiles((prev) => {
+      const next = prev.filter((p) => p._id !== id)
+      // if we removed the default, promote the first remaining
+      const hadDefault = prev.find((p) => p._id === id)?.is_default
+      if (hadDefault && next.length > 0) next[0].is_default = true
+      return next
     })
   }
+
+  // Validation
+  const step0Valid = selectedPreset && printTypes.length > 0
+  const step1Valid = Number(electricityRate) > 0
+  const step2Valid = serviceName && turnaround && phone
+  const step3Valid = profiles.length > 0 && !addingProfile
 
   async function handlePublish() {
     if (!selectedPreset) return
@@ -100,14 +141,22 @@ export default function RegisterWizard() {
       printer_model: `${selectedPreset.brand} ${selectedPreset.name}`,
       printer_model_id: selectedPreset.id,
       print_types: printTypes,
-      materials,
       max_size: selectedPreset.max_size,
       turnaround,
       contact_phone: phone,
       power_watts: selectedPreset.power_watts,
-      filament_costs: buildFilamentCosts(),
       electricity_rate: Number(electricityRate),
       markup_percent: Number(markupPercent),
+      profiles: profiles.map((p) => ({
+        name: p.name,
+        nozzle_mm: p.nozzle_mm,
+        infill_draft: p.infill_draft,
+        infill_standard: p.infill_standard,
+        infill_premium: p.infill_premium,
+        supports_available: p.supports_available,
+        ironing_available: p.ironing_available,
+        is_default: p.is_default,
+      })),
     })
     if (result?.error) {
       setPublishError(result.error)
@@ -115,14 +164,15 @@ export default function RegisterWizard() {
     }
   }
 
-  const range = liveRange()
+  const nozzleLabel = (mm: number) =>
+    NOZZLE_OPTIONS.find((n) => n.value === mm)?.label ?? `${mm}mm`
 
   return (
     <div>
       {/* Step indicator */}
-      <div className="mb-8 flex items-center gap-2">
+      <div className="mb-8 flex items-center gap-1.5 flex-wrap">
         {steps.map((label, i) => (
-          <div key={label} className="flex items-center gap-2">
+          <div key={label} className="flex items-center gap-1.5">
             <div
               className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
                 i < step
@@ -137,7 +187,7 @@ export default function RegisterWizard() {
             <span className={`text-xs font-medium ${i === step ? 'text-slate-900' : 'text-slate-400'}`}>
               {label}
             </span>
-            {i < steps.length - 1 && <div className="h-px w-6 bg-slate-200" />}
+            {i < steps.length - 1 && <div className="h-px w-4 bg-slate-200" />}
           </div>
         ))}
       </div>
@@ -203,71 +253,37 @@ export default function RegisterWizard() {
           </div>
 
           {selectedPreset && (
-            <div className="rounded-xl border border-orange-100 bg-orange-50/50 p-4 space-y-4">
+            <div className="rounded-xl border border-orange-100 bg-orange-50/50 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-slate-800">
-                  {selectedPreset.brand} {selectedPreset.name} — confirm what you offer
+                  {selectedPreset.brand} {selectedPreset.name} — confirm print types
                 </p>
                 <span className="text-xs text-slate-400">
                   Max {SIZE_LABELS[selectedPreset.max_size]}
                 </span>
               </div>
-
-              <div>
-                <p className="mb-2 text-xs font-medium text-slate-600">Print types</p>
-                <div className="flex flex-wrap gap-2">
-                  {(['everyday', 'strong', 'colorful'] as PrintType[]).map((t) => {
-                    const included = selectedPreset.print_types.includes(t)
-                    const active = printTypes.includes(t)
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        disabled={!included}
-                        onClick={() => included && togglePrintType(t)}
-                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                          active && included
-                            ? 'border-orange-500 bg-orange-500 text-white'
-                            : included
-                            ? 'border-slate-200 bg-white text-slate-600 hover:border-orange-300'
-                            : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'
-                        }`}
-                      >
-                        {PRINT_TYPE_LABELS[t]}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2 text-xs font-medium text-slate-600">Materials you have in stock</p>
-                <div className="flex flex-wrap gap-2">
-                  {(['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'] as FilamentMaterial[]).map((m) => {
-                    const included = selectedPreset.materials.includes(m)
-                    const active = materials.includes(m)
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        disabled={!included}
-                        onClick={() => included && toggleMaterial(m)}
-                        className={`rounded-lg border px-3 py-1.5 text-left transition ${
-                          active && included
-                            ? 'border-orange-500 bg-orange-500 text-white'
-                            : included
-                            ? 'border-slate-200 bg-white text-slate-600 hover:border-orange-300'
-                            : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'
-                        }`}
-                      >
-                        <p className="text-xs font-medium">{MATERIAL_LABELS[m]}</p>
-                        <p className={`text-xs ${active && included ? 'text-orange-100' : 'text-slate-400'}`}>
-                          {MATERIAL_DESCRIPTIONS[m]}
-                        </p>
-                      </button>
-                    )
-                  })}
-                </div>
+              <div className="flex flex-wrap gap-2">
+                {(['everyday', 'strong', 'colorful'] as PrintType[]).map((t) => {
+                  const included = selectedPreset.print_types.includes(t)
+                  const active = printTypes.includes(t)
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      disabled={!included}
+                      onClick={() => included && togglePrintType(t)}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                        active && included
+                          ? 'border-orange-500 bg-orange-500 text-white'
+                          : included
+                          ? 'border-slate-200 bg-white text-slate-600 hover:border-orange-300'
+                          : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'
+                      }`}
+                    >
+                      {PRINT_TYPE_LABELS[t]}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -282,73 +298,13 @@ export default function RegisterWizard() {
         </div>
       )}
 
-      {/* ── Step 1: Cost Setup ── */}
+      {/* ── Step 1: Costs ── */}
       {step === 1 && selectedPreset && (
         <div className="space-y-5">
           <p className="text-sm text-slate-500">
-            Select the materials you offer and enter your average filament cost per kilogram. At least one material is required.
+            Set your electricity cost and profit margin. You&apos;ll add your specific filaments
+            and their costs from the Filaments section after publishing.
           </p>
-
-          {/* Material rows */}
-          <div className="space-y-3">
-            <p className="text-sm font-medium text-slate-700">Materials & filament cost (RM/kg)</p>
-            {(['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'] as FilamentMaterial[]).map((m) => {
-              const supported = selectedPreset.materials.includes(m)
-              const enabled = materials.includes(m)
-              return (
-                <div
-                  key={m}
-                  className={`rounded-xl border p-4 transition ${
-                    !supported
-                      ? 'border-slate-100 bg-slate-50 opacity-40'
-                      : enabled
-                      ? 'border-orange-300 bg-orange-50/40'
-                      : 'border-slate-200 bg-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      disabled={!supported}
-                      onClick={() => supported && toggleMaterial(m)}
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition ${
-                        enabled && supported
-                          ? 'border-orange-500 bg-orange-500'
-                          : 'border-slate-300 bg-white'
-                      }`}
-                    >
-                      {enabled && supported && <Check className="h-3 w-3 text-white" />}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium ${enabled && supported ? 'text-slate-800' : 'text-slate-400'}`}>
-                        {MATERIAL_LABELS[m]}
-                      </p>
-                      <p className="text-xs text-slate-400">{MATERIAL_DESCRIPTIONS[m]}</p>
-                    </div>
-                    <div className="shrink-0 w-32">
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">RM</span>
-                        <input
-                          type="number"
-                          disabled={!supported || !enabled}
-                          value={filamentCosts[m]}
-                          onChange={(e) => setFilamentCosts((prev) => ({ ...prev, [m]: e.target.value }))}
-                          min="1"
-                          className={`${inputClass} pl-10 ${(!supported || !enabled) ? 'opacity-30 cursor-not-allowed' : ''}`}
-                        />
-                      </div>
-                      {supported && enabled && Number(filamentCosts[m]) === DEFAULT_FILAMENT_COST_PER_KG[m] && (
-                        <p className="mt-0.5 text-center text-xs text-slate-400">market rate</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-            {materials.length === 0 && (
-              <p className="text-xs text-red-500">Select at least one material to continue.</p>
-            )}
-          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -365,7 +321,7 @@ export default function RegisterWizard() {
                   className={`${inputClass} pl-10`}
                 />
               </div>
-              <p className="mt-1 text-xs text-slate-400">Per kWh</p>
+              <p className="mt-1 text-xs text-slate-400">Per kWh (TNB default: 0.57)</p>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Overhead & profit %</label>
@@ -382,21 +338,6 @@ export default function RegisterWizard() {
               </div>
               <p className="mt-1 text-xs text-slate-400">On top of filament + electricity</p>
             </div>
-          </div>
-
-          {/* Live price preview */}
-          <div className={`rounded-xl border p-4 ${range ? 'border-orange-100 bg-orange-50/50' : 'border-slate-100 bg-slate-50'}`}>
-            <p className="text-xs font-medium text-slate-500 mb-1">Estimated price range for your listing</p>
-            {range ? (
-              <p className="text-2xl font-bold text-orange-600">
-                RM {range.price_min} – RM {range.price_max}
-              </p>
-            ) : (
-              <p className="text-sm text-slate-400">Fill in material costs above to see your price range</p>
-            )}
-            <p className="mt-1 text-xs text-slate-400">
-              Based on small draft → large premium print · {selectedPreset.power_watts}W
-            </p>
           </div>
 
           <div className="flex gap-3 pt-2">
@@ -486,14 +427,104 @@ export default function RegisterWizard() {
               disabled={!step2Valid}
               className="flex-1 rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
+              Continue →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step 3: Print Profiles ── */}
+      {step === 3 && (
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm text-slate-500">
+              Add at least one print profile. A profile defines nozzle size, infill settings,
+              and available add-ons. You can add more from your dashboard later.
+            </p>
+          </div>
+
+          {/* Added profiles */}
+          {profiles.length === 0 && !addingProfile && (
+            <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center">
+              <p className="text-sm text-slate-400">No profiles yet.</p>
+              <p className="mt-1 text-xs text-slate-300">At least one profile is required to publish.</p>
+            </div>
+          )}
+
+          {profiles.map((p) => (
+            <div
+              key={p._id}
+              className={`rounded-xl border bg-white p-4 shadow-sm ${p.is_default ? 'border-orange-200' : 'border-slate-200'}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  {p.is_default && <Star className="h-4 w-4 fill-orange-400 text-orange-400 shrink-0" />}
+                  <div>
+                    <p className="font-semibold text-slate-900">{p.name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {nozzleLabel(p.nozzle_mm)} nozzle &nbsp;·&nbsp;
+                      Infill {p.infill_draft}% / {p.infill_standard}% / {p.infill_premium}%
+                    </p>
+                    <div className="mt-1.5 flex gap-3 text-xs">
+                      <span className={p.supports_available ? 'text-green-600' : 'text-slate-300'}>
+                        {p.supports_available ? '✓' : '✗'} Supports
+                      </span>
+                      <span className={p.ironing_available ? 'text-green-600' : 'text-slate-300'}>
+                        {p.ironing_available ? '✓' : '✗'} Ironing
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => removeProfile(p._id)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* Inline add form */}
+          {addingProfile && (
+            <WizardProfileForm
+              form={profileForm}
+              set={setProfileField}
+              onSave={saveProfile}
+              onCancel={() => { setAddingProfile(false); setProfileError('') }}
+              error={profileError}
+            />
+          )}
+
+          {!addingProfile && (
+            <button
+              onClick={openAddProfile}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-orange-300 py-3 text-sm font-medium text-orange-500 hover:bg-orange-50 transition"
+            >
+              <Plus className="h-4 w-4" /> Add profile
+            </button>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => setStep(2)}
+              className="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+            >
+              ← Back
+            </button>
+            <button
+              onClick={() => setStep(4)}
+              disabled={!step3Valid}
+              className="flex-1 rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
               Review →
             </button>
           </div>
         </div>
       )}
 
-      {/* ── Step 3: Review & Publish ── */}
-      {step === 3 && selectedPreset && (
+      {/* ── Step 4: Review & Publish ── */}
+      {step === 4 && selectedPreset && (
         <div className="space-y-6">
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-5 space-y-3 text-sm">
             <div className="flex justify-between">
@@ -515,21 +546,9 @@ export default function RegisterWizard() {
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Materials</span>
-              <span className="font-medium text-slate-900">
-                {materials.map((m) => MATERIAL_LABELS[m]).join(', ')}
-              </span>
-            </div>
-            <div className="flex justify-between">
               <span className="text-slate-500">Max size</span>
               <span className="font-medium text-slate-900">{SIZE_LABELS[selectedPreset.max_size]}</span>
             </div>
-            {range && (
-              <div className="flex justify-between">
-                <span className="text-slate-500">Price range</span>
-                <span className="font-medium text-orange-600">RM {range.price_min} – RM {range.price_max}</span>
-              </div>
-            )}
             <div className="flex justify-between">
               <span className="text-slate-500">Turnaround</span>
               <span className="font-medium text-slate-900">{turnaround}</span>
@@ -538,10 +557,24 @@ export default function RegisterWizard() {
               <span className="text-slate-500">WhatsApp</span>
               <span className="font-medium text-slate-900">{phone}</span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Markup</span>
+              <span className="font-medium text-slate-900">{markupPercent}%</span>
+            </div>
+            <div className="flex justify-between items-start">
+              <span className="text-slate-500">Print profiles</span>
+              <div className="text-right space-y-0.5">
+                {profiles.map((p) => (
+                  <p key={p._id} className="font-medium text-slate-900">
+                    {p.name}{p.is_default ? ' ★' : ''}
+                  </p>
+                ))}
+              </div>
+            </div>
           </div>
 
           <p className="text-xs text-slate-400 text-center">
-            Your listing goes live immediately. Edit anytime from your dashboard.
+            Add your filament inventory from the <strong>Filaments</strong> section after publishing to enable live pricing.
           </p>
 
           {publishError && (
@@ -550,7 +583,7 @@ export default function RegisterWizard() {
 
           <div className="flex gap-3">
             <button
-              onClick={() => setStep(2)}
+              onClick={() => setStep(3)}
               className="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
             >
               ← Back
@@ -565,6 +598,164 @@ export default function RegisterWizard() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Inline profile form for wizard ─────────────────────────
+
+function WizardProfileForm({
+  form,
+  set,
+  onSave,
+  onCancel,
+  error,
+}: {
+  form: Omit<WizardProfile, '_id'>
+  set: <K extends keyof Omit<WizardProfile, '_id'>>(key: K, value: Omit<WizardProfile, '_id'>[K]) => void
+  onSave: () => void
+  onCancel: () => void
+  error: string
+}) {
+  return (
+    <div className="rounded-xl border border-orange-200 bg-orange-50/30 p-5 space-y-5">
+      <div className="flex items-center justify-between">
+        <p className="font-semibold text-slate-800">New profile</p>
+        <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 transition">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Name */}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">Profile name</label>
+        <input
+          type="text"
+          value={form.name}
+          onChange={(e) => set('name', e.target.value)}
+          placeholder="e.g. Standard, Fast, Ultra Detail"
+          className={inputClass}
+        />
+      </div>
+
+      {/* Nozzle size */}
+      <div>
+        <label className="mb-2 block text-sm font-medium text-slate-700">Nozzle size</label>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {NOZZLE_OPTIONS.map((n) => (
+            <button
+              key={n.value}
+              type="button"
+              onClick={() => set('nozzle_mm', n.value)}
+              className={`rounded-xl border p-3 text-left transition ${
+                form.nozzle_mm === n.value
+                  ? 'border-orange-500 bg-orange-500 text-white'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'
+              }`}
+            >
+              <p className="text-sm font-semibold">{n.label}</p>
+              <p className={`text-xs ${form.nozzle_mm === n.value ? 'text-orange-100' : 'text-slate-400'}`}>
+                {n.sublabel}
+              </p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Infill */}
+      <div>
+        <label className="mb-2 block text-sm font-medium text-slate-700">Infill % per quality level</label>
+        <div className="grid grid-cols-3 gap-3">
+          {([
+            { key: 'infill_draft' as const,    label: 'Draft',    hint: 'prototypes' },
+            { key: 'infill_standard' as const, label: 'Standard', hint: 'most jobs' },
+            { key: 'infill_premium' as const,  label: 'Premium',  hint: 'high strength' },
+          ]).map(({ key, label, hint }) => (
+            <div key={key}>
+              <p className="mb-1 text-xs font-medium text-slate-600">{label}</p>
+              <p className="mb-1 text-xs text-slate-400">{hint}</p>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={form[key]}
+                  onChange={(e) => set(key, Number(e.target.value))}
+                  min={5} max={100}
+                  className={`${inputClass} pr-8`}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Add-ons */}
+      <div>
+        <label className="mb-2 block text-sm font-medium text-slate-700">Add-ons this profile supports</label>
+        <div className="flex flex-wrap gap-3">
+          {([
+            { key: 'supports_available' as const, label: 'Support structures', desc: 'For overhangs & bridges' },
+            { key: 'ironing_available' as const,  label: 'Ironing',            desc: 'Smooth top surface (+15% time)' },
+          ]).map(({ key, label, desc }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => set(key, !form[key])}
+              className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-left transition ${
+                form[key]
+                  ? 'border-orange-400 bg-orange-50 text-orange-700'
+                  : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200'
+              }`}
+            >
+              <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 ${
+                form[key] ? 'border-orange-500 bg-orange-500' : 'border-slate-300'
+              }`}>
+                {form[key] && <Check className="h-2.5 w-2.5 text-white" />}
+              </div>
+              <div>
+                <p className="text-sm font-medium">{label}</p>
+                <p className="text-xs opacity-70">{desc}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Default */}
+      <button
+        type="button"
+        onClick={() => set('is_default', !form.is_default)}
+        className="flex items-center gap-3 text-sm"
+      >
+        <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition ${
+          form.is_default ? 'border-orange-500 bg-orange-500' : 'border-slate-300 bg-white'
+        }`}>
+          {form.is_default && <Check className="h-3 w-3 text-white" />}
+        </div>
+        <span className={form.is_default ? 'text-slate-800 font-medium' : 'text-slate-500'}>
+          Set as default profile
+        </span>
+        <span className="text-xs text-slate-400">(shown first to customers)</span>
+      </button>
+
+      {error && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>
+      )}
+
+      <div className="flex gap-3 pt-1">
+        <button
+          onClick={onCancel}
+          className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onSave}
+          className="flex-1 rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 transition"
+        >
+          Add profile
+        </button>
+      </div>
     </div>
   )
 }
