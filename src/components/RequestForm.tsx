@@ -29,7 +29,7 @@ export default function RequestForm({
   printer: Printer
   profiles: PrintProfile[]
 }) {
-  const [submitted, setSubmitted] = useState(false)
+  const [requestId, setRequestId] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
 
@@ -134,14 +134,15 @@ export default function RequestForm({
     })
 
     setPending(false)
-    if (result?.error) {
+    if ('error' in result) {
       setError(result.error)
       return
     }
-    setSubmitted(true)
+    setRequestId(result.id)
   }
 
-  if (submitted) {
+  if (requestId) {
+    const trackingUrl = `/track/${requestId}`
     return (
       <div className="flex flex-col items-center py-12 text-center">
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
@@ -152,11 +153,26 @@ export default function RequestForm({
           <strong>{printer.name}</strong> will review your request and email you a quote
           within {printer.turnaround}.
         </p>
+        <div className="mt-6 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left">
+          <p className="text-xs font-medium text-slate-500 mb-1">Your tracking link — save this!</p>
+          <a
+            href={trackingUrl}
+            className="text-sm font-medium text-orange-500 hover:text-orange-600 break-all"
+          >
+            {typeof window !== 'undefined' ? window.location.origin : ''}{trackingUrl}
+          </a>
+        </div>
+        <a
+          href={trackingUrl}
+          className="mt-4 w-full rounded-xl bg-orange-500 py-3 text-center text-sm font-semibold text-white hover:bg-orange-600 transition"
+        >
+          Track your order →
+        </a>
         <a
           href="/printers"
-          className="mt-6 text-sm font-medium text-orange-500 hover:text-orange-600"
+          className="mt-3 text-sm text-slate-400 hover:text-slate-600"
         >
-          Browse more printers →
+          Browse more printers
         </a>
       </div>
     )

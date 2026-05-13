@@ -246,10 +246,15 @@ export async function submitRequest(data: {
   stl_url?: string | null
   weight_g?: number | null
   print_hours?: number | null
-}): Promise<{ error: string } | undefined> {
+}): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
-  const { error } = await supabase.from('requests').insert(data)
+  const { data: inserted, error } = await supabase
+    .from('requests')
+    .insert(data)
+    .select('id')
+    .single()
   if (error) return { error: error.message }
+  return { id: inserted.id }
 }
 
 export async function updateRequestStatus(
