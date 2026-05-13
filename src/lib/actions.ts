@@ -243,6 +243,9 @@ export async function submitRequest(data: {
   quality: string
   deadline: string
   notes: string
+  color?: string
+  color_hex?: string
+  supports?: boolean
   stl_url?: string | null
   weight_g?: number | null
   print_hours?: number | null

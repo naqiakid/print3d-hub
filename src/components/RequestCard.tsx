@@ -97,9 +97,18 @@ export default function RequestCard({ request, printer }: { request: PrintReques
               <span className="text-slate-400">Print type</span>
               <span className="ml-2 font-medium text-slate-900">{PRINT_TYPE_LABELS[request.print_type]}</span>
             </div>
-            <div>
+            <div className="flex items-center gap-1.5">
               <span className="text-slate-400">Material</span>
-              <span className="ml-2 font-medium text-slate-900">{MATERIAL_LABELS[request.material]}</span>
+              <span className="font-medium text-slate-900">{MATERIAL_LABELS[request.material]}</span>
+              {request.color && (
+                <>
+                  <span
+                    className="h-3.5 w-3.5 rounded-full border border-slate-200 shadow-sm"
+                    style={{ background: request.color_hex || '#888' }}
+                  />
+                  <span className="text-slate-500">{request.color}</span>
+                </>
+              )}
             </div>
             <div>
               <span className="text-slate-400">Size</span>
@@ -109,6 +118,13 @@ export default function RequestCard({ request, printer }: { request: PrintReques
               <span className="text-slate-400">Quality</span>
               <span className="ml-2 font-medium text-slate-900">{QUALITY_LABELS[request.quality]}</span>
             </div>
+            {request.supports && (
+              <div className="col-span-2">
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  Supports required
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Notes */}

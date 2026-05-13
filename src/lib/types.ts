@@ -65,6 +65,9 @@ export type PrintRequest = {
   print_hours: number | null
   print_type: PrintType
   material: FilamentMaterial
+  color: string
+  color_hex: string
+  supports: boolean
   size: PrintSize
   quality: PrintQuality
   deadline: string

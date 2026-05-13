@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import type { Printer, PrintProfile } from '@/lib/types'
+import type { Printer, PrintProfile, Filament } from '@/lib/types'
 import RequestForm from '@/components/RequestForm'
 
 export default async function RequestPage({
@@ -20,13 +20,22 @@ export default async function RequestPage({
   if (!printerData) notFound()
   const printer = printerData as unknown as Printer
 
-  const { data: profilesData } = await supabase
-    .from('print_profiles')
-    .select('*')
-    .eq('printer_id', printerId)
-    .order('is_default', { ascending: false })
+  const [{ data: profilesData }, { data: filamentsData }] = await Promise.all([
+    supabase
+      .from('print_profiles')
+      .select('*')
+      .eq('printer_id', printerId)
+      .order('is_default', { ascending: false }),
+    supabase
+      .from('filaments')
+      .select('*')
+      .eq('owner_id', printer.owner_id)
+      .eq('in_stock', true)
+      .order('material'),
+  ])
 
   const profiles = (profilesData ?? []) as unknown as PrintProfile[]
+  const filaments = (filamentsData ?? []) as unknown as Filament[]
 
   if (!printer.available) {
     return (
@@ -50,7 +59,7 @@ export default async function RequestPage({
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <RequestForm printer={printer} profiles={profiles} />
+        <RequestForm printer={printer} profiles={profiles} filaments={filaments} />
       </div>
 
       <p className="mt-4 text-center text-xs text-slate-400">
