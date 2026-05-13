@@ -1,0 +1,23 @@
+services:
+  # ── Next.js app ────────────────────────────────────────────────
+  - type: web
+    name: print3d-hub
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SLICER_SERVICE_URL
+        sync: false
+
+  # ── Slicer microservice ────────────────────────────────────────
+  - type: web
+    name: print3d-slicer
+    runtime: docker
+    dockerfilePath: slicer-service/Dockerfile
+    dockerContext: slicer-service
