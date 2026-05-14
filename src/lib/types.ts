@@ -72,6 +72,7 @@ export type PrintRequest = {
   quality: PrintQuality
   deadline: string
   notes: string
+  profile_id: string | null
   status: RequestStatus
   quoted_price: number | null
   quoted_by_date: string | null

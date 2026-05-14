@@ -41,14 +41,16 @@ export default function RequestForm({
   const [quality, setQuality] = useState<PrintQuality | ''>('')
   const [supports, setSupports] = useState(false)
 
+  // Profile selection — auto-select when only one profile exists
+  const defaultProfile = profiles.find((p) => p.is_default) ?? profiles[0] ?? null
+  const [selectedProfile, setSelectedProfile] = useState<PrintProfile | null>(defaultProfile)
+
   // STL upload state
   const [stlFile, setStlFile] = useState<File | null>(null)
   const [stlUrl, setStlUrl] = useState<string | null>(null)
   const [slicing, setSlicing] = useState(false)
   const [sliceResult, setSliceResult] = useState<SliceResult | null>(null)
   const [sliceError, setSliceError] = useState('')
-
-  const defaultProfile = profiles.find((p) => p.is_default) ?? profiles[0] ?? null
 
   // Group in-stock filaments by material
   const filamentsByMaterial = filaments.reduce<Record<string, Filament[]>>((acc, f) => {
@@ -58,8 +60,6 @@ export default function RequestForm({
   }, {})
 
   const availableMaterials = Object.keys(filamentsByMaterial) as FilamentMaterial[]
-
-  // Fall back to printer.materials if no filaments added yet
   const materialOptions: FilamentMaterial[] =
     availableMaterials.length > 0 ? availableMaterials : (printer.materials as FilamentMaterial[])
 
@@ -71,14 +71,14 @@ export default function RequestForm({
 
   const getInfill = useCallback(
     (q: PrintQuality) => {
-      if (!defaultProfile) return DEFAULT_INFILL[q]
+      if (!selectedProfile) return DEFAULT_INFILL[q]
       return q === 'draft'
-        ? defaultProfile.infill_draft
+        ? selectedProfile.infill_draft
         : q === 'standard'
-        ? defaultProfile.infill_standard
-        : defaultProfile.infill_premium
+        ? selectedProfile.infill_standard
+        : selectedProfile.infill_premium
     },
-    [defaultProfile],
+    [selectedProfile],
   )
 
   const handleStlSelect = useCallback(
@@ -105,7 +105,7 @@ export default function RequestForm({
       setStlUrl(publicUrl)
 
       const mat = material || 'pla'
-      const nozzle = defaultProfile?.nozzle_mm ?? 0.4
+      const nozzle = selectedProfile?.nozzle_mm ?? 0.4
       const infill = quality ? getInfill(quality as PrintQuality) : getInfill('standard')
 
       const result = await sliceSTL(publicUrl, mat, nozzle, infill)
@@ -121,7 +121,7 @@ export default function RequestForm({
         setSliceResult(result)
       }
     },
-    [material, quality, defaultProfile, getInfill],
+    [material, quality, selectedProfile, getInfill],
   )
 
   function clearStl() {
@@ -156,25 +156,30 @@ export default function RequestForm({
         })()
       : null
 
+  const effectiveSize = stlFile ? 'medium' : (size as PrintSize)
+
   const fallbackEstimate =
-    !slicerPrice && material && size && quality && costPerKg
+    !slicerPrice && material && effectiveSize && quality && costPerKg
       ? calculateEstimate({
-          size: size as PrintSize,
+          size: effectiveSize,
           quality: quality as PrintQuality,
           material: material as FilamentMaterial,
           power_watts: printer.power_watts ?? 150,
           cost_per_kg: costPerKg,
           electricity_rate: printer.electricity_rate ?? 0.57,
           markup_percent: printer.markup_percent ?? 30,
-          nozzle_mm: defaultProfile?.nozzle_mm,
+          nozzle_mm: selectedProfile?.nozzle_mm,
           custom_infill: quality ? getInfill(quality as PrintQuality) : undefined,
         })
       : null
 
+  // Size required only when no STL uploaded
+  const allSelected = !!(printType && material && quality && (stlFile || size))
+
   // ── Submit ─────────────────────────────────────────────────────
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!printType || !material || !size || !quality) return
+    if (!allSelected) return
     setError('')
     setPending(true)
 
@@ -185,18 +190,19 @@ export default function RequestForm({
       customer_email: (form.elements.namedItem('email') as HTMLInputElement).value,
       customer_phone: (form.elements.namedItem('phone') as HTMLInputElement).value,
       description: (form.elements.namedItem('description') as HTMLTextAreaElement).value,
-      print_type: printType,
+      print_type: printType as PrintType,
       material,
       color: selectedFilament?.color ?? '',
       color_hex: selectedFilament?.color_hex ?? '#888888',
       supports,
-      size,
-      quality,
+      size: (size || 'medium') as PrintSize,
+      quality: quality as PrintQuality,
       deadline: (form.elements.namedItem('deadline') as HTMLInputElement).value,
       notes: (form.elements.namedItem('notes') as HTMLInputElement).value ?? '',
       stl_url: stlUrl,
       weight_g: slicerPrice?.weight_g ?? fallbackEstimate?.weight_g ?? null,
       print_hours: slicerPrice?.hours ?? fallbackEstimate?.hours ?? null,
+      profile_id: selectedProfile?.id ?? null,
     })
 
     setPending(false)
@@ -241,8 +247,6 @@ export default function RequestForm({
       </div>
     )
   }
-
-  const allSelected = printType && material && size && quality
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -308,7 +312,7 @@ export default function RequestForm({
                 <span>~{sliceResult.weight_g}g filament</span>
                 <span>·</span>
                 <span>~{sliceResult.print_hours}h print time</span>
-                {defaultProfile && <span className="text-green-500">({defaultProfile.nozzle_mm}mm nozzle)</span>}
+                {selectedProfile && <span className="text-green-500">({selectedProfile.nozzle_mm}mm nozzle)</span>}
               </div>
             )}
             {sliceError && <p className="text-xs text-slate-400">{sliceError}</p>}
@@ -387,41 +391,72 @@ export default function RequestForm({
         </div>
       )}
 
-      {/* Size + Quality */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {/* Print profile picker — only shown when owner has multiple profiles */}
+      {profiles.length > 1 && (
         <div>
-          <h3 className="mb-1 text-sm font-semibold text-slate-700">Size <span className="text-red-500">*</span></h3>
-          <p className="text-xs text-slate-400 mb-2">{sliceResult ? 'Inferred from your STL' : 'Approximate size'}</p>
+          <h3 className="mb-1 text-sm font-semibold text-slate-700">Print profile <span className="text-red-500">*</span></h3>
+          <p className="mb-3 text-xs text-slate-400">Nozzle size and print settings</p>
+          <div className="flex flex-wrap gap-2">
+            {profiles.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setSelectedProfile(p)}
+                className={`rounded-xl border px-4 py-2.5 text-left transition ${
+                  selectedProfile?.id === p.id
+                    ? 'border-orange-500 bg-orange-50 text-orange-700'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'
+                }`}
+              >
+                <p className="text-sm font-medium">{p.name}</p>
+                <p className="text-xs text-slate-400">{p.nozzle_mm}mm nozzle</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quality */}
+      <div className={stlFile ? '' : 'grid grid-cols-1 gap-4 sm:grid-cols-2'}>
+        {/* Size — only shown when no STL uploaded */}
+        {!stlFile && (
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-slate-700">Approximate size <span className="text-red-500">*</span></h3>
+            <p className="text-xs text-slate-400 mb-2">For cost estimate only — actual size is taken from your design</p>
+            <div className="flex flex-col gap-2">
+              {(['small', 'medium', 'large'] as PrintSize[]).map((s) => {
+                const allowed = s === 'small' || (s === 'medium' && printer.max_size !== 'small') || (s === 'large' && printer.max_size === 'large')
+                return (
+                  <button key={s} type="button" disabled={!allowed} onClick={() => setSize(s)}
+                    className={`rounded-xl border px-3 py-2 text-left text-sm transition ${size === s ? 'border-orange-500 bg-orange-50 text-orange-700' : allowed ? 'border-slate-200 bg-white text-slate-700 hover:border-orange-200' : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'}`}>
+                    {SIZE_LABELS[s]}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className={stlFile ? 'max-w-xs' : ''}>
+          <h3 className="mb-1 text-sm font-semibold text-slate-700">Quality <span className="text-red-500">*</span></h3>
+          <p className="text-xs text-slate-400 mb-2">Surface finish &amp; infill density</p>
           <div className="flex flex-col gap-2">
-            {(['small', 'medium', 'large'] as PrintSize[]).map((s) => {
-              const allowed = s === 'small' || (s === 'medium' && printer.max_size !== 'small') || (s === 'large' && printer.max_size === 'large')
+            {(['draft', 'standard', 'premium'] as PrintQuality[]).map((q) => {
+              const infillPct = getInfill(q)
               return (
-                <button key={s} type="button" disabled={!allowed} onClick={() => setSize(s)}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition ${size === s ? 'border-orange-500 bg-orange-50 text-orange-700' : allowed ? 'border-slate-200 bg-white text-slate-700 hover:border-orange-200' : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'}`}>
-                  {SIZE_LABELS[s]}
+                <button key={q} type="button" onClick={() => setQuality(q)}
+                  className={`rounded-xl border px-3 py-2 text-left text-sm transition ${quality === q ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
+                  {QUALITY_LABELS[q]}
+                  <span className="ml-2 text-xs text-slate-400">{infillPct}% infill</span>
                 </button>
               )
             })}
           </div>
         </div>
-
-        <div>
-          <h3 className="mb-1 text-sm font-semibold text-slate-700">Quality <span className="text-red-500">*</span></h3>
-          <p className="text-xs text-slate-400 mb-2">Surface finish &amp; infill density</p>
-          <div className="flex flex-col gap-2">
-            {(['draft', 'standard', 'premium'] as PrintQuality[]).map((q) => (
-              <button key={q} type="button" onClick={() => setQuality(q)}
-                className={`rounded-xl border px-3 py-2 text-left text-sm transition ${quality === q ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
-                {QUALITY_LABELS[q]}
-                <span className="ml-2 text-xs text-slate-400">{getInfill(q)}% infill</span>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* Supports toggle */}
-      {defaultProfile?.supports_available && (
+      {selectedProfile?.supports_available && (
         <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
           <div>
             <p className="text-sm font-medium text-slate-700">Support structures</p>

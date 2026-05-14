@@ -249,6 +249,7 @@ export async function submitRequest(data: {
   stl_url?: string | null
   weight_g?: number | null
   print_hours?: number | null
+  profile_id?: string | null
 }): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
   const { data: inserted, error } = await supabase
