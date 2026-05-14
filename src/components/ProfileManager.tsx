@@ -17,6 +17,9 @@ const BLANK_FORM = {
   infill_premium: DEFAULT_INFILL.premium,
   supports_available: true,
   ironing_available: false,
+  color_change_available: false,
+  pause_insert_available: false,
+  fuzzy_skin_available: false,
   is_default: false,
 }
 
@@ -52,6 +55,9 @@ export default function ProfileManager({
       infill_premium: p.infill_premium,
       supports_available: p.supports_available,
       ironing_available: p.ironing_available,
+      color_change_available: p.color_change_available,
+      pause_insert_available: p.pause_insert_available,
+      fuzzy_skin_available: p.fuzzy_skin_available,
       is_default: p.is_default,
     })
     setError('')
@@ -142,13 +148,18 @@ export default function ProfileManager({
                       &nbsp;·&nbsp;
                       Infill {p.infill_draft}% / {p.infill_standard}% / {p.infill_premium}%
                     </p>
-                    <div className="mt-1.5 flex gap-3 text-xs">
-                      <span className={p.supports_available ? 'text-green-600' : 'text-slate-300'}>
-                        {p.supports_available ? '✓' : '✗'} Supports
-                      </span>
-                      <span className={p.ironing_available ? 'text-green-600' : 'text-slate-300'}>
-                        {p.ironing_available ? '✓' : '✗'} Ironing
-                      </span>
+                    <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                      {[
+                        { flag: p.supports_available,     label: 'Supports' },
+                        { flag: p.ironing_available,      label: 'Ironing' },
+                        { flag: p.color_change_available, label: 'Color change' },
+                        { flag: p.pause_insert_available, label: 'Insert pause' },
+                        { flag: p.fuzzy_skin_available,   label: 'Fuzzy skin' },
+                      ].map(({ flag, label }) => (
+                        <span key={label} className={flag ? 'text-green-600' : 'text-slate-300'}>
+                          {flag ? '✓' : '✗'} {label}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -329,8 +340,11 @@ function ProfileForm({
         </label>
         <div className="flex flex-wrap gap-3">
           {([
-            { key: 'supports_available' as const, label: 'Support structures', desc: 'For overhangs & bridges' },
-            { key: 'ironing_available' as const,  label: 'Ironing',            desc: 'Smooth top surface (+15% time)' },
+            { key: 'supports_available'     as const, label: 'Support structures', desc: 'For overhangs & bridges' },
+            { key: 'ironing_available'      as const, label: 'Ironing',            desc: 'Smooth top surface (+15% time)' },
+            { key: 'color_change_available' as const, label: 'Color change',       desc: 'Pause to swap filament color' },
+            { key: 'pause_insert_available' as const, label: 'Embedded insert',    desc: 'Pause to press-fit nuts or magnets' },
+            { key: 'fuzzy_skin_available'   as const, label: 'Fuzzy skin',         desc: 'Textured outer surface (+5% time)' },
           ]).map(({ key, label, desc }) => (
             <button
               key={key}

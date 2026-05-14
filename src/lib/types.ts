@@ -73,6 +73,7 @@ export type PrintRequest = {
   deadline: string
   notes: string
   profile_id: string | null
+  selected_addons: string[]
   status: RequestStatus
   quoted_price: number | null
   quoted_by_date: string | null
@@ -90,6 +91,9 @@ export type PrintProfile = {
   infill_premium: number
   supports_available: boolean
   ironing_available: boolean
+  color_change_available: boolean
+  pause_insert_available: boolean
+  fuzzy_skin_available: boolean
   is_default: boolean
   created_at: string
 }

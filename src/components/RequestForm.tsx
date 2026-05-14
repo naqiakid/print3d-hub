@@ -40,6 +40,7 @@ export default function RequestForm({
   const [size, setSize] = useState<PrintSize | ''>('')
   const [quality, setQuality] = useState<PrintQuality | ''>('')
   const [supports, setSupports] = useState(false)
+  const [selectedAddons, setSelectedAddons] = useState<string[]>([])
 
   // Profile selection — auto-select when only one profile exists
   const defaultProfile = profiles.find((p) => p.is_default) ?? profiles[0] ?? null
@@ -203,6 +204,7 @@ export default function RequestForm({
       weight_g: slicerPrice?.weight_g ?? fallbackEstimate?.weight_g ?? null,
       print_hours: slicerPrice?.hours ?? fallbackEstimate?.hours ?? null,
       profile_id: selectedProfile?.id ?? null,
+      selected_addons: supports ? ['supports', ...selectedAddons] : selectedAddons,
     })
 
     setPending(false)
@@ -470,6 +472,56 @@ export default function RequestForm({
             <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${supports ? 'translate-x-5' : 'translate-x-0.5'}`} />
           </button>
         </div>
+      )}
+
+      {/* Advanced add-ons */}
+      {selectedProfile && (
+        (() => {
+          const available = [
+            selectedProfile.ironing_available      && { id: 'ironing',      label: 'Ironing',           desc: 'Smooth top surface by remelting the top layer',          note: '+15% print time' },
+            selectedProfile.color_change_available && { id: 'color_change', label: 'Color change',      desc: 'Pause at a layer to swap filament for a two-tone effect', note: '+RM3–5' },
+            selectedProfile.pause_insert_available && { id: 'pause_insert', label: 'Embedded insert',   desc: 'Pause to press-fit heat-set nuts or magnets',             note: '+RM2–3' },
+            selectedProfile.fuzzy_skin_available   && { id: 'fuzzy_skin',   label: 'Fuzzy skin',        desc: 'Textured outer surface for grip or aesthetic effect',      note: '+5% print time' },
+          ].filter(Boolean) as { id: string; label: string; desc: string; note: string }[]
+
+          if (available.length === 0) return null
+          return (
+            <div>
+              <h3 className="mb-1 text-sm font-semibold text-slate-700">Add-ons</h3>
+              <p className="mb-3 text-xs text-slate-400">Optional finishing options this printer supports</p>
+              <div className="space-y-2">
+                {available.map(({ id, label, desc, note }) => {
+                  const checked = selectedAddons.includes(id)
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setSelectedAddons((prev) =>
+                        checked ? prev.filter((a) => a !== id) : [...prev, id]
+                      )}
+                      className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${
+                        checked
+                          ? 'border-orange-400 bg-orange-50'
+                          : 'border-slate-200 bg-white hover:border-orange-200'
+                      }`}
+                    >
+                      <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition ${
+                        checked ? 'border-orange-500 bg-orange-500' : 'border-slate-300'
+                      }`}>
+                        {checked && <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-slate-800">{label}</p>
+                        <p className="text-xs text-slate-400">{desc}</p>
+                      </div>
+                      <span className="shrink-0 text-xs text-slate-400">{note}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()
       )}
 
       {/* Price estimate */}

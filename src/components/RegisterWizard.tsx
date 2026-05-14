@@ -155,6 +155,9 @@ export default function RegisterWizard() {
         infill_premium: p.infill_premium,
         supports_available: p.supports_available,
         ironing_available: p.ironing_available,
+        color_change_available: false,
+        pause_insert_available: false,
+        fuzzy_skin_available: false,
         is_default: p.is_default,
       })),
     })

@@ -118,11 +118,24 @@ export default function RequestCard({ request, printer }: { request: PrintReques
               <span className="text-slate-400">Quality</span>
               <span className="ml-2 font-medium text-slate-900">{QUALITY_LABELS[request.quality]}</span>
             </div>
-            {request.supports && (
-              <div className="col-span-2">
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                  Supports required
-                </span>
+            {(request.supports || request.selected_addons?.length > 0) && (
+              <div className="col-span-2 flex flex-wrap gap-1.5">
+                {request.supports && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Supports</span>
+                )}
+                {request.selected_addons?.filter((a) => a !== 'supports').map((addon) => {
+                  const ADDON_LABELS: Record<string, string> = {
+                    ironing: 'Ironing',
+                    color_change: 'Color change',
+                    pause_insert: 'Embedded insert',
+                    fuzzy_skin: 'Fuzzy skin',
+                  }
+                  return (
+                    <span key={addon} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                      {ADDON_LABELS[addon] ?? addon}
+                    </span>
+                  )
+                })}
               </div>
             )}
           </div>

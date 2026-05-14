@@ -16,6 +16,9 @@ export async function createProfile(data: {
   infill_premium: number
   supports_available: boolean
   ironing_available: boolean
+  color_change_available: boolean
+  pause_insert_available: boolean
+  fuzzy_skin_available: boolean
   is_default: boolean
 }): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
@@ -45,6 +48,9 @@ export async function updateProfile(
     infill_premium: number
     supports_available: boolean
     ironing_available: boolean
+    color_change_available: boolean
+    pause_insert_available: boolean
+    fuzzy_skin_available: boolean
     is_default: boolean
   }
 ): Promise<{ error: string } | undefined> {
@@ -85,6 +91,9 @@ type ProfileInput = {
   infill_premium: number
   supports_available: boolean
   ironing_available: boolean
+  color_change_available: boolean
+  pause_insert_available: boolean
+  fuzzy_skin_available: boolean
   is_default: boolean
 }
 
@@ -250,6 +259,7 @@ export async function submitRequest(data: {
   weight_g?: number | null
   print_hours?: number | null
   profile_id?: string | null
+  selected_addons?: string[]
 }): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
   const { data: inserted, error } = await supabase
