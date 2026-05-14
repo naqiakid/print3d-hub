@@ -1,17 +1,11 @@
 'use client'
 
-import { useState, useCallback, lazy, Suspense } from 'react'
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react'
 import { CheckCircle, Upload, X, Loader2 } from 'lucide-react'
-import type { Printer, PrintProfile, Filament, PrintType, FilamentMaterial, PrintSize, PrintQuality } from '@/lib/types'
-import {
-  PRINT_TYPE_LABELS,
-  PRINT_TYPE_DESCRIPTIONS,
-  MATERIAL_LABELS,
-  SIZE_LABELS,
-  QUALITY_LABELS,
-} from '@/lib/types'
+import type { Printer, PrintProfile, Filament, PrintType, FilamentMaterial, PrintQuality } from '@/lib/types'
+import { MATERIAL_LABELS, QUALITY_LABELS } from '@/lib/types'
 import { submitRequest, sliceSTL } from '@/lib/actions'
-import { calculateEstimate, formatRM, DEFAULT_INFILL } from '@/lib/pricing'
+import { formatRM } from '@/lib/pricing'
 import { createClient } from '@/lib/supabase/client'
 
 const STLViewer = lazy(() => import('./STLViewer'))
@@ -20,6 +14,10 @@ const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
 
 type SliceResult = { weight_g: number; print_hours: number }
+
+function inferPrintType(material: FilamentMaterial): PrintType {
+  return ['abs', 'nylon', 'pc'].includes(material) ? 'strong' : 'everyday'
+}
 
 export default function RequestForm({
   printer,
@@ -32,156 +30,127 @@ export default function RequestForm({
 }) {
   const [requestId, setRequestId] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
-  const [error, setError] = useState('')
+  const [submitError, setSubmitError] = useState('')
 
-  const [printType, setPrintType] = useState<PrintType | ''>('')
-  const [material, setMaterial] = useState<FilamentMaterial | ''>('')
-  const [selectedFilament, setSelectedFilament] = useState<Filament | null>(null)
-  const [size, setSize] = useState<PrintSize | ''>('')
-  const [quality, setQuality] = useState<PrintQuality | ''>('')
-  const [supports, setSupports] = useState(false)
-  const [selectedAddons, setSelectedAddons] = useState<string[]>([])
-
-  // Profile selection — auto-select when only one profile exists
-  const defaultProfile = profiles.find((p) => p.is_default) ?? profiles[0] ?? null
-  const [selectedProfile, setSelectedProfile] = useState<PrintProfile | null>(defaultProfile)
-
-  // STL upload state
+  // Step 1: STL upload
   const [stlFile, setStlFile] = useState<File | null>(null)
   const [stlUrl, setStlUrl] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+
+  // Step 2: Specs
+  const [material, setMaterial] = useState<FilamentMaterial | ''>('')
+  const [selectedFilament, setSelectedFilament] = useState<Filament | null>(null)
+  const [quality, setQuality] = useState<PrintQuality | ''>('')
+
+  // Auto-slice state
   const [slicing, setSlicing] = useState(false)
   const [sliceResult, setSliceResult] = useState<SliceResult | null>(null)
   const [sliceError, setSliceError] = useState('')
 
-  // Group in-stock filaments by material
+  const defaultProfile = profiles.find((p) => p.is_default) ?? profiles[0] ?? null
+
+  // Group filaments by material
   const filamentsByMaterial = filaments.reduce<Record<string, Filament[]>>((acc, f) => {
     if (!acc[f.material]) acc[f.material] = []
     acc[f.material].push(f)
     return acc
   }, {})
-
-  const availableMaterials = Object.keys(filamentsByMaterial) as FilamentMaterial[]
   const materialOptions: FilamentMaterial[] =
-    availableMaterials.length > 0 ? availableMaterials : (printer.materials as FilamentMaterial[])
+    Object.keys(filamentsByMaterial).length > 0
+      ? (Object.keys(filamentsByMaterial) as FilamentMaterial[])
+      : (printer.materials as FilamentMaterial[])
 
   function handleMaterialSelect(m: FilamentMaterial) {
     setMaterial(m)
     const colors = filamentsByMaterial[m] ?? []
     setSelectedFilament(colors.length === 1 ? colors[0] : null)
+    setSliceResult(null)
   }
 
-  const getInfill = useCallback(
-    (q: PrintQuality) => {
-      if (!selectedProfile) return DEFAULT_INFILL[q]
-      return q === 'draft'
-        ? selectedProfile.infill_draft
-        : q === 'standard'
-        ? selectedProfile.infill_standard
-        : selectedProfile.infill_premium
-    },
-    [selectedProfile],
-  )
+  // Upload STL — only uploads, no slice yet
+  const handleStlSelect = useCallback(async (file: File) => {
+    setStlFile(file)
+    setStlUrl(null)
+    setSliceResult(null)
+    setSliceError('')
+    setUploadError('')
+    setUploading(true)
 
-  const handleStlSelect = useCallback(
-    async (file: File) => {
-      setStlFile(file)
-      setSliceResult(null)
-      setSliceError('')
-      setSlicing(true)
+    const supabase = createClient()
+    const path = `anonymous/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const { data: uploadData, error } = await supabase.storage
+      .from('stl-files')
+      .upload(path, file)
 
-      const supabase = createClient()
-      const path = `anonymous/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('stl-files')
-        .upload(path, file)
+    setUploading(false)
 
-      if (uploadError || !uploadData) {
-        setSliceError('Upload failed: ' + (uploadError?.message ?? 'unknown'))
-        setSlicing(false)
-        return
-      }
+    if (error || !uploadData) {
+      setUploadError('Upload failed: ' + (error?.message ?? 'unknown'))
+      return
+    }
 
-      const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
-      const publicUrl = urlData.publicUrl
-      setStlUrl(publicUrl)
-
-      const mat = material || 'pla'
-      const nozzle = selectedProfile?.nozzle_mm ?? 0.4
-      const infill = quality ? getInfill(quality as PrintQuality) : getInfill('standard')
-
-      const result = await sliceSTL(publicUrl, mat, nozzle, infill)
-      setSlicing(false)
-
-      if ('error' in result) {
-        setSliceError(
-          result.error === 'Slicer service not configured'
-            ? 'Live analysis unavailable — using size estimate.'
-            : result.error,
-        )
-      } else {
-        setSliceResult(result)
-      }
-    },
-    [material, quality, selectedProfile, getInfill],
-  )
+    const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
+    setStlUrl(urlData.publicUrl)
+  }, [])
 
   function clearStl() {
     setStlFile(null)
     setStlUrl(null)
     setSliceResult(null)
     setSliceError('')
+    setUploadError('')
   }
+
+  // Auto-trigger slice whenever stlUrl + material + quality are all set
+  useEffect(() => {
+    if (!stlUrl || !material || !quality) return
+
+    setSlicing(true)
+    setSliceResult(null)
+    setSliceError('')
+
+    const nozzle = defaultProfile?.nozzle_mm ?? 0.4
+    const infill =
+      quality === 'draft'
+        ? (defaultProfile?.infill_draft ?? 15)
+        : quality === 'standard'
+        ? (defaultProfile?.infill_standard ?? 25)
+        : (defaultProfile?.infill_premium ?? 40)
+
+    sliceSTL(stlUrl, material, nozzle, infill).then((result) => {
+      setSlicing(false)
+      if ('error' in result) {
+        setSliceError(result.error === 'Slicer service not configured'
+          ? 'Price calculation unavailable — the owner will quote manually.'
+          : `Could not calculate price: ${result.error}`)
+      } else {
+        setSliceResult(result)
+      }
+    })
+  }, [stlUrl, material, quality, defaultProfile])
 
   // ── Price calculation ──────────────────────────────────────────
   const costPerKg =
     selectedFilament?.cost_per_kg ??
     (material && printer.filament_costs ? printer.filament_costs[material as FilamentMaterial] : undefined)
 
-  const effectiveWeight = sliceResult
-    ? sliceResult.weight_g * (supports ? 1.25 : 1)
+  const price = sliceResult && costPerKg
+    ? (() => {
+        const filament_cost = (sliceResult.weight_g / 1000) * costPerKg
+        const electricity_cost =
+          sliceResult.print_hours * ((printer.power_watts ?? 150) / 1000) * (printer.electricity_rate ?? 0.57)
+        const base_cost = filament_cost + electricity_cost
+        const suggested_price = Math.ceil(base_cost * (1 + (printer.markup_percent ?? 30) / 100))
+        return { filament_cost, electricity_cost, base_cost, suggested_price }
+      })()
     : null
-
-  const effectiveHours = sliceResult
-    ? sliceResult.print_hours * (supports ? 1.2 : 1)
-    : null
-
-  const slicerPrice =
-    effectiveWeight && effectiveHours && costPerKg
-      ? (() => {
-          const filament_cost = (effectiveWeight / 1000) * costPerKg
-          const electricity_cost =
-            effectiveHours * ((printer.power_watts ?? 150) / 1000) * (printer.electricity_rate ?? 0.57)
-          const base_cost = filament_cost + electricity_cost
-          const suggested_price = Math.ceil(base_cost * (1 + (printer.markup_percent ?? 30) / 100))
-          return { filament_cost, electricity_cost, base_cost, suggested_price, weight_g: effectiveWeight, hours: effectiveHours }
-        })()
-      : null
-
-  const effectiveSize = stlFile ? 'medium' : (size as PrintSize)
-
-  const fallbackEstimate =
-    !slicerPrice && material && effectiveSize && quality && costPerKg
-      ? calculateEstimate({
-          size: effectiveSize,
-          quality: quality as PrintQuality,
-          material: material as FilamentMaterial,
-          power_watts: printer.power_watts ?? 150,
-          cost_per_kg: costPerKg,
-          electricity_rate: printer.electricity_rate ?? 0.57,
-          markup_percent: printer.markup_percent ?? 30,
-          nozzle_mm: selectedProfile?.nozzle_mm,
-          custom_infill: quality ? getInfill(quality as PrintQuality) : undefined,
-        })
-      : null
-
-  // Size required only when no STL uploaded
-  const allSelected = !!(printType && material && quality && (stlFile || size))
 
   // ── Submit ─────────────────────────────────────────────────────
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!allSelected) return
-    setError('')
+    if (!stlUrl || !material || !quality) return
+    setSubmitError('')
     setPending(true)
 
     const form = e.currentTarget
@@ -191,25 +160,25 @@ export default function RequestForm({
       customer_email: (form.elements.namedItem('email') as HTMLInputElement).value,
       customer_phone: (form.elements.namedItem('phone') as HTMLInputElement).value,
       description: (form.elements.namedItem('description') as HTMLTextAreaElement).value,
-      print_type: printType as PrintType,
-      material,
+      print_type: inferPrintType(material as FilamentMaterial),
+      material: material as FilamentMaterial,
       color: selectedFilament?.color ?? '',
       color_hex: selectedFilament?.color_hex ?? '#888888',
-      supports,
-      size: (size || 'medium') as PrintSize,
+      supports: false,
+      size: 'medium',
       quality: quality as PrintQuality,
       deadline: (form.elements.namedItem('deadline') as HTMLInputElement).value,
-      notes: (form.elements.namedItem('notes') as HTMLInputElement).value ?? '',
+      notes: (form.elements.namedItem('notes') as HTMLInputElement)?.value ?? '',
       stl_url: stlUrl,
-      weight_g: slicerPrice?.weight_g ?? fallbackEstimate?.weight_g ?? null,
-      print_hours: slicerPrice?.hours ?? fallbackEstimate?.hours ?? null,
-      profile_id: selectedProfile?.id ?? null,
-      selected_addons: supports ? ['supports', ...selectedAddons] : selectedAddons,
+      weight_g: sliceResult?.weight_g ?? null,
+      print_hours: sliceResult?.print_hours ?? null,
+      profile_id: defaultProfile?.id ?? null,
+      selected_addons: [],
     })
 
     setPending(false)
     if ('error' in result) {
-      setError(result.error)
+      setSubmitError(result.error)
       return
     }
     setRequestId(result.id)
@@ -230,10 +199,7 @@ export default function RequestForm({
         </p>
         <div className="mt-6 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left">
           <p className="text-xs font-medium text-slate-500 mb-1">Your tracking link — save this!</p>
-          <a
-            href={trackingUrl}
-            className="text-sm font-medium text-orange-500 hover:text-orange-600 break-all"
-          >
+          <a href={trackingUrl} className="text-sm font-medium text-orange-500 hover:text-orange-600 break-all">
             {typeof window !== 'undefined' ? window.location.origin : ''}{trackingUrl}
           </a>
         </div>
@@ -250,338 +216,303 @@ export default function RequestForm({
     )
   }
 
+  const hasColorChoice = material && (filamentsByMaterial[material]?.length ?? 0) > 1
+  const colorRequired = hasColorChoice && !selectedFilament
+  const canSubmit = !!(stlUrl && material && !colorRequired && quality && !slicing && !pending)
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-8">
 
-      {/* Contact info */}
+      {/* ── Step 1: Upload STL ─────────────────────────────────── */}
       <div>
-        <h3 className="mb-3 text-sm font-semibold text-slate-700">Your contact details</h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label htmlFor="name" className="mb-1 block text-xs font-medium text-slate-600">
-              Name <span className="text-red-500">*</span>
-            </label>
-            <input id="name" name="name" type="text" required placeholder="Ahmad Farid" className={inputClass} />
-          </div>
-          <div>
-            <label htmlFor="phone" className="mb-1 block text-xs font-medium text-slate-600">
-              WhatsApp / Phone <span className="text-red-500">*</span>
-            </label>
-            <input id="phone" name="phone" type="tel" required placeholder="+601X-XXXXXXX" className={inputClass} />
-          </div>
-          <div className="sm:col-span-2">
-            <label htmlFor="email" className="mb-1 block text-xs font-medium text-slate-600">
-              Email <span className="text-red-500">*</span>
-            </label>
-            <input id="email" name="email" type="email" required placeholder="you@example.com" className={inputClass} />
-          </div>
-        </div>
-      </div>
+        <h3 className="mb-1 text-sm font-semibold text-slate-700">
+          Upload your 3D model <span className="text-red-500">*</span>
+        </h3>
+        <p className="mb-3 text-xs text-slate-400">STL file required to calculate an accurate price</p>
 
-      {/* Description + STL */}
-      <div>
-        <h3 className="mb-3 text-sm font-semibold text-slate-700">What do you want printed?</h3>
-        <textarea
-          name="description"
-          required
-          rows={3}
-          placeholder="Describe what you need. e.g. A small phone stand for my desk, roughly 10cm tall..."
-          className={`${inputClass} resize-none`}
-        />
         {!stlFile ? (
-          <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 hover:border-orange-300 hover:bg-orange-50 transition">
-            <Upload className="h-4 w-4 shrink-0" />
-            <span>Upload STL for 3D preview &amp; auto-pricing <span className="text-slate-400">(optional)</span></span>
-            <input type="file" accept=".stl" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleStlSelect(f) }} />
+          <label className="flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center hover:border-orange-300 hover:bg-orange-50 transition">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+              <Upload className="h-6 w-6 text-slate-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-700">Drop your STL file here</p>
+              <p className="text-xs text-slate-400 mt-0.5">or click to browse</p>
+            </div>
+            <input
+              type="file"
+              accept=".stl"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleStlSelect(f) }}
+            />
           </label>
         ) : (
-          <div className="mt-2 space-y-2">
+          <div className="space-y-2">
             <div className="relative rounded-xl overflow-hidden border border-slate-200">
-              <Suspense fallback={<div className="flex h-48 items-center justify-center bg-slate-50 text-sm text-slate-400">Loading 3D viewer...</div>}>
+              <Suspense fallback={
+                <div className="flex h-48 items-center justify-center bg-slate-50 text-sm text-slate-400">
+                  Loading 3D viewer...
+                </div>
+              }>
                 <STLViewer file={stlFile} />
               </Suspense>
-              <button type="button" onClick={clearStl} className="absolute top-2 right-2 rounded-full bg-white/80 p-1 text-slate-500 hover:text-slate-900 shadow-sm">
+              <button
+                type="button"
+                onClick={clearStl}
+                className="absolute top-2 right-2 rounded-full bg-white/90 p-1.5 text-slate-500 hover:text-slate-900 shadow transition"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            {slicing && (
+
+            {uploading && (
               <div className="flex items-center gap-2 text-xs text-slate-500">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analysing model...
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...
               </div>
             )}
-            {sliceResult && (
-              <div className="flex items-center gap-3 rounded-lg bg-green-50 border border-green-100 px-3 py-2 text-xs text-green-700">
-                <span>~{sliceResult.weight_g}g filament</span>
-                <span>·</span>
-                <span>~{sliceResult.print_hours}h print time</span>
-                {selectedProfile && <span className="text-green-500">({selectedProfile.nozzle_mm}mm nozzle)</span>}
-              </div>
+            {stlUrl && !uploading && (
+              <p className="text-xs text-green-600">✓ {stlFile.name} ready</p>
             )}
-            {sliceError && <p className="text-xs text-slate-400">{sliceError}</p>}
+            {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
           </div>
         )}
       </div>
 
-      {/* Print type */}
-      <div>
-        <h3 className="mb-1 text-sm font-semibold text-slate-700">Print type <span className="text-red-500">*</span></h3>
-        <p className="mb-3 text-xs text-slate-400">What kind of print do you need?</p>
-        <div className="flex flex-wrap gap-2">
-          {printer.print_types.map((type) => (
-            <button key={type} type="button" onClick={() => setPrintType(type)}
-              className={`rounded-xl border px-4 py-2.5 text-left transition ${printType === type ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
-              <p className="text-sm font-medium">{PRINT_TYPE_LABELS[type]}</p>
-              <p className="text-xs text-slate-500">{PRINT_TYPE_DESCRIPTIONS[type]}</p>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Material */}
-      <div>
-        <h3 className="mb-1 text-sm font-semibold text-slate-700">Material <span className="text-red-500">*</span></h3>
-        <p className="mb-3 text-xs text-slate-400">What material should it be printed in?</p>
-        <div className="flex flex-wrap gap-2">
-          {materialOptions.map((m) => {
-            const colors = filamentsByMaterial[m] ?? []
-            return (
-              <button key={m} type="button" onClick={() => handleMaterialSelect(m)}
-                className={`rounded-xl border px-4 py-2.5 text-left transition ${material === m ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
-                <p className="text-sm font-medium">{MATERIAL_LABELS[m]}</p>
-                {colors.length > 0 && (
-                  <div className="mt-1 flex items-center gap-1">
-                    {colors.slice(0, 5).map((f) => (
-                      <span key={f.id} className="h-3 w-3 rounded-full border border-white shadow-sm" style={{ background: f.color_hex }} title={f.color} />
-                    ))}
-                    {colors.length > 5 && <span className="text-xs text-slate-400">+{colors.length - 5}</span>}
-                  </div>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Color picker */}
-      {material && (filamentsByMaterial[material]?.length ?? 0) > 0 && (
-        <div>
-          <h3 className="mb-1 text-sm font-semibold text-slate-700">
-            Color <span className="text-red-500">*</span>
-          </h3>
-          <p className="mb-3 text-xs text-slate-400">Choose an available color</p>
-          <div className="flex flex-wrap gap-2">
-            {filamentsByMaterial[material].map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setSelectedFilament(f)}
-                className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
-                  selectedFilament?.id === f.id
-                    ? 'border-orange-500 bg-orange-50 text-orange-700'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'
-                }`}
-              >
-                <span className="h-4 w-4 shrink-0 rounded-full border border-slate-200 shadow-sm" style={{ background: f.color_hex }} />
-                <span>{f.color}</span>
-                {f.brand && <span className="text-xs text-slate-400">{f.brand}</span>}
-              </button>
-            ))}
-          </div>
-          {!selectedFilament && (
-            <p className="mt-1 text-xs text-red-400">Please select a color</p>
-          )}
-        </div>
-      )}
-
-      {/* Print profile picker — only shown when owner has multiple profiles */}
-      {profiles.length > 1 && (
-        <div>
-          <h3 className="mb-1 text-sm font-semibold text-slate-700">Print profile <span className="text-red-500">*</span></h3>
-          <p className="mb-3 text-xs text-slate-400">Nozzle size and print settings</p>
-          <div className="flex flex-wrap gap-2">
-            {profiles.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setSelectedProfile(p)}
-                className={`rounded-xl border px-4 py-2.5 text-left transition ${
-                  selectedProfile?.id === p.id
-                    ? 'border-orange-500 bg-orange-50 text-orange-700'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'
-                }`}
-              >
-                <p className="text-sm font-medium">{p.name}</p>
-                <p className="text-xs text-slate-400">{p.nozzle_mm}mm nozzle</p>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Quality */}
-      <div className={stlFile ? '' : 'grid grid-cols-1 gap-4 sm:grid-cols-2'}>
-        {/* Size — only shown when no STL uploaded */}
-        {!stlFile && (
+      {/* ── Step 2: Material & Color (shown after STL uploaded) ─── */}
+      {stlUrl && (
+        <>
           <div>
-            <h3 className="mb-1 text-sm font-semibold text-slate-700">Approximate size <span className="text-red-500">*</span></h3>
-            <p className="text-xs text-slate-400 mb-2">For cost estimate only — actual size is taken from your design</p>
-            <div className="flex flex-col gap-2">
-              {(['small', 'medium', 'large'] as PrintSize[]).map((s) => {
-                const allowed = s === 'small' || (s === 'medium' && printer.max_size !== 'small') || (s === 'large' && printer.max_size === 'large')
+            <h3 className="mb-1 text-sm font-semibold text-slate-700">
+              Material <span className="text-red-500">*</span>
+            </h3>
+            <p className="mb-3 text-xs text-slate-400">What material should it be printed in?</p>
+            <div className="flex flex-wrap gap-2">
+              {materialOptions.map((m) => {
+                const colors = filamentsByMaterial[m] ?? []
                 return (
-                  <button key={s} type="button" disabled={!allowed} onClick={() => setSize(s)}
-                    className={`rounded-xl border px-3 py-2 text-left text-sm transition ${size === s ? 'border-orange-500 bg-orange-50 text-orange-700' : allowed ? 'border-slate-200 bg-white text-slate-700 hover:border-orange-200' : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'}`}>
-                    {SIZE_LABELS[s]}
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => handleMaterialSelect(m)}
+                    className={`rounded-xl border px-4 py-2.5 text-left transition ${
+                      material === m
+                        ? 'border-orange-500 bg-orange-50 text-orange-700'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'
+                    }`}
+                  >
+                    <p className="text-sm font-medium">{MATERIAL_LABELS[m]}</p>
+                    {colors.length > 0 && (
+                      <div className="mt-1 flex items-center gap-1">
+                        {colors.slice(0, 5).map((f) => (
+                          <span
+                            key={f.id}
+                            className="h-3 w-3 rounded-full border border-white shadow-sm"
+                            style={{ background: f.color_hex }}
+                            title={f.color}
+                          />
+                        ))}
+                        {colors.length > 5 && <span className="text-xs text-slate-400">+{colors.length - 5}</span>}
+                      </div>
+                    )}
                   </button>
                 )
               })}
             </div>
           </div>
-        )}
 
-        <div className={stlFile ? 'max-w-xs' : ''}>
-          <h3 className="mb-1 text-sm font-semibold text-slate-700">Quality <span className="text-red-500">*</span></h3>
-          <p className="text-xs text-slate-400 mb-2">Surface finish &amp; infill density</p>
-          <div className="flex flex-col gap-2">
+          {/* Color picker */}
+          {hasColorChoice && (
+            <div>
+              <h3 className="mb-1 text-sm font-semibold text-slate-700">
+                Color <span className="text-red-500">*</span>
+              </h3>
+              <p className="mb-3 text-xs text-slate-400">Choose an available color</p>
+              <div className="flex flex-wrap gap-2">
+                {filamentsByMaterial[material as string].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setSelectedFilament(f)}
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+                      selectedFilament?.id === f.id
+                        ? 'border-orange-500 bg-orange-50 text-orange-700'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'
+                    }`}
+                  >
+                    <span
+                      className="h-4 w-4 shrink-0 rounded-full border border-slate-200 shadow-sm"
+                      style={{ background: f.color_hex }}
+                    />
+                    <span>{f.color}</span>
+                    {f.brand && <span className="text-xs text-slate-400">{f.brand}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Step 3: Quality (shown after material selected) ──────── */}
+      {stlUrl && material && (
+        <div>
+          <h3 className="mb-1 text-sm font-semibold text-slate-700">
+            Quality <span className="text-red-500">*</span>
+          </h3>
+          <p className="mb-3 text-xs text-slate-400">Surface finish and infill strength</p>
+          <div className="grid grid-cols-3 gap-2">
             {(['draft', 'standard', 'premium'] as PrintQuality[]).map((q) => {
-              const infillPct = getInfill(q)
+              const infillPct =
+                q === 'draft'
+                  ? (defaultProfile?.infill_draft ?? 15)
+                  : q === 'standard'
+                  ? (defaultProfile?.infill_standard ?? 25)
+                  : (defaultProfile?.infill_premium ?? 40)
               return (
-                <button key={q} type="button" onClick={() => setQuality(q)}
-                  className={`rounded-xl border px-3 py-2 text-left text-sm transition ${quality === q ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
-                  {QUALITY_LABELS[q]}
-                  <span className="ml-2 text-xs text-slate-400">{infillPct}% infill</span>
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setQuality(q)}
+                  className={`rounded-xl border px-3 py-3 text-center transition ${
+                    quality === q
+                      ? 'border-orange-500 bg-orange-50 text-orange-700'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'
+                  }`}
+                >
+                  <p className="text-sm font-medium capitalize">{q}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{infillPct}% infill</p>
                 </button>
               )
             })}
           </div>
         </div>
-      </div>
-
-      {/* Supports toggle */}
-      {selectedProfile?.supports_available && (
-        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <div>
-            <p className="text-sm font-medium text-slate-700">Support structures</p>
-            <p className="text-xs text-slate-400">Required for overhangs &gt;45°. Adds ~25% filament &amp; 20% print time.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSupports((v) => !v)}
-            className={`relative h-6 w-11 rounded-full transition-colors ${supports ? 'bg-orange-500' : 'bg-slate-200'}`}
-          >
-            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${supports ? 'translate-x-5' : 'translate-x-0.5'}`} />
-          </button>
-        </div>
       )}
 
-      {/* Advanced add-ons */}
-      {selectedProfile && (
-        (() => {
-          const available = [
-            selectedProfile.ironing_available      && { id: 'ironing',      label: 'Ironing',           desc: 'Smooth top surface by remelting the top layer',          note: '+15% print time' },
-            selectedProfile.color_change_available && { id: 'color_change', label: 'Color change',      desc: 'Pause at a layer to swap filament for a two-tone effect', note: '+RM3–5' },
-            selectedProfile.pause_insert_available && { id: 'pause_insert', label: 'Embedded insert',   desc: 'Pause to press-fit heat-set nuts or magnets',             note: '+RM2–3' },
-            selectedProfile.fuzzy_skin_available   && { id: 'fuzzy_skin',   label: 'Fuzzy skin',        desc: 'Textured outer surface for grip or aesthetic effect',      note: '+5% print time' },
-          ].filter(Boolean) as { id: string; label: string; desc: string; note: string }[]
-
-          if (available.length === 0) return null
-          return (
-            <div>
-              <h3 className="mb-1 text-sm font-semibold text-slate-700">Add-ons</h3>
-              <p className="mb-3 text-xs text-slate-400">Optional finishing options this printer supports</p>
-              <div className="space-y-2">
-                {available.map(({ id, label, desc, note }) => {
-                  const checked = selectedAddons.includes(id)
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setSelectedAddons((prev) =>
-                        checked ? prev.filter((a) => a !== id) : [...prev, id]
-                      )}
-                      className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${
-                        checked
-                          ? 'border-orange-400 bg-orange-50'
-                          : 'border-slate-200 bg-white hover:border-orange-200'
-                      }`}
-                    >
-                      <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition ${
-                        checked ? 'border-orange-500 bg-orange-500' : 'border-slate-300'
-                      }`}>
-                        {checked && <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-800">{label}</p>
-                        <p className="text-xs text-slate-400">{desc}</p>
-                      </div>
-                      <span className="shrink-0 text-xs text-slate-400">{note}</span>
-                    </button>
-                  )
-                })}
+      {/* ── Price (shown while slicing or after slice) ─────────── */}
+      {stlUrl && material && quality && (
+        <div>
+          {slicing && (
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-orange-500 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-slate-700">Calculating price from your file...</p>
+                <p className="text-xs text-slate-400">This takes a few seconds</p>
               </div>
             </div>
-          )
-        })()
-      )}
+          )}
 
-      {/* Price estimate */}
-      {slicerPrice && allSelected && (
-        <div className="rounded-xl border border-green-100 bg-green-50/60 p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <p className="text-xs font-medium text-slate-500">Estimated price (from your STL)</p>
-            <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-700">accurate</span>
-          </div>
-          <p className="text-2xl font-bold text-green-700">{formatRM(slicerPrice.suggested_price)}</p>
-          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-slate-500">
-            <p>Filament: ~{slicerPrice.weight_g.toFixed(1)}g</p>
-            <p>Cost: {formatRM(slicerPrice.filament_cost)}</p>
-            <p>Print time: ~{slicerPrice.hours.toFixed(2)}h</p>
-            <p>Power: {formatRM(slicerPrice.electricity_cost)}</p>
-            {supports && <p className="col-span-2 text-amber-600">Includes support material</p>}
-          </div>
-          <p className="mt-2 text-xs text-slate-400">Final price set by the owner in their quote.</p>
+          {sliceError && (
+            <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              {sliceError}
+            </div>
+          )}
+
+          {price && sliceResult && (
+            <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4">
+              <p className="text-xs font-medium text-slate-500 mb-3">Price estimate from your file</p>
+              <p className="text-3xl font-bold text-orange-600 mb-3">{formatRM(price.suggested_price)}</p>
+              <div className="space-y-1 text-xs text-slate-500 border-t border-orange-100 pt-3">
+                <div className="flex justify-between">
+                  <span>Filament ~{sliceResult.weight_g}g</span>
+                  <span>{formatRM(price.filament_cost)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Electricity ~{sliceResult.print_hours}h</span>
+                  <span>{formatRM(price.electricity_cost)}</span>
+                </div>
+                <div className="flex justify-between font-medium text-slate-700 border-t border-orange-100 pt-1 mt-1">
+                  <span>Base + {printer.markup_percent ?? 30}% margin</span>
+                  <span>{formatRM(price.suggested_price)}</span>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-slate-400">Final price confirmed in the owner's quote.</p>
+            </div>
+          )}
         </div>
       )}
 
-      {!slicerPrice && fallbackEstimate && (
-        <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4">
-          <p className="text-xs font-medium text-slate-500 mb-2">Estimated price</p>
-          <p className="text-2xl font-bold text-orange-600">{formatRM(fallbackEstimate.suggested_price)}</p>
-          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-slate-500">
-            <p>Filament: ~{fallbackEstimate.weight_g}g</p>
-            <p>Cost: {formatRM(fallbackEstimate.filament_cost)}</p>
-            <p>Print time: ~{fallbackEstimate.hours}h</p>
-            <p>Power: {formatRM(fallbackEstimate.electricity_cost)}</p>
+      {/* ── Step 4: Details + contact (shown after STL ready) ────── */}
+      {stlUrl && (
+        <>
+          <div>
+            <label htmlFor="description" className="mb-1 block text-xs font-medium text-slate-600">
+              Describe what you need <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              required
+              rows={3}
+              placeholder="e.g. A phone stand for my desk, roughly 10 cm tall. Need 2 copies."
+              className={`${inputClass} resize-none`}
+            />
           </div>
-          <p className="mt-2 text-xs text-slate-400">Upload an STL for a more accurate estimate.</p>
-        </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="deadline" className="mb-1 block text-xs font-medium text-slate-600">
+                When do you need it? <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="deadline"
+                name="deadline"
+                type="date"
+                required
+                min={new Date().toISOString().split('T')[0]}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label htmlFor="notes" className="mb-1 block text-xs font-medium text-slate-600">
+                Any notes?
+              </label>
+              <input
+                id="notes"
+                name="notes"
+                type="text"
+                placeholder="Quantity, special requirements..."
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-slate-700">Your contact details</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="name" className="mb-1 block text-xs font-medium text-slate-600">
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <input id="name" name="name" type="text" required placeholder="Ahmad Farid" className={inputClass} />
+              </div>
+              <div>
+                <label htmlFor="phone" className="mb-1 block text-xs font-medium text-slate-600">
+                  WhatsApp <span className="text-red-500">*</span>
+                </label>
+                <input id="phone" name="phone" type="tel" required placeholder="+601X-XXXXXXX" className={inputClass} />
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="email" className="mb-1 block text-xs font-medium text-slate-600">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input id="email" name="email" type="email" required placeholder="you@example.com" className={inputClass} />
+              </div>
+            </div>
+          </div>
+
+          {submitError && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{submitError}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={!canSubmit || !!colorRequired}
+            className="w-full rounded-xl bg-orange-500 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pending ? 'Sending request...' : slicing ? 'Calculating price...' : 'Send Request'}
+          </button>
+        </>
       )}
-
-      {/* Deadline + Notes */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="deadline" className="mb-1 block text-xs font-medium text-slate-600">
-            When do you need it? <span className="text-red-500">*</span>
-          </label>
-          <input id="deadline" name="deadline" type="date" required className={inputClass} />
-        </div>
-        <div>
-          <label htmlFor="notes" className="mb-1 block text-xs font-medium text-slate-600">
-            Any other notes?
-          </label>
-          <input id="notes" name="notes" type="text" placeholder="Quantity, special requirements..." className={inputClass} />
-        </div>
-      </div>
-
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
-
-      <button
-        type="submit"
-        disabled={pending || !allSelected || (material && (filamentsByMaterial[material]?.length ?? 0) > 0 && !selectedFilament) ? true : false}
-        className="w-full rounded-xl bg-orange-500 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {pending ? 'Sending request...' : 'Send Request'}
-      </button>
     </form>
   )
 }
