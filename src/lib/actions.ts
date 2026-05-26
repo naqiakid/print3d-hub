@@ -5,6 +5,20 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from './supabase/server'
 import type { RequestStatus, PrintType, FilamentMaterial, PrintSize } from './types'
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://print3d-hub.vercel.app'
+
+async function sendEmail(to: string, subject: string, html: string) {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return
+  try {
+    const { Resend } = await import('resend')
+    const resend = new Resend(apiKey)
+    await resend.emails.send({ from: 'Print3D Hub <onboarding@resend.dev>', to, subject, html })
+  } catch {
+    // Fire-and-forget
+  }
+}
+
 async function sendOwnerNotification(data: {
   customer_name: string
   customer_email: string
@@ -14,29 +28,18 @@ async function sendOwnerNotification(data: {
   deadline: string
   printer_name: string
 }) {
-  const apiKey = process.env.RESEND_API_KEY
   const toEmail = process.env.NOTIFICATION_EMAIL
-  if (!apiKey || !toEmail) return
-
-  try {
-    const { Resend } = await import('resend')
-    const resend = new Resend(apiKey)
-    await resend.emails.send({
-      from: 'Print3D Hub <onboarding@resend.dev>',
-      to: toEmail,
-      subject: `New print request from ${data.customer_name}`,
-      html: `
-        <h2>New request on ${data.printer_name}</h2>
-        <p><strong>From:</strong> ${data.customer_name} (${data.customer_email} · ${data.customer_phone})</p>
-        <p><strong>Description:</strong> ${data.description}</p>
-        <p><strong>Material:</strong> ${data.material.toUpperCase()}</p>
-        <p><strong>Deadline:</strong> ${new Date(data.deadline).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-        <p><a href="https://print3d-hub.vercel.app/dashboard">Open dashboard →</a></p>
-      `,
-    })
-  } catch {
-    // Fire-and-forget — email failure must not block the request submission
-  }
+  if (!toEmail) return
+  await sendEmail(
+    toEmail,
+    `New print request from ${data.customer_name}`,
+    `<h2>New request on ${data.printer_name}</h2>
+     <p><strong>From:</strong> ${data.customer_name} (${data.customer_email} · ${data.customer_phone})</p>
+     <p><strong>Description:</strong> ${data.description}</p>
+     <p><strong>Material:</strong> ${data.material.toUpperCase()}</p>
+     <p><strong>Deadline:</strong> ${new Date(data.deadline).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+     <p><a href="${APP_URL}/dashboard">Open dashboard →</a></p>`,
+  )
 }
 
 // ─── Print Profile CRUD ─────────────────────────────────────
@@ -137,6 +140,7 @@ export async function registerPrinter(data: {
   printer_model: string
   printer_model_id: string
   print_types: PrintType[]
+  materials: FilamentMaterial[]
   max_size: PrintSize
   turnaround: string
   contact_phone: string
@@ -157,7 +161,7 @@ export async function registerPrinter(data: {
       description: data.description,
       printer_model: data.printer_model,
       print_types: data.print_types,
-      materials: [],
+      materials: data.materials,
       max_size: data.max_size,
       turnaround: data.turnaround,
       contact_phone: data.contact_phone,
@@ -191,6 +195,38 @@ export async function registerPrinter(data: {
 
 // ─── Filament CRUD ──────────────────────────────────────────
 
+async function syncFilamentCosts(supabase: Awaited<ReturnType<typeof createClient>>, ownerId: string) {
+  const { data: filaments } = await supabase
+    .from('filaments')
+    .select('material, cost_per_kg')
+    .eq('owner_id', ownerId)
+    .eq('in_stock', true)
+
+  if (!filaments) return
+
+  // Take cheapest in-stock cost per material
+  const costs: Record<string, number> = {}
+  for (const f of filaments) {
+    if (!(f.material in costs) || f.cost_per_kg < costs[f.material]) {
+      costs[f.material] = f.cost_per_kg
+    }
+  }
+
+  const { data: printerRow } = await supabase
+    .from('printers')
+    .select('id')
+    .eq('owner_id', ownerId)
+    .limit(1)
+    .maybeSingle()
+
+  if (printerRow) {
+    await supabase
+      .from('printers')
+      .update({ filament_costs: Object.keys(costs).length ? costs : null })
+      .eq('id', printerRow.id)
+  }
+}
+
 export async function createFilament(data: {
   material: FilamentMaterial
   brand: string
@@ -205,7 +241,9 @@ export async function createFilament(data: {
 
   const { error } = await supabase.from('filaments').insert({ ...data, owner_id: user.id })
   if (error) return { error: error.message }
+  await syncFilamentCosts(supabase, user.id)
   revalidatePath('/dashboard/filaments')
+  revalidatePath('/dashboard/listing')
 }
 
 export async function updateFilament(
@@ -229,7 +267,9 @@ export async function updateFilament(
     .eq('id', id)
     .eq('owner_id', user.id)
   if (error) return { error: error.message }
+  await syncFilamentCosts(supabase, user.id)
   revalidatePath('/dashboard/filaments')
+  revalidatePath('/dashboard/listing')
 }
 
 export async function deleteFilament(id: string): Promise<{ error: string } | undefined> {
@@ -243,7 +283,9 @@ export async function deleteFilament(id: string): Promise<{ error: string } | un
     .eq('id', id)
     .eq('owner_id', user.id)
   if (error) return { error: error.message }
+  await syncFilamentCosts(supabase, user.id)
   revalidatePath('/dashboard/filaments')
+  revalidatePath('/dashboard/listing')
 }
 
 export async function sliceSTL(
@@ -303,13 +345,16 @@ export async function submitRequest(data: {
     .single()
   if (error) return { error: error.message }
 
-  // Fire-and-forget email notification
+  // Fire-and-forget emails
   supabase
     .from('printers')
     .select('name')
     .eq('id', data.printer_id)
     .single()
     .then(({ data: printer }) => {
+      const printerName = printer?.name ?? 'your printer'
+      const trackingUrl = `${APP_URL}/track/${inserted.id}`
+
       sendOwnerNotification({
         customer_name: data.customer_name,
         customer_email: data.customer_email,
@@ -317,8 +362,20 @@ export async function submitRequest(data: {
         description: data.description,
         material: data.material,
         deadline: data.deadline,
-        printer_name: printer?.name ?? 'your printer',
+        printer_name: printerName,
       })
+
+      sendEmail(
+        data.customer_email,
+        `Your print request has been received — ${printerName}`,
+        `<h2>Thanks, ${data.customer_name}!</h2>
+         <p>Your request has been received by <strong>${printerName}</strong>. They'll review it and send you a quote soon.</p>
+         <p><strong>Description:</strong> ${data.description}</p>
+         <p><strong>Material:</strong> ${data.material.toUpperCase()}</p>
+         <p><strong>Deadline:</strong> ${new Date(data.deadline).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+         <p>Track your order here:<br><a href="${trackingUrl}">${trackingUrl}</a></p>
+         <p style="color:#888;font-size:12px">Save this link — it's the only way to check your order status.</p>`,
+      )
     })
 
   return { id: inserted.id }
@@ -391,6 +448,43 @@ export async function sendQuote(
     .eq('id', requestId)
 
   if (error) return { error: error.message }
+
+  // Fire-and-forget quote email to customer
+  supabase
+    .from('requests')
+    .select('customer_name, customer_email, printer_id')
+    .eq('id', requestId)
+    .single()
+    .then(({ data: req }) => {
+      if (!req) return
+      supabase
+        .from('printers')
+        .select('name')
+        .eq('id', req.printer_id)
+        .single()
+        .then(({ data: printer }) => {
+          const printerName = printer?.name ?? 'your printer'
+          const trackingUrl = `${APP_URL}/track/${requestId}`
+          const readyDate = new Date(byDate).toLocaleDateString('en-MY', {
+            weekday: 'long', day: 'numeric', month: 'long',
+          })
+          sendEmail(
+            req.customer_email,
+            `Quote from ${printerName}: RM${price}`,
+            `<h2>You have a quote!</h2>
+             <p>Hi ${req.customer_name},</p>
+             <p><strong>${printerName}</strong> has reviewed your request and sent a quote:</p>
+             <table style="margin:16px 0;border-collapse:collapse">
+               <tr><td style="padding:4px 12px 4px 0;color:#888">Price</td><td style="font-size:24px;font-weight:bold">RM${price}</td></tr>
+               <tr><td style="padding:4px 12px 4px 0;color:#888">Ready by</td><td>${readyDate}</td></tr>
+               ${message ? `<tr><td style="padding:4px 12px 4px 0;color:#888">Note</td><td>${message}</td></tr>` : ''}
+             </table>
+             <p>To confirm this quote, contact the owner via WhatsApp or reply to this email.</p>
+             <p>Track your order: <a href="${trackingUrl}">${trackingUrl}</a></p>`,
+          )
+        })
+    })
+
   revalidatePath('/dashboard')
 }
 

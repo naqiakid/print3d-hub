@@ -36,8 +36,11 @@ yarn-error.log*
 # vercel
 .vercel
 
-# claude
+# claude / mcp
 .claude/
+.mcp.json
+.agents/
+skills-lock.json
 
 # supabase
 supabase/.temp/

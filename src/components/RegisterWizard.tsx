@@ -141,6 +141,7 @@ export default function RegisterWizard() {
       printer_model: `${selectedPreset.brand} ${selectedPreset.name}`,
       printer_model_id: selectedPreset.id,
       print_types: printTypes,
+      materials: selectedPreset.materials,
       max_size: selectedPreset.max_size,
       turnaround,
       contact_phone: phone,
