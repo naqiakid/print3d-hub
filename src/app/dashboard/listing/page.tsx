@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { Printer } from '@/lib/types'
 import { PRINT_TYPE_LABELS, MATERIAL_LABELS, SIZE_LABELS } from '@/lib/types'
 import AvailabilityToggle from '@/components/AvailabilityToggle'
+import ListingEditor from '@/components/ListingEditor'
 
 export default async function ListingPage() {
   const supabase = await createClient()
@@ -46,23 +47,22 @@ export default async function ListingPage() {
         <AvailabilityToggle printerId={printer.id} initial={printer.available} />
       </div>
 
-      {/* Listing details */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">{printer.name}</h2>
-            <p className="text-sm text-slate-500">{printer.printer_model}</p>
-          </div>
-          <Link
-            href={`/printers/${printer.id}`}
-            className="text-xs text-orange-500 hover:text-orange-600 transition"
-          >
-            View public page →
-          </Link>
-        </div>
+      {/* View public page link */}
+      <div className="mb-2 flex justify-end">
+        <Link
+          href={`/printers/${printer.id}`}
+          className="text-xs text-orange-500 hover:text-orange-600 transition"
+        >
+          View public page →
+        </Link>
+      </div>
 
-        <p className="text-sm text-slate-600">{printer.description}</p>
+      {/* Editable listing details */}
+      <ListingEditor printer={printer} />
 
+      {/* Materials / specs (read-only info) */}
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+        <h3 className="font-semibold text-slate-900">Printer specs</h3>
         <div className="space-y-2 text-sm">
           <div className="flex gap-2 flex-wrap">
             {printer.print_types.map((t) => (
@@ -79,7 +79,6 @@ export default async function ListingPage() {
             ))}
           </div>
         </div>
-
         <div className="grid grid-cols-2 gap-3 text-sm border-t border-slate-100 pt-4">
           <div>
             <span className="block text-xs text-slate-400">Max size</span>
@@ -89,16 +88,7 @@ export default async function ListingPage() {
             <span className="block text-xs text-slate-400">Price range</span>
             <span className="font-medium text-slate-900">RM{printer.price_min}–RM{printer.price_max}</span>
           </div>
-          <div>
-            <span className="block text-xs text-slate-400">Turnaround</span>
-            <span className="font-medium text-slate-900">{printer.turnaround}</span>
-          </div>
-          <div>
-            <span className="block text-xs text-slate-400">WhatsApp</span>
-            <span className="font-medium text-slate-900">{printer.contact_phone}</span>
-          </div>
         </div>
-
         <div className="flex gap-3 border-t border-slate-100 pt-4">
           <Link
             href="/dashboard/profiles"
@@ -109,20 +99,10 @@ export default async function ListingPage() {
         </div>
       </div>
 
-      {/* Cost settings summary */}
+      {/* Filament costs (read-only) */}
       {printer.filament_costs && (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
-          <h3 className="font-semibold text-slate-900">Cost settings</h3>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <span className="block text-xs text-slate-400">Electricity rate</span>
-              <span className="font-medium text-slate-900">RM{printer.electricity_rate}/kWh</span>
-            </div>
-            <div>
-              <span className="block text-xs text-slate-400">Markup</span>
-              <span className="font-medium text-slate-900">{printer.markup_percent}%</span>
-            </div>
-          </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
+          <h3 className="font-semibold text-slate-900">Filament costs</h3>
           <div className="flex flex-wrap gap-2">
             {Object.entries(printer.filament_costs).map(([mat, cost]) => (
               <span key={mat} className="rounded-lg bg-slate-50 px-3 py-1.5 text-xs">

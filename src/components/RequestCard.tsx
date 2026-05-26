@@ -60,8 +60,14 @@ export default function RequestCard({ request, printer }: { request: PrintReques
     })
   }
 
+  const TERMINAL = new Set<RequestStatus>(['collected', 'declined', 'cancelled', 'reviewed'])
+  const daysUntilDeadline = Math.ceil(
+    (new Date(request.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  )
+  const isUrgent = !TERMINAL.has(request.status) && daysUntilDeadline <= 2
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+    <div className={`rounded-xl border bg-white shadow-sm overflow-hidden ${isUrgent ? 'border-red-300' : 'border-slate-200'}`}>
       {/* Summary row */}
       <button
         onClick={() => setExpanded((v) => !v)}
@@ -76,10 +82,10 @@ export default function RequestCard({ request, printer }: { request: PrintReques
           </div>
           <p className="text-sm text-slate-500 truncate">{request.description}</p>
         </div>
-        <div className="shrink-0 text-right text-xs text-slate-400">
-          <div className="flex items-center gap-1 mb-1">
+        <div className="shrink-0 text-right text-xs">
+          <div className={`flex items-center gap-1 mb-1 ${isUrgent ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
             <Calendar className="h-3.5 w-3.5" />
-            Due {new Date(request.deadline).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })}
+            {isUrgent && daysUntilDeadline <= 0 ? 'Overdue!' : isUrgent ? `${daysUntilDeadline}d left` : `Due ${new Date(request.deadline).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })}`}
           </div>
           {request.quoted_price && (
             <div className="font-semibold text-slate-900">RM{request.quoted_price}</div>

@@ -5,6 +5,40 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from './supabase/server'
 import type { RequestStatus, PrintType, FilamentMaterial, PrintSize } from './types'
 
+async function sendOwnerNotification(data: {
+  customer_name: string
+  customer_email: string
+  customer_phone: string
+  description: string
+  material: string
+  deadline: string
+  printer_name: string
+}) {
+  const apiKey = process.env.RESEND_API_KEY
+  const toEmail = process.env.NOTIFICATION_EMAIL
+  if (!apiKey || !toEmail) return
+
+  try {
+    const { Resend } = await import('resend')
+    const resend = new Resend(apiKey)
+    await resend.emails.send({
+      from: 'Print3D Hub <onboarding@resend.dev>',
+      to: toEmail,
+      subject: `New print request from ${data.customer_name}`,
+      html: `
+        <h2>New request on ${data.printer_name}</h2>
+        <p><strong>From:</strong> ${data.customer_name} (${data.customer_email} · ${data.customer_phone})</p>
+        <p><strong>Description:</strong> ${data.description}</p>
+        <p><strong>Material:</strong> ${data.material.toUpperCase()}</p>
+        <p><strong>Deadline:</strong> ${new Date(data.deadline).toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+        <p><a href="https://print3d-hub.vercel.app/dashboard">Open dashboard →</a></p>
+      `,
+    })
+  } catch {
+    // Fire-and-forget — email failure must not block the request submission
+  }
+}
+
 // ─── Print Profile CRUD ─────────────────────────────────────
 
 export async function createProfile(data: {
@@ -268,7 +302,51 @@ export async function submitRequest(data: {
     .select('id')
     .single()
   if (error) return { error: error.message }
+
+  // Fire-and-forget email notification
+  supabase
+    .from('printers')
+    .select('name')
+    .eq('id', data.printer_id)
+    .single()
+    .then(({ data: printer }) => {
+      sendOwnerNotification({
+        customer_name: data.customer_name,
+        customer_email: data.customer_email,
+        customer_phone: data.customer_phone,
+        description: data.description,
+        material: data.material,
+        deadline: data.deadline,
+        printer_name: printer?.name ?? 'your printer',
+      })
+    })
+
   return { id: inserted.id }
+}
+
+export async function updateListing(data: {
+  printer_id: string
+  name: string
+  description: string
+  turnaround: string
+  contact_phone: string
+  electricity_rate: number
+  markup_percent: number
+}): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { printer_id, ...fields } = data
+  const { error } = await supabase
+    .from('printers')
+    .update(fields)
+    .eq('id', printer_id)
+    .eq('owner_id', user.id)
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/listing')
+  revalidatePath('/dashboard')
 }
 
 export async function updateRequestStatus(
