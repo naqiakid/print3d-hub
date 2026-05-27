@@ -61,6 +61,7 @@ export type PrintRequest = {
   description: string
   file_url: string | null
   stl_url: string | null
+  stl_urls: string[]
   weight_g: number | null
   print_hours: number | null
   print_type: PrintType

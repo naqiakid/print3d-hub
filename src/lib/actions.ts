@@ -332,6 +332,7 @@ export async function submitRequest(data: {
   color_hex?: string
   supports?: boolean
   stl_url?: string | null
+  stl_urls?: string[]
   weight_g?: number | null
   print_hours?: number | null
   profile_id?: string | null

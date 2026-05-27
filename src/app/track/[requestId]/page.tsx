@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { PrintRequest, Printer } from '@/lib/types'
@@ -177,6 +178,25 @@ export default async function TrackPage({
             </div>
           )}
         </div>
+        {/* STL file links */}
+        {(request.stl_urls?.length > 0 || request.stl_url) && (
+          <div className="border-t border-slate-100 pt-2 flex flex-wrap gap-3">
+            {(request.stl_urls?.length > 0
+              ? request.stl_urls
+              : [request.stl_url!]
+            ).map((url, i) => (
+              <Link
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-medium text-orange-500 hover:text-orange-600"
+              >
+                {request.stl_urls?.length > 1 ? `File ${i + 1}` : 'View STL'} ↗
+              </Link>
+            ))}
+          </div>
+        )}
         {request.notes && (
           <p className="text-xs text-slate-500 border-t border-slate-100 pt-2">
             Notes: {request.notes}

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useCallback, useEffect, lazy, Suspense } from 'react'
-import { CheckCircle, Upload, X, Loader2 } from 'lucide-react'
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react'
+import { CheckCircle, Upload, X, Loader2, FileBox, Plus } from 'lucide-react'
 import type { Printer, PrintProfile, Filament, PrintType, FilamentMaterial, PrintQuality } from '@/lib/types'
 import { MATERIAL_LABELS, QUALITY_LABELS } from '@/lib/types'
 import { submitRequest, sliceSTL } from '@/lib/actions'
@@ -14,6 +14,14 @@ const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
 
 type SliceResult = { weight_g: number; print_hours: number }
+
+type StlItem = {
+  id: string
+  file: File
+  url: string | null
+  uploading: boolean
+  error: string
+}
 
 function inferPrintType(material: FilamentMaterial): PrintType {
   return ['abs', 'nylon', 'pc'].includes(material) ? 'strong' : 'everyday'
@@ -31,12 +39,12 @@ export default function RequestForm({
   const [requestId, setRequestId] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const addInputRef = useRef<HTMLInputElement>(null)
 
-  // Step 1: STL upload
-  const [stlFile, setStlFile] = useState<File | null>(null)
-  const [stlUrl, setStlUrl] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState('')
+  // Step 1: STL files
+  const [stlItems, setStlItems] = useState<StlItem[]>([])
+  const allUploaded = stlItems.length > 0 && stlItems.every((i) => i.url !== null && !i.uploading)
+  const stlUrls = stlItems.map((i) => i.url).filter(Boolean) as string[]
 
   // Step 2: Specs
   const [material, setMaterial] = useState<FilamentMaterial | ''>('')
@@ -50,7 +58,6 @@ export default function RequestForm({
 
   const defaultProfile = profiles.find((p) => p.is_default) ?? profiles[0] ?? null
 
-  // Group filaments by material
   const filamentsByMaterial = filaments.reduce<Record<string, Filament[]>>((acc, f) => {
     if (!acc[f.material]) acc[f.material] = []
     acc[f.material].push(f)
@@ -68,43 +75,60 @@ export default function RequestForm({
     setSliceResult(null)
   }
 
-  // Upload STL — only uploads, no slice yet
-  const handleStlSelect = useCallback(async (file: File) => {
-    setStlFile(file)
-    setStlUrl(null)
-    setSliceResult(null)
-    setSliceError('')
-    setUploadError('')
-    setUploading(true)
-
+  const uploadFile = useCallback(async (item: StlItem) => {
     const supabase = createClient()
-    const path = `anonymous/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const path = `anonymous/${Date.now()}-${item.file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
     const { data: uploadData, error } = await supabase.storage
       .from('stl-files')
-      .upload(path, file)
-
-    setUploading(false)
+      .upload(path, item.file)
 
     if (error || !uploadData) {
-      setUploadError('Upload failed: ' + (error?.message ?? 'unknown'))
+      setStlItems((prev) =>
+        prev.map((i) =>
+          i.id === item.id ? { ...i, uploading: false, error: error?.message ?? 'Upload failed' } : i,
+        ),
+      )
       return
     }
 
     const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
-    setStlUrl(urlData.publicUrl)
+    setStlItems((prev) =>
+      prev.map((i) =>
+        i.id === item.id ? { ...i, uploading: false, url: urlData.publicUrl } : i,
+      ),
+    )
   }, [])
 
-  function clearStl() {
-    setStlFile(null)
-    setStlUrl(null)
+  const addFiles = useCallback(
+    (files: FileList | File[]) => {
+      const newItems: StlItem[] = Array.from(files)
+        .filter((f) => f.name.toLowerCase().endsWith('.stl'))
+        .map((f) => ({
+          id: crypto.randomUUID(),
+          file: f,
+          url: null,
+          uploading: true,
+          error: '',
+        }))
+
+      if (newItems.length === 0) return
+      setStlItems((prev) => [...prev, ...newItems])
+      setSliceResult(null)
+      setSliceError('')
+      newItems.forEach((item) => uploadFile(item))
+    },
+    [uploadFile],
+  )
+
+  function removeFile(id: string) {
+    setStlItems((prev) => prev.filter((i) => i.id !== id))
     setSliceResult(null)
     setSliceError('')
-    setUploadError('')
   }
 
-  // Auto-trigger slice whenever stlUrl + material + quality are all set
+  // Auto-trigger slice when all files uploaded + material + quality set
   useEffect(() => {
-    if (!stlUrl || !material || !quality) return
+    if (!allUploaded || stlUrls.length === 0 || !material || !quality) return
 
     setSlicing(true)
     setSliceResult(null)
@@ -118,38 +142,49 @@ export default function RequestForm({
         ? (defaultProfile?.infill_standard ?? 25)
         : (defaultProfile?.infill_premium ?? 40)
 
-    sliceSTL(stlUrl, material, nozzle, infill).then((result) => {
+    Promise.all(stlUrls.map((url) => sliceSTL(url, material, nozzle, infill))).then((results) => {
       setSlicing(false)
-      if ('error' in result) {
-        setSliceError(result.error === 'Slicer service not configured'
-          ? 'Price calculation unavailable — the owner will quote manually.'
-          : `Could not calculate price: ${result.error}`)
+      const errors = results.filter((r) => 'error' in r)
+      const successes = results.filter((r) => 'weight_g' in r) as SliceResult[]
+
+      if (successes.length === 0) {
+        const firstError = (errors[0] as { error: string }).error
+        setSliceError(
+          firstError === 'Slicer service not configured'
+            ? 'Price calculation unavailable — the owner will quote manually.'
+            : `Could not calculate price: ${firstError}`,
+        )
       } else {
-        setSliceResult(result)
+        setSliceResult({
+          weight_g: Math.round(successes.reduce((s, r) => s + r.weight_g, 0) * 10) / 10,
+          print_hours: Math.round(successes.reduce((s, r) => s + r.print_hours, 0) * 100) / 100,
+        })
       }
     })
-  }, [stlUrl, material, quality, defaultProfile])
+  }, [allUploaded, stlUrls.join(','), material, quality, defaultProfile])
 
-  // ── Price calculation ──────────────────────────────────────────
+  // Price calculation
   const costPerKg =
     selectedFilament?.cost_per_kg ??
     (material && printer.filament_costs ? printer.filament_costs[material as FilamentMaterial] : undefined)
 
-  const price = sliceResult && costPerKg
-    ? (() => {
-        const filament_cost = (sliceResult.weight_g / 1000) * costPerKg
-        const electricity_cost =
-          sliceResult.print_hours * ((printer.power_watts ?? 150) / 1000) * (printer.electricity_rate ?? 0.57)
-        const base_cost = filament_cost + electricity_cost
-        const suggested_price = Math.ceil(base_cost * (1 + (printer.markup_percent ?? 30) / 100))
-        return { filament_cost, electricity_cost, base_cost, suggested_price }
-      })()
-    : null
+  const price =
+    sliceResult && costPerKg
+      ? (() => {
+          const filament_cost = (sliceResult.weight_g / 1000) * costPerKg
+          const electricity_cost =
+            sliceResult.print_hours *
+            ((printer.power_watts ?? 150) / 1000) *
+            (printer.electricity_rate ?? 0.57)
+          const base_cost = filament_cost + electricity_cost
+          const suggested_price = Math.ceil(base_cost * (1 + (printer.markup_percent ?? 30) / 100))
+          return { filament_cost, electricity_cost, base_cost, suggested_price }
+        })()
+      : null
 
-  // ── Submit ─────────────────────────────────────────────────────
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!stlUrl || !material || !quality) return
+    if (!allUploaded || !material || !quality) return
     setSubmitError('')
     setPending(true)
 
@@ -169,7 +204,8 @@ export default function RequestForm({
       quality: quality as PrintQuality,
       deadline: (form.elements.namedItem('deadline') as HTMLInputElement).value,
       notes: (form.elements.namedItem('notes') as HTMLInputElement)?.value ?? '',
-      stl_url: stlUrl,
+      stl_url: stlUrls[0] ?? null,
+      stl_urls: stlUrls,
       weight_g: sliceResult?.weight_g ?? null,
       print_hours: sliceResult?.print_hours ?? null,
       profile_id: defaultProfile?.id ?? null,
@@ -184,7 +220,7 @@ export default function RequestForm({
     setRequestId(result.id)
   }
 
-  // ── Success screen ─────────────────────────────────────────────
+  // Success screen
   if (requestId) {
     const trackingUrl = `/track/${requestId}`
     return (
@@ -218,74 +254,108 @@ export default function RequestForm({
 
   const hasColorChoice = material && (filamentsByMaterial[material]?.length ?? 0) > 1
   const colorRequired = hasColorChoice && !selectedFilament
-  const canSubmit = !!(stlUrl && material && !colorRequired && quality && !slicing && !pending)
+  const canSubmit = !!(allUploaded && material && !colorRequired && quality && !slicing && !pending)
+  const firstFileWithPreview = stlItems.find((i) => i.file)
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
 
-      {/* ── Step 1: Upload STL ─────────────────────────────────── */}
+      {/* ── Step 1: Upload STL files ───────────────────────────── */}
       <div>
         <h3 className="mb-1 text-sm font-semibold text-slate-700">
-          Upload your 3D model <span className="text-red-500">*</span>
+          Upload your 3D model files <span className="text-red-500">*</span>
         </h3>
-        <p className="mb-3 text-xs text-slate-400">STL file required to calculate an accurate price</p>
+        <p className="mb-3 text-xs text-slate-400">
+          STL files required to calculate an accurate price. Multi-part models: upload all STL files.
+        </p>
 
-        {!stlFile ? (
-          <label className="flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center hover:border-orange-300 hover:bg-orange-50 transition">
+        {stlItems.length === 0 ? (
+          <label
+            className="flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center hover:border-orange-300 hover:bg-orange-50 transition"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files) }}
+          >
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
               <Upload className="h-6 w-6 text-slate-400" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-700">Drop your STL file here</p>
-              <p className="text-xs text-slate-400 mt-0.5">or click to browse</p>
+              <p className="text-sm font-medium text-slate-700">Drop your STL files here</p>
+              <p className="text-xs text-slate-400 mt-0.5">or click to browse · you can select multiple files</p>
             </div>
             <input
               type="file"
               accept=".stl"
+              multiple
               className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleStlSelect(f) }}
+              onChange={(e) => { if (e.target.files) addFiles(e.target.files) }}
             />
           </label>
         ) : (
-          <div className="space-y-2">
-            <div className="relative rounded-xl overflow-hidden border border-slate-200">
-              <Suspense fallback={
-                <div className="flex h-48 items-center justify-center bg-slate-50 text-sm text-slate-400">
-                  Loading 3D viewer...
-                </div>
-              }>
-                <STLViewer file={stlFile} />
-              </Suspense>
-              <button
-                type="button"
-                onClick={clearStl}
-                className="absolute top-2 right-2 rounded-full bg-white/90 p-1.5 text-slate-500 hover:text-slate-900 shadow transition"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {uploading && (
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...
+          <div className="space-y-3">
+            {/* 3D preview of first file */}
+            {firstFileWithPreview && (
+              <div className="relative rounded-xl overflow-hidden border border-slate-200">
+                <Suspense fallback={
+                  <div className="flex h-48 items-center justify-center bg-slate-50 text-sm text-slate-400">
+                    Loading 3D viewer...
+                  </div>
+                }>
+                  <STLViewer file={firstFileWithPreview.file} />
+                </Suspense>
               </div>
             )}
-            {stlUrl && !uploading && (
-              <p className="text-xs text-green-600">✓ {stlFile.name} ready</p>
-            )}
-            {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
+
+            {/* File list */}
+            <div className="space-y-2">
+              {stlItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
+                >
+                  <FileBox className="h-4 w-4 shrink-0 text-slate-400" />
+                  <span className="flex-1 truncate text-sm text-slate-700">{item.file.name}</span>
+                  {item.uploading && <Loader2 className="h-3.5 w-3.5 animate-spin text-orange-500 shrink-0" />}
+                  {item.url && !item.uploading && <span className="shrink-0 text-xs text-green-600">✓</span>}
+                  {item.error && <span className="shrink-0 text-xs text-red-500">Failed</span>}
+                  <button
+                    type="button"
+                    onClick={() => removeFile(item.id)}
+                    className="shrink-0 rounded-full p-0.5 text-slate-400 hover:text-slate-700 transition"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add more files */}
+            <button
+              type="button"
+              onClick={() => addInputRef.current?.click()}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-500 hover:text-orange-600 transition"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add more files
+            </button>
+            <input
+              ref={addInputRef}
+              type="file"
+              accept=".stl"
+              multiple
+              className="hidden"
+              onChange={(e) => { if (e.target.files) { addFiles(e.target.files); e.target.value = '' } }}
+            />
           </div>
         )}
       </div>
 
-      {/* ── Step 2: Material & Color (shown after STL uploaded) ─── */}
-      {stlUrl && (
+      {/* ── Step 2: Material & Color (shown after all files uploaded) */}
+      {allUploaded && (
         <>
           <div>
             <h3 className="mb-1 text-sm font-semibold text-slate-700">
               Material <span className="text-red-500">*</span>
             </h3>
-            <p className="mb-3 text-xs text-slate-400">What material should it be printed in?</p>
+            <p className="mb-3 text-xs text-slate-400">What material should all parts be printed in?</p>
             <div className="flex flex-wrap gap-2">
               {materialOptions.map((m) => {
                 const colors = filamentsByMaterial[m] ?? []
@@ -320,7 +390,6 @@ export default function RequestForm({
             </div>
           </div>
 
-          {/* Color picker */}
           {hasColorChoice && (
             <div>
               <h3 className="mb-1 text-sm font-semibold text-slate-700">
@@ -353,8 +422,8 @@ export default function RequestForm({
         </>
       )}
 
-      {/* ── Step 3: Quality (shown after material selected) ──────── */}
-      {stlUrl && material && (
+      {/* ── Step 3: Quality ────────────────────────────────────── */}
+      {allUploaded && material && (
         <div>
           <h3 className="mb-1 text-sm font-semibold text-slate-700">
             Quality <span className="text-red-500">*</span>
@@ -388,14 +457,16 @@ export default function RequestForm({
         </div>
       )}
 
-      {/* ── Price (shown while slicing or after slice) ─────────── */}
-      {stlUrl && material && quality && (
+      {/* ── Price ─────────────────────────────────────────────── */}
+      {allUploaded && material && quality && (
         <div>
           {slicing && (
             <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
               <Loader2 className="h-5 w-5 animate-spin text-orange-500 shrink-0" />
               <div>
-                <p className="text-sm font-medium text-slate-700">Calculating price from your file...</p>
+                <p className="text-sm font-medium text-slate-700">
+                  Calculating price for {stlUrls.length} file{stlUrls.length > 1 ? 's' : ''}...
+                </p>
                 <p className="text-xs text-slate-400">This takes a few seconds</p>
               </div>
             </div>
@@ -409,15 +480,17 @@ export default function RequestForm({
 
           {price && sliceResult && (
             <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4">
-              <p className="text-xs font-medium text-slate-500 mb-3">Price estimate from your file</p>
+              <p className="text-xs font-medium text-slate-500 mb-1">
+                Price estimate · {stlItems.length} file{stlItems.length > 1 ? 's' : ''}
+              </p>
               <p className="text-3xl font-bold text-orange-600 mb-3">{formatRM(price.suggested_price)}</p>
               <div className="space-y-1 text-xs text-slate-500 border-t border-orange-100 pt-3">
                 <div className="flex justify-between">
-                  <span>Filament ~{sliceResult.weight_g}g</span>
+                  <span>Filament ~{sliceResult.weight_g}g total</span>
                   <span>{formatRM(price.filament_cost)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Electricity ~{sliceResult.print_hours}h</span>
+                  <span>Electricity ~{sliceResult.print_hours}h total</span>
                   <span>{formatRM(price.electricity_cost)}</span>
                 </div>
                 <div className="flex justify-between font-medium text-slate-700 border-t border-orange-100 pt-1 mt-1">
@@ -431,8 +504,8 @@ export default function RequestForm({
         </div>
       )}
 
-      {/* ── Step 4: Details + contact (shown after STL ready) ────── */}
-      {stlUrl && (
+      {/* ── Step 4: Details + contact ──────────────────────────── */}
+      {allUploaded && (
         <>
           <div>
             <label htmlFor="description" className="mb-1 block text-xs font-medium text-slate-600">

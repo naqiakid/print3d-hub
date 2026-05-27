@@ -164,16 +164,25 @@ export default function RequestCard({ request, printer }: { request: PrintReques
             </div>
           )}
 
-          {/* File */}
-          {(request.file_url || request.stl_url) && (
-            <a
-              href={request.stl_url ?? request.file_url ?? '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-500 hover:text-orange-600"
-            >
-              <FileText className="h-4 w-4" /> Download STL
-            </a>
+          {/* Files */}
+          {(request.stl_urls?.length > 0 || request.stl_url || request.file_url) && (
+            <div className="flex flex-wrap gap-2">
+              {(request.stl_urls?.length > 0
+                ? request.stl_urls
+                : [request.stl_url ?? request.file_url ?? '']
+              ).map((url, i) => (
+                <a
+                  key={url}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-500 hover:text-orange-600"
+                >
+                  <FileText className="h-4 w-4" />
+                  {request.stl_urls?.length > 1 ? `File ${i + 1}` : 'Download STL'}
+                </a>
+              ))}
+            </div>
           )}
 
           {/* Quote info */}
