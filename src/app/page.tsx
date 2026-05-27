@@ -1,10 +1,28 @@
 import Link from 'next/link'
 import { ArrowRight, Printer, Search, Package } from 'lucide-react'
 import PrinterCard from '@/components/PrinterCard'
-import { printers } from '@/lib/data'
+import { createClient } from '@/lib/supabase/server'
+import type { Printer as PrinterType } from '@/lib/types'
 
-export default function HomePage() {
-  const featured = printers.filter((p) => p.available).slice(0, 3)
+export default async function HomePage() {
+  const supabase = await createClient()
+
+  const [{ data: printersData }, { count: completedCount }] = await Promise.all([
+    supabase
+      .from('printers')
+      .select('*')
+      .eq('available', true)
+      .order('created_at', { ascending: false })
+      .limit(3),
+    supabase
+      .from('requests')
+      .select('*', { count: 'exact', head: true })
+      .in('status', ['collected', 'reviewed']),
+  ])
+
+  const featured = (printersData ?? []) as unknown as PrinterType[]
+  const totalPrinters = featured.length  // we only fetched available ones for display
+  const totalCompleted = completedCount ?? 0
 
   return (
     <div className="flex flex-col">
@@ -25,8 +43,8 @@ export default function HomePage() {
             </h1>
 
             <p className="mb-8 max-w-lg text-lg leading-relaxed text-slate-300">
-              Connect with local 3D printer owners. Describe what you need, get a
-              quote, and pick it up — no technical knowledge required.
+              Connect with local 3D printer owners. Upload your STL file, get an
+              instant price estimate, and pick it up — no technical knowledge required.
             </p>
 
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -34,7 +52,7 @@ export default function HomePage() {
                 href="/printers"
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-orange-600"
               >
-                Find Printers Near Me <ArrowRight className="h-4 w-4" />
+                Find a Printer Near Me <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
                 href="/register"
@@ -47,31 +65,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Stats ── */}
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-3 divide-x divide-slate-200 text-center">
-            {[
-              { value: '500+', label: 'Registered Printers' },
-              { value: '2,000+', label: 'Prints Completed' },
-              { value: '50+', label: 'Cities Covered' },
-            ].map(({ value, label }) => (
-              <div key={label} className="px-4 py-2">
-                <div className="text-xl font-bold text-slate-900 sm:text-2xl">{value}</div>
-                <div className="mt-0.5 text-xs text-slate-500 sm:text-sm">{label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── How it works ── */}
       <section className="bg-slate-50 py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-12 text-center">
             <h2 className="mb-3 text-3xl font-bold text-slate-900">How it works</h2>
             <p className="mx-auto max-w-md text-slate-600">
-              Three simple steps. No technical knowledge needed.
+              Three simple steps. No account needed.
             </p>
           </div>
 
@@ -81,19 +81,19 @@ export default function HomePage() {
                 icon: Search,
                 step: '01',
                 title: 'Find a printer near you',
-                desc: 'Browse local 3D printer owners in your area. See their rating, specialties, and price range.',
+                desc: 'Browse local 3D printer owners. See their materials, turnaround time, and price range.',
               },
               {
                 icon: Package,
                 step: '02',
-                title: 'Describe what you need',
-                desc: "Tell the owner what you want printed — in plain words. Upload a file if you have one, or just describe it.",
+                title: 'Upload your STL file',
+                desc: 'Upload your 3D model and get an instant price estimate before committing to anything.',
               },
               {
                 icon: Printer,
                 step: '03',
                 title: 'Pick it up locally',
-                desc: 'Agree on a quote, let them print it, and collect your item. Pay directly at pickup.',
+                desc: 'The owner prints your model and you collect it. Pay directly at pickup.',
               },
             ].map(({ icon: Icon, step, title, desc }) => (
               <div
@@ -130,22 +130,55 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {featured.map((printer) => (
-              <PrinterCard key={printer.id} printer={printer} />
-            ))}
-          </div>
+          {featured.length === 0 ? (
+            <div className="flex flex-col items-center py-20 text-center">
+              <p className="text-slate-500">No printers available right now.</p>
+              <Link href="/register" className="mt-3 text-sm font-medium text-orange-500 hover:text-orange-600">
+                Be the first to list your printer →
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {featured.map((printer) => (
+                <PrinterCard key={printer.id} printer={printer} />
+              ))}
+            </div>
+          )}
 
-          <div className="mt-8 text-center sm:hidden">
-            <Link
-              href="/printers"
-              className="inline-flex items-center gap-1 text-sm font-medium text-orange-500"
-            >
-              See all printers <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
+          {featured.length > 0 && (
+            <div className="mt-8 text-center sm:hidden">
+              <Link
+                href="/printers"
+                className="inline-flex items-center gap-1 text-sm font-medium text-orange-500"
+              >
+                See all printers <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          )}
         </div>
       </section>
+
+      {/* ── Live stats ── */}
+      {(totalPrinters > 0 || totalCompleted > 0) && (
+        <section className="border-y border-slate-200 bg-white">
+          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            <div className="flex flex-wrap justify-center gap-12 text-center">
+              {totalPrinters > 0 && (
+                <div>
+                  <div className="text-3xl font-bold text-slate-900">{totalPrinters}</div>
+                  <div className="mt-0.5 text-sm text-slate-500">Printer{totalPrinters !== 1 ? 's' : ''} available</div>
+                </div>
+              )}
+              {totalCompleted > 0 && (
+                <div>
+                  <div className="text-3xl font-bold text-slate-900">{totalCompleted}</div>
+                  <div className="mt-0.5 text-sm text-slate-500">Print{totalCompleted !== 1 ? 's' : ''} completed</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── Owner CTA ── */}
       <section className="bg-orange-500 py-16">
@@ -156,7 +189,7 @@ export default function HomePage() {
                 Own a 3D printer? Put it to work.
               </h2>
               <p className="mt-2 text-orange-100">
-                Join the network. List your printer for free and start earning from print jobs in your area.
+                List your printer for free and start earning from print jobs in your area.
               </p>
             </div>
             <Link

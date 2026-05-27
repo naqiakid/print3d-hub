@@ -19,7 +19,7 @@ export default async function PrinterDetailPage({
   const { id } = await params
   const supabase = await createClient()
 
-  const { data } = await supabase.from('printers').select('*').eq('id', id).single()
+  const { data } = await supabase.from('printers').select('*').eq('id', id).maybeSingle()
   if (!data) notFound()
   const printer = data as unknown as Printer
 
