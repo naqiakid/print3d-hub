@@ -66,7 +66,9 @@ export default function PrinterCard({ printer, distanceKm }: Props) {
             <span className="text-xs text-slate-400">({printer.review_count})</span>
           </div>
           <span className="text-sm font-semibold text-slate-900">
-            RM{printer.price_min}–RM{printer.price_max}
+            {printer.price_min === 0 && printer.price_max === 0
+              ? 'Quote on request'
+              : `RM${printer.price_min}–RM${printer.price_max}`}
           </span>
         </div>
       </div>

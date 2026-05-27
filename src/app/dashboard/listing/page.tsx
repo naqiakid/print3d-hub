@@ -6,6 +6,7 @@ import type { Printer } from '@/lib/types'
 import { PRINT_TYPE_LABELS, MATERIAL_LABELS, SIZE_LABELS } from '@/lib/types'
 import AvailabilityToggle from '@/components/AvailabilityToggle'
 import ListingEditor from '@/components/ListingEditor'
+import CopyLinkButton from '@/components/CopyLinkButton'
 
 export default async function ListingPage() {
   const supabase = await createClient()
@@ -45,6 +46,13 @@ export default async function ListingPage() {
           </p>
         </div>
         <AvailabilityToggle printerId={printer.id} initial={printer.available} />
+      </div>
+
+      {/* Share request link */}
+      <div className="mb-4 rounded-2xl border border-orange-100 bg-orange-50 p-5">
+        <p className="mb-1 text-sm font-semibold text-slate-800">Your request link</p>
+        <p className="mb-3 text-xs text-slate-500">Share this with customers — they can upload their STL and get an instant price.</p>
+        <CopyLinkButton url={`${process.env.NEXT_PUBLIC_APP_URL ?? ''}/request/${printer.id}`} />
       </div>
 
       {/* View public page link */}

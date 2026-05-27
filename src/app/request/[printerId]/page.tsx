@@ -63,7 +63,7 @@ export default async function RequestPage({
       </div>
 
       <p className="mt-4 text-center text-xs text-slate-400">
-        No account needed. The owner will reply to your email with a quote.
+        No account needed. You&apos;ll get a confirmation email with your tracking link.
       </p>
     </div>
   )

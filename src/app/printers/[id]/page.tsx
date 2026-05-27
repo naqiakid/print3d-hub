@@ -128,9 +128,15 @@ export default async function PrinterDetailPage({
           <div className="space-y-4">
             <div className="rounded-xl border border-slate-200 p-5">
               <div className="mb-1 text-2xl font-bold text-slate-900">
-                RM{printer.price_min}–RM{printer.price_max}
+                {printer.price_min === 0 && printer.price_max === 0
+                  ? 'Quote on request'
+                  : `RM${printer.price_min}–RM${printer.price_max}`}
               </div>
-              <p className="mb-4 text-xs text-slate-500">Price range per job</p>
+              <p className="mb-4 text-xs text-slate-500">
+                {printer.price_min === 0 && printer.price_max === 0
+                  ? 'Upload your STL to get an instant estimate'
+                  : 'Price range per job'}
+              </p>
 
               {printer.available ? (
                 <Link

@@ -194,8 +194,8 @@ export default function RequestForm({
         </div>
         <h2 className="mb-2 text-xl font-bold text-slate-900">Request sent!</h2>
         <p className="max-w-sm text-sm text-slate-600">
-          <strong>{printer.name}</strong> will review your request and email you a quote
-          within {printer.turnaround}.
+          <strong>{printer.name}</strong> will review your request and get back to you
+          within {printer.turnaround}. A confirmation email is on its way.
         </p>
         <div className="mt-6 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left">
           <p className="text-xs font-medium text-slate-500 mb-1">Your tracking link — save this!</p>
