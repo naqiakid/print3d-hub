@@ -90,6 +90,7 @@ export default function ProfileManager({
           ...form,
           id: crypto.randomUUID(),
           printer_id: printerId,
+          is_active: true,
           created_at: new Date().toISOString(),
         }
         setProfiles((prev) => {

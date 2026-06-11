@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import type { PrintRequest, Printer } from '@/lib/types'
 import { STATUS_LABELS, MATERIAL_LABELS, SIZE_LABELS, QUALITY_LABELS } from '@/lib/types'
 import { formatRM } from '@/lib/pricing'
+import QuoteActions from '@/components/QuoteActions'
+import STLViewer from '@/components/STLViewerWrapper'
+import GcodeViewer from '@/components/GcodeViewerWrapper'
 
 const TIMELINE: { status: string; label: string }[] = [
   { status: 'new',       label: 'Request received' },
@@ -134,10 +137,81 @@ export default async function TrackPage({
               })}
             </p>
           )}
+
+          {/* Filament chips + STL fallback — only when there is no G-code yet */}
+          {(request.stl_urls?.length > 0 || request.stl_url) && (request.gcode_urls?.length ?? 0) === 0 && (
+            <div className="mt-3">
+              {(request.plate_filaments?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {request.plate_filaments.map((pf, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm"
+                    >
+                      <span
+                        className="h-3 w-3 rounded-full border border-slate-200"
+                        style={{ background: pf.color_hex || '#888' }}
+                      />
+                      {request.plate_filaments.length > 1 && `Plate ${i + 1} · `}
+                      {MATERIAL_LABELS[pf.material]}
+                      {pf.color && ` · ${pf.color}`}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <STLViewer
+                urls={request.stl_urls?.length > 0 ? request.stl_urls : [request.stl_url!]}
+                colors={
+                  (request.plate_filaments?.length ?? 0) > 0
+                    ? request.plate_filaments.map((pf) => pf.color_hex || '#888888')
+                    : ['#e0e0e0']
+                }
+                className="h-64 w-full"
+              />
+            </div>
+          )}
+
+          {/* G-code viewer + stats */}
+          {(request.gcode_urls?.length ?? 0) > 0 && (
+            <div className="mt-3 space-y-2">
+              {/* Stats row */}
+              {(request.weight_g || request.print_hours) && (
+                <div className="rounded-xl border border-teal-100 bg-white px-3 py-2">
+                  <p className="text-xs font-medium text-teal-600 mb-1">
+                    Sliced &amp; ready · {request.gcode_urls.length} plate{request.gcode_urls.length > 1 ? 's' : ''}
+                  </p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-teal-900">
+                    {request.weight_g && <span className="font-medium">~{request.weight_g}g filament</span>}
+                    {request.print_hours && (
+                      <span className="font-medium">
+                        ~{(() => {
+                          const h = request.print_hours
+                          const hrs = Math.floor(h)
+                          const mins = Math.round((h - hrs) * 60)
+                          return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`
+                        })()} print time
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* G-code 3D viewer */}
+              <GcodeViewer
+                urls={request.gcode_urls}
+                colors={(request.plate_filaments ?? []).map((pf) => pf.color_hex || '#cccccc')}
+              />
+            </div>
+          )}
+
           {request.quote_message && (
-            <p className="mt-2 text-sm text-amber-800 border-t border-amber-200 pt-2">
+            <p className="mt-3 text-sm text-amber-800 border-t border-amber-200 pt-2">
               &ldquo;{request.quote_message}&rdquo;
             </p>
+          )}
+          {request.status === 'quoted' && (
+            <div className="mt-4 border-t border-amber-200 pt-4">
+              <QuoteActions requestId={requestId} />
+            </div>
           )}
         </div>
       )}

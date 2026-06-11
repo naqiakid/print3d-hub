@@ -50,6 +50,20 @@ export type Printer = {
   markup_percent: number | null
   power_watts: number | null
   grams_per_roll: number | null
+  bed_type: string[] | null
+}
+
+export type PlateFilament = {
+  material: FilamentMaterial
+  color: string
+  color_hex: string
+}
+
+export type ColorPreference = {
+  part_number: number
+  file_name: string
+  color: string
+  color_hex: string
 }
 
 export type PrintRequest = {
@@ -59,9 +73,15 @@ export type PrintRequest = {
   customer_email: string
   customer_phone: string
   description: string
+  model_url: string | null
+  model_title: string | null
+  model_image: string | null
   file_url: string | null
   stl_url: string | null
   stl_urls: string[]
+  gcode_urls: string[]
+  plate_filaments: PlateFilament[]
+  color_preferences: ColorPreference[]
   weight_g: number | null
   print_hours: number | null
   print_type: PrintType
@@ -96,6 +116,7 @@ export type PrintProfile = {
   pause_insert_available: boolean
   fuzzy_skin_available: boolean
   is_default: boolean
+  is_active: boolean
   created_at: string
 }
 
@@ -123,9 +144,9 @@ export type Review = {
 // ─── Display helpers ────────────────────────────────────────────
 
 export const PRINT_TYPE_LABELS: Record<PrintType, string> = {
-  everyday: ' Everyday',
-  strong: ' Strong',
-  colorful: ' Colorful',
+  everyday: 'Everyday / Decorative',
+  strong: 'Strong / Functional',
+  colorful: 'Multi-color',
 }
 
 export const PRINT_TYPE_DESCRIPTIONS: Record<PrintType, string> = {

@@ -89,10 +89,10 @@ export default async function DashboardPage() {
             Filaments
           </Link>
           <Link
-            href="/dashboard/profiles"
+            href="/dashboard/equipment"
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
           >
-            Profiles
+            Equipment
           </Link>
           <Link
             href="/dashboard/listing"

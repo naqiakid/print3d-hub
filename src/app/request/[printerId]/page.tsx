@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { Printer, PrintProfile, Filament } from '@/lib/types'
+import { PRINTER_MODELS } from '@/lib/printer-models'
 import RequestForm from '@/components/RequestForm'
 
 export default async function RequestPage({
@@ -19,22 +20,26 @@ export default async function RequestPage({
 
   if (!printerData) notFound()
   const printer = printerData as unknown as Printer
+  const printerModelId = (printerData as Record<string, unknown>).printer_model_id as string | undefined
+  const buildVolume = printerModelId
+    ? (PRINTER_MODELS.find((m) => m.id === printerModelId)?.build_volume ?? null)
+    : null
 
-  const [{ data: profilesData }, { data: filamentsData }] = await Promise.all([
-    supabase
-      .from('print_profiles')
-      .select('*')
-      .eq('printer_id', printerId)
-      .order('is_default', { ascending: false }),
-    supabase
-      .from('filaments')
-      .select('*')
-      .eq('owner_id', printer.owner_id)
-      .eq('in_stock', true)
-      .order('material'),
-  ])
+  const { data: profilesData } = await supabase
+    .from('print_profiles')
+    .select('*')
+    .eq('printer_id', printerId)
+    .order('is_default', { ascending: false })
 
   const profiles = (profilesData ?? []) as unknown as PrintProfile[]
+
+  const { data: filamentsData } = await supabase
+    .from('filaments')
+    .select('*')
+    .eq('owner_id', printer.owner_id)
+    .eq('in_stock', true)
+    .order('material')
+
   const filaments = (filamentsData ?? []) as unknown as Filament[]
 
   if (!printer.available) {
@@ -59,7 +64,7 @@ export default async function RequestPage({
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <RequestForm printer={printer} profiles={profiles} filaments={filaments} />
+        <RequestForm printer={printer} profiles={profiles} buildVolume={buildVolume} filaments={filaments} />
       </div>
 
       <p className="mt-4 text-center text-xs text-slate-400">

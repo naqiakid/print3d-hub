@@ -97,14 +97,6 @@ export default async function ListingPage() {
             <span className="font-medium text-slate-900">RM{printer.price_min}–RM{printer.price_max}</span>
           </div>
         </div>
-        <div className="flex gap-3 border-t border-slate-100 pt-4">
-          <Link
-            href="/dashboard/profiles"
-            className="flex-1 rounded-xl border border-slate-200 py-2.5 text-center text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
-          >
-            Manage profiles
-          </Link>
-        </div>
       </div>
 
       {/* Filament costs (read-only) */}

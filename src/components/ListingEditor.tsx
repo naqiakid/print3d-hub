@@ -16,7 +16,7 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
   const [description, setDescription] = useState(printer.description)
   const [turnaround, setTurnaround] = useState(printer.turnaround)
   const [contactPhone, setContactPhone] = useState(printer.contact_phone)
-  const [electricityRate, setElectricityRate] = useState(String(printer.electricity_rate ?? 0.57))
+  const [electricityRate, setElectricityRate] = useState(String(printer.electricity_rate ?? 0.516))
   const [markupPercent, setMarkupPercent] = useState(String(printer.markup_percent ?? 30))
   const [saveError, setSaveError] = useState('')
   const [isPending, startTransition] = useTransition()
@@ -26,7 +26,7 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
     setDescription(printer.description)
     setTurnaround(printer.turnaround)
     setContactPhone(printer.contact_phone)
-    setElectricityRate(String(printer.electricity_rate ?? 0.57))
+    setElectricityRate(String(printer.electricity_rate ?? 0.516))
     setMarkupPercent(String(printer.markup_percent ?? 30))
     setSaveError('')
     setEditing(false)
@@ -41,7 +41,7 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
         description: description.trim(),
         turnaround: turnaround.trim(),
         contact_phone: contactPhone.trim(),
-        electricity_rate: parseFloat(electricityRate) || 0.57,
+        electricity_rate: parseFloat(electricityRate) || 0.516,
         markup_percent: parseFloat(markupPercent) || 30,
       })
       if (result?.error) {

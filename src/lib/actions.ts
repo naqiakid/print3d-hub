@@ -120,20 +120,6 @@ export async function deleteProfile(id: string): Promise<{ error: string } | und
   revalidatePath('/dashboard/profiles')
 }
 
-type ProfileInput = {
-  name: string
-  nozzle_mm: number
-  infill_draft: number
-  infill_standard: number
-  infill_premium: number
-  supports_available: boolean
-  ironing_available: boolean
-  color_change_available: boolean
-  pause_insert_available: boolean
-  fuzzy_skin_available: boolean
-  is_default: boolean
-}
-
 export async function registerPrinter(data: {
   name: string
   description: string
@@ -147,7 +133,8 @@ export async function registerPrinter(data: {
   power_watts: number
   electricity_rate: number
   markup_percent: number
-  profiles: ProfileInput[]
+  nozzle_sizes: number[]
+  bed_type: string[]
 }): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -168,6 +155,7 @@ export async function registerPrinter(data: {
       power_watts: data.power_watts,
       electricity_rate: data.electricity_rate,
       markup_percent: data.markup_percent,
+      bed_type: data.bed_type,
       price_min: 0,
       price_max: 0,
     })
@@ -176,11 +164,23 @@ export async function registerPrinter(data: {
 
   if (error) return { error: error.message }
 
-  const anyDefault = data.profiles.some((p) => p.is_default)
-  const profilesPayload = data.profiles.map((p, i) => ({
-    ...p,
+  // Auto-create one profile per nozzle size with sensible defaults.
+  // The 0.4mm nozzle (or the first selected) is marked as default.
+  const sortedNozzles = [...data.nozzle_sizes].sort((a, b) => a - b)
+  const defaultNozzle = sortedNozzles.includes(0.4) ? 0.4 : sortedNozzles[0]
+  const profilesPayload = sortedNozzles.map((nozzle) => ({
     printer_id: printer.id,
-    is_default: anyDefault ? p.is_default : i === 0,
+    name: `${nozzle}mm nozzle`,
+    nozzle_mm: nozzle,
+    infill_draft: 15,
+    infill_standard: 25,
+    infill_premium: 40,
+    supports_available: true,
+    ironing_available: false,
+    color_change_available: data.print_types.includes('colorful'),
+    pause_insert_available: false,
+    fuzzy_skin_available: false,
+    is_default: nozzle === defaultNozzle,
   }))
 
   const { error: profileError } = await supabase
@@ -331,17 +331,28 @@ export async function submitRequest(data: {
   color?: string
   color_hex?: string
   supports?: boolean
+  model_url?: string | null
+  model_title?: string | null
+  model_image?: string | null
   stl_url?: string | null
   stl_urls?: string[]
   weight_g?: number | null
   print_hours?: number | null
   profile_id?: string | null
   selected_addons?: string[]
+  color_preferences?: { part_number: number; file_name: string; color: string; color_hex: string }[]
 }): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
+
+  // Strip optional JSONB columns that may not exist yet if migrations haven't run
+  const { color_preferences, ...baseData } = data
+  const insertPayload = color_preferences?.length
+    ? { ...baseData, color_preferences }
+    : baseData
+
   const { data: inserted, error } = await supabase
     .from('requests')
-    .insert(data)
+    .insert(insertPayload)
     .select('id')
     .single()
   if (error) return { error: error.message }
@@ -431,6 +442,11 @@ export async function sendQuote(
   price: number,
   byDate: string,
   message: string,
+  gcodeUrls?: string[],
+  weightG?: number | null,
+  printHours?: number | null,
+  material?: string,
+  plateFilaments?: { material: string; color: string; color_hex: string }[],
 ): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
   const {
@@ -445,6 +461,11 @@ export async function sendQuote(
       quoted_price: price,
       quoted_by_date: byDate,
       quote_message: message,
+      ...(gcodeUrls !== undefined  && { gcode_urls: gcodeUrls }),
+      ...(weightG != null          && { weight_g: weightG }),
+      ...(printHours != null       && { print_hours: printHours }),
+      ...(material                 && { material }),
+      ...(plateFilaments?.length   && { plate_filaments: plateFilaments }),
     })
     .eq('id', requestId)
 
@@ -480,8 +501,8 @@ export async function sendQuote(
                <tr><td style="padding:4px 12px 4px 0;color:#888">Ready by</td><td>${readyDate}</td></tr>
                ${message ? `<tr><td style="padding:4px 12px 4px 0;color:#888">Note</td><td>${message}</td></tr>` : ''}
              </table>
-             <p>To confirm this quote, contact the owner via WhatsApp or reply to this email.</p>
-             <p>Track your order: <a href="${trackingUrl}">${trackingUrl}</a></p>`,
+             <p>To accept or decline this quote, visit your tracking page:</p>
+             <p><a href="${trackingUrl}" style="font-size:16px;font-weight:bold">${trackingUrl}</a></p>`,
           )
         })
     })
@@ -508,6 +529,92 @@ export async function updateAvailability(
   revalidatePath('/dashboard/listing')
 }
 
+export async function acceptQuote(
+  requestId: string,
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+
+  const { data: req, error: fetchError } = await supabase
+    .from('requests')
+    .select('status, customer_name, printer_id')
+    .eq('id', requestId)
+    .maybeSingle()
+
+  if (fetchError || !req) return { error: 'Request not found' }
+  if (req.status !== 'quoted') return { error: 'Quote is no longer available to accept' }
+
+  const { error } = await supabase
+    .from('requests')
+    .update({ status: 'accepted' as RequestStatus })
+    .eq('id', requestId)
+
+  if (error) return { error: error.message }
+
+  // Notify owner
+  const toEmail = process.env.NOTIFICATION_EMAIL
+  if (toEmail) {
+    supabase
+      .from('printers')
+      .select('name')
+      .eq('id', req.printer_id)
+      .maybeSingle()
+      .then(({ data: printer }) => {
+        sendEmail(
+          toEmail,
+          `Quote accepted — ${req.customer_name}`,
+          `<h2>Quote accepted on ${printer?.name ?? 'your printer'}</h2>
+           <p><strong>${req.customer_name}</strong> has accepted your quote and confirmed the job.</p>
+           <p><a href="${APP_URL}/dashboard">Open dashboard →</a></p>`,
+        )
+      })
+  }
+
+  revalidatePath(`/track/${requestId}`)
+}
+
+export async function declineQuote(
+  requestId: string,
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+
+  const { data: req, error: fetchError } = await supabase
+    .from('requests')
+    .select('status, customer_name, printer_id')
+    .eq('id', requestId)
+    .maybeSingle()
+
+  if (fetchError || !req) return { error: 'Request not found' }
+  if (req.status !== 'quoted') return { error: 'Quote is no longer available to decline' }
+
+  const { error } = await supabase
+    .from('requests')
+    .update({ status: 'cancelled' as RequestStatus })
+    .eq('id', requestId)
+
+  if (error) return { error: error.message }
+
+  // Notify owner
+  const toEmail = process.env.NOTIFICATION_EMAIL
+  if (toEmail) {
+    supabase
+      .from('printers')
+      .select('name')
+      .eq('id', req.printer_id)
+      .maybeSingle()
+      .then(({ data: printer }) => {
+        sendEmail(
+          toEmail,
+          `Quote declined — ${req.customer_name}`,
+          `<h2>Quote declined on ${printer?.name ?? 'your printer'}</h2>
+           <p><strong>${req.customer_name}</strong> has declined your quote. The request has been cancelled.</p>
+           <p><a href="${APP_URL}/dashboard">Open dashboard →</a></p>`,
+        )
+      })
+  }
+
+  revalidatePath(`/track/${requestId}`)
+}
+
 export async function updatePassword(
   newPassword: string,
 ): Promise<{ error: string } | undefined> {
@@ -520,4 +627,85 @@ export async function logout(): Promise<void> {
   const supabase = await createClient()
   await supabase.auth.signOut()
   redirect('/')
+}
+
+// ─── Equipment management ────────────────────────────────────
+
+export async function toggleNozzle(
+  profileId: string,
+  isActive: boolean,
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('print_profiles')
+    .update({ is_active: isActive })
+    .eq('id', profileId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/equipment')
+}
+
+export async function addNozzleSize(
+  printerId: string,
+  nozzleMm: number,
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase.from('print_profiles').insert({
+    printer_id: printerId,
+    name: `${nozzleMm}mm nozzle`,
+    nozzle_mm: nozzleMm,
+    infill_draft: 15,
+    infill_standard: 25,
+    infill_premium: 40,
+    supports_available: true,
+    ironing_available: false,
+    color_change_available: false,
+    pause_insert_available: false,
+    fuzzy_skin_available: false,
+    is_default: false,
+    is_active: true,
+  })
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/equipment')
+}
+
+export async function removeNozzleSize(
+  profileId: string,
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('print_profiles')
+    .delete()
+    .eq('id', profileId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/equipment')
+}
+
+export async function updateBedTypes(
+  printerId: string,
+  bedTypes: string[],
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('printers')
+    .update({ bed_type: bedTypes })
+    .eq('id', printerId)
+    .eq('owner_id', user.id)
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/equipment')
 }

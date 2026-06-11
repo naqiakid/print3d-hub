@@ -1,6 +1,6 @@
 import type { PrintSize, PrintQuality, FilamentMaterial, FilamentCosts } from './types'
 
-export const DEFAULT_ELECTRICITY_RATE = 0.57
+export const DEFAULT_ELECTRICITY_RATE = 0.516
 export const DEFAULT_MARKUP_PERCENT   = 30
 
 export const DEFAULT_INFILL: Record<string, number> = {
