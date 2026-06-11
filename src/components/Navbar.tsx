@@ -36,6 +36,12 @@ export default async function Navbar() {
           ) : (
             <>
               <Link
+                href="/track"
+                className="hidden text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors sm:block"
+              >
+                Track order
+              </Link>
+              <Link
                 href="/login"
                 className="hidden text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors sm:block"
               >

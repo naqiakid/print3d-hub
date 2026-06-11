@@ -235,8 +235,9 @@ export default function RequestForm({
   buildVolume: string | null
   filaments: Filament[]
 }) {
-  const [requestId, setRequestId]   = useState<string | null>(null)
-  const [pending, setPending]       = useState(false)
+  const [requestId, setRequestId]     = useState<string | null>(null)
+  const [customerEmail, setCustomerEmail] = useState('')
+  const [pending, setPending]         = useState(false)
   const [submitError, setSubmitError] = useState('')
   const addInputRef    = useRef<HTMLInputElement>(null)
   const linkUploadRef  = useRef<HTMLInputElement>(null)
@@ -389,8 +390,10 @@ export default function RequestForm({
       color_preferences: colorPrefs.length ? colorPrefs : undefined,
     })
 
+    const submittedEmail = (form.elements.namedItem('email') as HTMLInputElement).value
     setPending(false)
     if ('error' in result) { setSubmitError(result.error); return }
+    setCustomerEmail(submittedEmail)
     setRequestId(result.id)
   }
 
@@ -414,8 +417,16 @@ export default function RequestForm({
           </a>
         </div>
         <a href={trackingUrl} className="mt-4 w-full rounded-xl bg-orange-500 py-3 text-center text-sm font-semibold text-white hover:bg-orange-600 transition">
-          Track your order →
+          Track this order →
         </a>
+        {customerEmail && (
+          <a
+            href={`/track?email=${encodeURIComponent(customerEmail)}`}
+            className="mt-2 w-full rounded-xl border border-slate-200 py-3 text-center text-sm font-medium text-slate-600 hover:border-orange-300 hover:text-orange-600 transition"
+          >
+            View all your orders
+          </a>
+        )}
         <a href="/printers" className="mt-3 text-sm text-slate-400 hover:text-slate-600">Browse more printers</a>
       </div>
     )
