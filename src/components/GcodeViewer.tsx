@@ -6,11 +6,48 @@ import { WebGLPreview } from 'gcode-preview'
 
 type ViewMode = 'full' | 'model'
 
-// ── Support filter ────────────────────────────────────────────────────────────
-// Strips extrusion (E) from G0–G3 moves inside support sections so the renderer
-// treats them as travels and draws no tube geometry.
-// Handles: Creality Print (;TYPE:Support), PrusaSlicer (;TYPE:Support material),
-//          Cura (;TYPE:SUPPORT), Bambu/OrcaSlicer (;MESH:SUPPORT).
+const SUPPORT_GREEN = '#4ade80'
+
+// Detects support section boundaries — same markers used by filterSupports & tagSupportTool.
+function isStartOfSupport(trimmed: string) {
+  return (
+    (/^;+\s*TYPE\s*:/i.test(trimmed) && /support/i.test(trimmed)) ||
+    trimmed === ';MESH:SUPPORT' ||
+    trimmed === ';SUPPORT_INTERFACE_START'
+  )
+}
+function isEndOfSupport(trimmed: string) {
+  return (
+    (/^;+\s*TYPE\s*:/i.test(trimmed) && !/support/i.test(trimmed)) ||
+    (/^;MESH:/i.test(trimmed) && trimmed !== ';MESH:SUPPORT') ||
+    trimmed === ';SUPPORT_INTERFACE_END'
+  )
+}
+
+// Injects T1 / T0 tool-change markers around support sections so the renderer
+// can colour them separately via the extrusionColor array.
+function tagSupportTool(gcode: string): string {
+  const lines  = gcode.split('\n')
+  const result: string[] = []
+  let inSupport = false
+
+  for (const line of lines) {
+    const t = line.trim()
+    result.push(line)
+
+    if (!inSupport && isStartOfSupport(t)) {
+      result.push('T1')
+      inSupport = true
+    } else if (inSupport && isEndOfSupport(t)) {
+      result.push('T0')
+      inSupport = false
+    }
+  }
+
+  return result.join('\n')
+}
+
+// Strips extrusion (E) from support moves so they render as invisible travels.
 function filterSupports(gcode: string): string {
   const lines  = gcode.split('\n')
   const result: string[] = []
@@ -19,19 +56,9 @@ function filterSupports(gcode: string): string {
   for (const line of lines) {
     const t = line.trim()
 
-    if (/^;+\s*TYPE\s*:/i.test(t)) {
-      inSupport = /support/i.test(t)
-    } else if (t === ';MESH:SUPPORT') {
-      inSupport = true
-    } else if (/^;MESH:/i.test(t)) {
-      inSupport = false
-    } else if (t === ';SUPPORT_INTERFACE_START') {
-      inSupport = true
-    } else if (t === ';SUPPORT_INTERFACE_END') {
-      inSupport = false
-    }
+    if (!inSupport && isStartOfSupport(t)) inSupport = true
+    else if (inSupport && isEndOfSupport(t)) inSupport = false
 
-    // G0–G3 (linear + arc) with E = extrusion move — strip E to make it a travel
     if (inSupport && /^G[0-3]\s/i.test(t) && /\bE[\d.e+\-]+/i.test(t)) {
       result.push(t.replace(/\s*E[\d.e+\-]+/gi, ''))
     } else {
@@ -98,10 +125,11 @@ export default function GcodeViewer({ urls, colors, className }: Props) {
       return c
     }
 
-    function makePreview(canvas: HTMLCanvasElement, color: string): WebGLPreview {
+    function makePreview(canvas: HTMLCanvasElement, extrusionColor: string | string[]): WebGLPreview {
       return new WebGLPreview({
         canvas,
-        extrusionColor:  color,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        extrusionColor:  extrusionColor as any,   // library accepts arrays (T0/T1 tool indexing)
         backgroundColor: '#0f172a',
         renderTravel:    false,
         renderTubes:     true,
@@ -130,10 +158,13 @@ export default function GcodeViewer({ urls, colors, className }: Props) {
         if (aborted) return
 
         // Full view on top when: no supports, or user is already in 'full' mode
-        const fullOnTop  = !supportsFound || viewModeRef.current === 'full'
-        const fullCanvas = makeCanvas(fullOnTop)
-        const fullPreview = makePreview(fullCanvas, color)
-        fullPreview.processGCode(gcode)
+        const fullOnTop   = !supportsFound || viewModeRef.current === 'full'
+        const fullCanvas  = makeCanvas(fullOnTop)
+        // When supports exist: inject T1/T0 markers so supports render in green
+        const fullColor   = supportsFound ? [color, SUPPORT_GREEN] : color
+        const fullGcode   = supportsFound ? tagSupportTool(gcode) : gcode
+        const fullPreview = makePreview(fullCanvas, fullColor)
+        fullPreview.processGCode(fullGcode)
         fullPreview.render()
         fullPreview.controls.saveState()
         fullViewRef.current = { canvas: fullCanvas, preview: fullPreview }
@@ -271,9 +302,13 @@ export default function GcodeViewer({ urls, colors, className }: Props) {
               Full print
             </button>
           </div>
-          <p className="text-[10px] text-slate-400 select-none leading-tight text-right">
-            {viewMode === 'model' ? '↑ Support structures hidden' : '↑ Includes support structures'}
-          </p>
+          {viewMode === 'full' && (
+            <div className="flex items-center gap-2 justify-end">
+              <span className="flex items-center gap-1 text-[10px] text-slate-400">
+                <span className="h-2 w-2 rounded-full bg-[#4ade80] inline-block" /> supports
+              </span>
+            </div>
+          )}
         </div>
       )}
 
