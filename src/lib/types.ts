@@ -51,6 +51,9 @@ export type Printer = {
   power_watts: number | null
   grams_per_roll: number | null
   bed_type: string[] | null
+  pickup_address: string | null
+  delivery_available: boolean
+  delivery_fee_rm: number | null
 }
 
 export type PlateFilament = {
@@ -95,6 +98,8 @@ export type PrintRequest = {
   notes: string
   profile_id: string | null
   selected_addons: string[]
+  fulfillment: 'pickup' | 'delivery'
+  delivery_address: string | null
   status: RequestStatus
   quoted_price: number | null
   quoted_by_date: string | null

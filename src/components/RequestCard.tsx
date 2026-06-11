@@ -448,6 +448,28 @@ export default function RequestCard({ request, printer }: { request: PrintReques
             </div>
           )}
 
+          {/* Fulfillment */}
+          <div className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+            request.fulfillment === 'delivery'
+              ? 'border-blue-100 bg-blue-50'
+              : 'border-slate-100 bg-slate-50'
+          }`}>
+            <span className="text-base leading-none mt-0.5">
+              {request.fulfillment === 'delivery' ? '🚚' : '🏠'}
+            </span>
+            <div>
+              <p className="font-medium text-slate-800">
+                {request.fulfillment === 'delivery' ? 'Delivery requested' : 'Pickup'}
+              </p>
+              {request.fulfillment === 'delivery' && request.delivery_address && (
+                <p className="text-xs text-slate-500 mt-0.5">{request.delivery_address}</p>
+              )}
+              {request.fulfillment === 'pickup' && printer.pickup_address && (
+                <p className="text-xs text-slate-500 mt-0.5">{printer.pickup_address}</p>
+              )}
+            </div>
+          </div>
+
           {/* Contact */}
           <div className="text-xs text-slate-400">{request.customer_email} · {request.customer_phone}</div>
 

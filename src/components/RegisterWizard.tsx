@@ -38,6 +38,7 @@ export default function RegisterWizard() {
   const [description, setDescription] = useState('')
   const [turnaround, setTurnaround] = useState('')
   const [phone, setPhone] = useState('')
+  const [pickupAddress, setPickupAddress] = useState('')
 
   // Step 3 — Printer Setup
   const [nozzleSizes, setNozzleSizes] = useState<number[]>([0.4])
@@ -91,6 +92,7 @@ export default function RegisterWizard() {
       markup_percent: Number(markupPercent),
       nozzle_sizes: nozzleSizes,
       bed_type: bedTypes,
+      pickup_address: pickupAddress.trim() || undefined,
     })
     if (result?.error) {
       setPublishError(result.error)
@@ -381,6 +383,20 @@ export default function RegisterWizard() {
             />
             <p className="mt-1 text-xs text-slate-400">
               Shared with customers when their print is ready for pickup
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Pickup address</label>
+            <textarea
+              rows={2}
+              value={pickupAddress}
+              onChange={(e) => setPickupAddress(e.target.value)}
+              placeholder="e.g. No. 12, Jalan Ampang, 50450 Kuala Lumpur"
+              className={`${inputClass} resize-none`}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Shown to customers so they know where to collect. You can add or update this later.
             </p>
           </div>
 

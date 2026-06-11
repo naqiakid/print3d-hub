@@ -42,11 +42,11 @@ export default async function TrackPage({
 
   const { data: printerData } = await supabase
     .from('printers')
-    .select('name, contact_phone, turnaround')
+    .select('name, contact_phone, turnaround, pickup_address')
     .eq('id', request.printer_id)
     .maybeSingle()
 
-  const printer = printerData as Pick<Printer, 'name' | 'contact_phone' | 'turnaround'> | null
+  const printer = printerData as Pick<Printer, 'name' | 'contact_phone' | 'turnaround' | 'pickup_address'> | null
 
   const isNegative = TERMINAL_NEGATIVE.includes(request.status)
   const currentStep = stepIndex(request.status)
@@ -107,7 +107,9 @@ export default async function TrackPage({
                     )}
                     {active && request.status === 'done' && (
                       <p className="mt-0.5 text-xs text-slate-500">
-                        Your print is ready — contact the owner to arrange pickup.
+                        {request.fulfillment === 'delivery'
+                          ? 'Your print is ready — the owner will arrange delivery to your address.'
+                          : `Your print is ready — contact the owner to arrange pickup.${printer?.pickup_address ? ` (${printer.pickup_address})` : ''}`}
                       </p>
                     )}
                   </div>
@@ -237,6 +239,14 @@ export default async function TrackPage({
             <span className="text-slate-400">Deadline</span>
             <span className="ml-2 font-medium text-slate-900">
               {new Date(request.deadline).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })}
+            </span>
+          </div>
+          <div className="col-span-2">
+            <span className="text-slate-400">Fulfillment</span>
+            <span className="ml-2 font-medium text-slate-900">
+              {request.fulfillment === 'delivery'
+                ? `🚚 Delivery${request.delivery_address ? ` — ${request.delivery_address}` : ''}`
+                : `🏠 Pickup${printer?.pickup_address ? ` — ${printer.pickup_address}` : ''}`}
             </span>
           </div>
           {request.weight_g && (

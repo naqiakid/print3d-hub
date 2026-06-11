@@ -135,6 +135,7 @@ export async function registerPrinter(data: {
   markup_percent: number
   nozzle_sizes: number[]
   bed_type: string[]
+  pickup_address?: string
 }): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -156,6 +157,7 @@ export async function registerPrinter(data: {
       electricity_rate: data.electricity_rate,
       markup_percent: data.markup_percent,
       bed_type: data.bed_type,
+      pickup_address: data.pickup_address ?? null,
       price_min: 0,
       price_max: 0,
     })
@@ -341,14 +343,19 @@ export async function submitRequest(data: {
   profile_id?: string | null
   selected_addons?: string[]
   color_preferences?: { part_number: number; file_name: string; color: string; color_hex: string }[]
+  fulfillment?: 'pickup' | 'delivery'
+  delivery_address?: string | null
 }): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
 
-  // Strip optional JSONB columns that may not exist yet if migrations haven't run
-  const { color_preferences, ...baseData } = data
-  const insertPayload = color_preferences?.length
-    ? { ...baseData, color_preferences }
-    : baseData
+  // Strip optional columns that may not exist yet if migrations haven't run
+  const { color_preferences, fulfillment, delivery_address, ...baseData } = data
+  const insertPayload = {
+    ...baseData,
+    ...(color_preferences?.length ? { color_preferences } : {}),
+    ...(fulfillment ? { fulfillment } : {}),
+    ...(delivery_address ? { delivery_address } : {}),
+  }
 
   const { data: inserted, error } = await supabase
     .from('requests')
@@ -401,6 +408,9 @@ export async function updateListing(data: {
   contact_phone: string
   electricity_rate: number
   markup_percent: number
+  pickup_address: string
+  delivery_available: boolean
+  delivery_fee_rm: number | null
 }): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

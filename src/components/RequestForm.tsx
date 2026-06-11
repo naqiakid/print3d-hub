@@ -237,6 +237,8 @@ export default function RequestForm({
 }) {
   const [requestId, setRequestId]     = useState<string | null>(null)
   const [customerEmail, setCustomerEmail] = useState('')
+  const [fulfillment, setFulfillment] = useState<'pickup' | 'delivery'>('pickup')
+  const [deliveryAddress, setDeliveryAddress] = useState('')
   const [pending, setPending]         = useState(false)
   const [submitError, setSubmitError] = useState('')
   const addInputRef    = useRef<HTMLInputElement>(null)
@@ -388,6 +390,8 @@ export default function RequestForm({
       profile_id:     defaultProfile?.id ?? null,
       selected_addons: isMultiColor ? ['color_change'] : [],
       color_preferences: colorPrefs.length ? colorPrefs : undefined,
+      fulfillment,
+      delivery_address: fulfillment === 'delivery' ? deliveryAddress.trim() || null : null,
     })
 
     const submittedEmail = (form.elements.namedItem('email') as HTMLInputElement).value
@@ -661,6 +665,60 @@ export default function RequestForm({
               <input id="notes" name="notes" type="text"
                 placeholder="Special requirements, finish preference..." className={inputClass} />
             </div>
+          </div>
+
+          {/* ── Pickup or Delivery ── */}
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-slate-700">How will you receive your order?</h3>
+            <div className={`grid gap-2 ${printer.delivery_available ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              <button
+                type="button"
+                onClick={() => setFulfillment('pickup')}
+                className={`rounded-xl border p-3 text-left transition ${
+                  fulfillment === 'pickup'
+                    ? 'border-orange-500 bg-orange-50 ring-1 ring-orange-500'
+                    : 'border-slate-200 bg-white hover:border-orange-200'
+                }`}
+              >
+                <p className="text-sm font-semibold text-slate-900">Pickup</p>
+                {printer.pickup_address
+                  ? <p className="mt-0.5 text-xs text-slate-500 line-clamp-2">{printer.pickup_address}</p>
+                  : <p className="mt-0.5 text-xs text-slate-400">Collect from owner's location</p>}
+              </button>
+              {printer.delivery_available && (
+                <button
+                  type="button"
+                  onClick={() => setFulfillment('delivery')}
+                  className={`rounded-xl border p-3 text-left transition ${
+                    fulfillment === 'delivery'
+                      ? 'border-orange-500 bg-orange-50 ring-1 ring-orange-500'
+                      : 'border-slate-200 bg-white hover:border-orange-200'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-slate-900">Delivery</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {printer.delivery_fee_rm
+                      ? `+ RM${Number(printer.delivery_fee_rm).toFixed(2)} delivery fee`
+                      : 'Fee to be quoted'}
+                  </p>
+                </button>
+              )}
+            </div>
+            {fulfillment === 'delivery' && (
+              <div className="mt-3">
+                <label className="mb-1 block text-xs font-medium text-slate-600">
+                  Delivery address <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                  required
+                  rows={2}
+                  placeholder="Full address including postcode and city"
+                  className={`${inputClass} resize-none`}
+                />
+              </div>
+            )}
           </div>
 
           <div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Pencil, Check, X } from 'lucide-react'
+import { Pencil, Check, X, MapPin, Truck } from 'lucide-react'
 import type { Printer } from '@/lib/types'
 import { updateListing } from '@/lib/actions'
 
@@ -12,12 +12,15 @@ const labelClass = 'block text-xs text-slate-400 mb-1'
 
 export default function ListingEditor({ printer }: { printer: Printer }) {
   const [editing, setEditing] = useState(false)
-  const [name, setName] = useState(printer.name)
+  const [name, setName]               = useState(printer.name)
   const [description, setDescription] = useState(printer.description)
-  const [turnaround, setTurnaround] = useState(printer.turnaround)
+  const [turnaround, setTurnaround]   = useState(printer.turnaround)
   const [contactPhone, setContactPhone] = useState(printer.contact_phone)
   const [electricityRate, setElectricityRate] = useState(String(printer.electricity_rate ?? 0.516))
-  const [markupPercent, setMarkupPercent] = useState(String(printer.markup_percent ?? 30))
+  const [markupPercent, setMarkupPercent]     = useState(String(printer.markup_percent ?? 30))
+  const [pickupAddress, setPickupAddress]     = useState(printer.pickup_address ?? '')
+  const [deliveryAvailable, setDeliveryAvailable] = useState(printer.delivery_available ?? false)
+  const [deliveryFeeRm, setDeliveryFeeRm]         = useState(String(printer.delivery_fee_rm ?? ''))
   const [saveError, setSaveError] = useState('')
   const [isPending, startTransition] = useTransition()
 
@@ -28,6 +31,9 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
     setContactPhone(printer.contact_phone)
     setElectricityRate(String(printer.electricity_rate ?? 0.516))
     setMarkupPercent(String(printer.markup_percent ?? 30))
+    setPickupAddress(printer.pickup_address ?? '')
+    setDeliveryAvailable(printer.delivery_available ?? false)
+    setDeliveryFeeRm(String(printer.delivery_fee_rm ?? ''))
     setSaveError('')
     setEditing(false)
   }
@@ -43,6 +49,9 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
         contact_phone: contactPhone.trim(),
         electricity_rate: parseFloat(electricityRate) || 0.516,
         markup_percent: parseFloat(markupPercent) || 30,
+        pickup_address: pickupAddress.trim(),
+        delivery_available: deliveryAvailable,
+        delivery_fee_rm: deliveryAvailable && deliveryFeeRm ? parseFloat(deliveryFeeRm) : null,
       })
       if (result?.error) {
         setSaveError(result.error)
@@ -86,6 +95,26 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
           <div>
             <span className="block text-xs text-slate-400">Markup</span>
             <span className="font-medium text-slate-900">{markupPercent}%</span>
+          </div>
+        </div>
+
+        {/* Pickup & Delivery summary */}
+        <div className="border-t border-slate-100 pt-4 space-y-2">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Pickup & Delivery</p>
+          <div className="flex items-start gap-2 text-sm">
+            <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+            {pickupAddress
+              ? <span className="text-slate-700">{pickupAddress}</span>
+              : <span className="text-slate-400 italic">No pickup address set</span>}
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <Truck className="h-4 w-4 text-slate-400 shrink-0" />
+            {deliveryAvailable
+              ? <span className="text-slate-700">
+                  Delivery available
+                  {deliveryFeeRm ? ` · RM${parseFloat(deliveryFeeRm).toFixed(2)} fee` : ' · fee not set'}
+                </span>
+              : <span className="text-slate-400">Pickup only</span>}
           </div>
         </div>
       </div>
@@ -170,6 +199,61 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
             className={inputClass}
           />
         </div>
+      </div>
+
+      {/* ── Pickup & Delivery ── */}
+      <div className="border-t border-slate-100 pt-4 space-y-4">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Pickup & Delivery</p>
+
+        <div>
+          <label className={labelClass}>Pickup address</label>
+          <textarea
+            value={pickupAddress}
+            onChange={(e) => setPickupAddress(e.target.value)}
+            rows={2}
+            placeholder="e.g. No. 12, Jalan Ampang, 50450 Kuala Lumpur"
+            className={`${inputClass} resize-none`}
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            Shown to customers so they know where to collect their print.
+          </p>
+        </div>
+
+        <div>
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={deliveryAvailable}
+              onChange={(e) => setDeliveryAvailable(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 accent-orange-500"
+            />
+            <span className="text-sm font-medium text-slate-700">Offer delivery to customers</span>
+          </label>
+          <p className="mt-1 ml-6.5 text-xs text-slate-400">
+            Customers can request delivery and you'll add the fee to their quote.
+          </p>
+        </div>
+
+        {deliveryAvailable && (
+          <div>
+            <label className={labelClass}>Delivery fee (RM)</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">RM</span>
+              <input
+                type="number"
+                step="0.50"
+                min="0"
+                value={deliveryFeeRm}
+                onChange={(e) => setDeliveryFeeRm(e.target.value)}
+                placeholder="0.00"
+                className={`${inputClass} pl-10`}
+              />
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              Flat rate shown to customers before they submit. Added on top of the print quote.
+            </p>
+          </div>
+        )}
       </div>
 
       {saveError && (
