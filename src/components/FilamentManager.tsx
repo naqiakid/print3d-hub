@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Pencil, Trash2, Plus, X, Check, Package } from 'lucide-react'
+import { Pencil, Trash2, Plus, X, Check, Package, ChevronDown, ClipboardPaste } from 'lucide-react'
 import type { Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { createFilament, updateFilament, deleteFilament } from '@/lib/actions'
@@ -30,6 +30,81 @@ const SWATCHES = [
   { hex: '#D4A574', name: 'Beige' },
   { hex: '#C0C0C0', name: 'Silver' },
 ]
+
+// ─── Product title parser ────────────────────────────────────
+const KNOWN_BRANDS = [
+  ['bambu lab', 'Bambu Lab'], ['bambu', 'Bambu Lab'],
+  ['esun', 'eSUN'], ['creality', 'Creality'], ['sunlu', 'SUNLU'],
+  ['polymaker', 'Polymaker'], ['hatchbox', 'Hatchbox'], ['prusament', 'Prusament'],
+  ['elegoo', 'Elegoo'], ['overture', 'Overture'], ['anycubic', 'Anycubic'],
+  ['flashforge', 'Flashforge'], ['tinmorry', 'Tinmorry'], ['jayo', 'Jayo'],
+  ['kingroon', 'Kingroon'],
+] as const
+
+const COLOR_RULES: Array<{ keywords: string[]; name: string; hex: string }> = [
+  { keywords: ['galaxy black', 'matte black', 'jet black'], name: 'Galaxy Black',   hex: '#1A1A2E' },
+  { keywords: ['galaxy blue', 'space blue'],                name: 'Galaxy Blue',    hex: '#1E3A5F' },
+  { keywords: ['marble'],                                   name: 'Marble White',   hex: '#E8E8E8' },
+  { keywords: ['glow', 'luminous', 'fluorescent'],          name: 'Glow in Dark',   hex: '#C8F08F' },
+  { keywords: ['transparent', 'clear', 'translucent'],      name: 'Natural',        hex: '#F5F0E8' },
+  { keywords: ['natural', 'neutral'],                       name: 'Natural',        hex: '#F5F0E8' },
+  { keywords: ['white'],                                    name: 'White',          hex: '#FFFFFF' },
+  { keywords: ['black'],                                    name: 'Black',          hex: '#1A1A1A' },
+  { keywords: ['red', 'crimson', 'scarlet'],                name: 'Red',            hex: '#DC2626' },
+  { keywords: ['orange'],                                   name: 'Orange',         hex: '#F97316' },
+  { keywords: ['yellow'],                                   name: 'Yellow',         hex: '#FACC15' },
+  { keywords: ['lime', 'neon green'],                       name: 'Lime',           hex: '#84CC16' },
+  { keywords: ['teal', 'cyan', 'aqua', 'turquoise'],        name: 'Teal',           hex: '#14B8A6' },
+  { keywords: ['sky blue', 'light blue', 'baby blue'],      name: 'Sky Blue',       hex: '#38BDF8' },
+  { keywords: ['navy'],                                     name: 'Blue',           hex: '#1E3A8A' },
+  { keywords: ['green', 'olive'],                           name: 'Green',          hex: '#22C55E' },
+  { keywords: ['blue', 'cobalt'],                           name: 'Blue',           hex: '#3B82F6' },
+  { keywords: ['indigo'],                                   name: 'Indigo',         hex: '#6366F1' },
+  { keywords: ['purple', 'violet', 'lavender'],             name: 'Purple',         hex: '#A855F7' },
+  { keywords: ['pink', 'magenta', 'rose'],                  name: 'Pink',           hex: '#EC4899' },
+  { keywords: ['brown', 'chocolate', 'coffee'],             name: 'Brown',          hex: '#92400E' },
+  { keywords: ['beige', 'cream', 'skin'],                   name: 'Beige',          hex: '#D4A574' },
+  { keywords: ['gold'],                                     name: 'Gold',           hex: '#FFD700' },
+  { keywords: ['silver', 'metallic'],                       name: 'Silver',         hex: '#C0C0C0' },
+  { keywords: ['grey', 'gray'],                             name: 'Gray',           hex: '#737373' },
+]
+
+type ParsedFilament = Pick<FormState, 'material' | 'brand' | 'color' | 'color_hex' | 'cost_per_kg'>
+
+function parseProductTitle(title: string, priceRM: number): ParsedFilament {
+  const t = title.toLowerCase()
+
+  // Material (longest match first to avoid "pc" inside "petg-cf")
+  let material: FilamentMaterial = 'pla'
+  if (/\bpetg\b/.test(t))                         material = 'petg'
+  else if (/\babs\b/.test(t))                      material = 'abs'
+  else if (/\btpu\b|\btpe\b/.test(t))              material = 'tpu'
+  else if (/\bnylon\b|\bpa[-\s]?\d+\b/.test(t))   material = 'nylon'
+  else if (/\bpolycarbonate\b|\bpc\b/.test(t))     material = 'pc'
+
+  // Weight → cost per kg
+  let weightG = 1000
+  const kgMatch = t.match(/(\d+(?:\.\d+)?)\s*kg/)
+  const gMatch  = t.match(/(\d+)\s*g(?:ram)?\b/)
+  if (kgMatch) weightG = parseFloat(kgMatch[1]) * 1000
+  else if (gMatch) weightG = parseInt(gMatch[1])
+  const cost_per_kg = priceRM > 0 ? String(Math.round((priceRM / weightG) * 1000)) : ''
+
+  // Brand
+  let brand = ''
+  for (const [key, display] of KNOWN_BRANDS) {
+    if (t.includes(key)) { brand = display; break }
+  }
+
+  // Color
+  let color = ''
+  let color_hex = '#888888'
+  for (const rule of COLOR_RULES) {
+    if (rule.keywords.some((k) => t.includes(k))) { color = rule.name; color_hex = rule.hex; break }
+  }
+
+  return { material, brand, color, color_hex, cost_per_kg }
+}
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
@@ -282,6 +357,20 @@ function FilamentForm({
   error: string
   title: string
 }) {
+  const [importOpen,  setImportOpen]  = useState(false)
+  const [importTitle, setImportTitle] = useState('')
+  const [importPrice, setImportPrice] = useState('')
+
+  function handleImport() {
+    const parsed = parseProductTitle(importTitle, parseFloat(importPrice) || 0)
+    for (const [k, v] of Object.entries(parsed)) {
+      set(k as keyof FormState, v as FormState[keyof FormState])
+    }
+    setImportOpen(false)
+    setImportTitle('')
+    setImportPrice('')
+  }
+
   return (
     <div className="rounded-xl border border-orange-200 bg-orange-50/30 p-5 space-y-4">
       <div className="flex items-center justify-between">
@@ -289,6 +378,65 @@ function FilamentForm({
         <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 transition">
           <X className="h-4 w-4" />
         </button>
+      </div>
+
+      {/* Quick import */}
+      <div className="rounded-lg border border-slate-200 bg-white">
+        <button
+          type="button"
+          onClick={() => setImportOpen((v) => !v)}
+          className="flex w-full items-center justify-between px-3 py-2.5 text-sm"
+        >
+          <span className="flex items-center gap-2 font-medium text-slate-600">
+            <ClipboardPaste className="h-4 w-4 text-orange-400" />
+            Import from product listing
+          </span>
+          <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${importOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {importOpen && (
+          <div className="border-t border-slate-100 px-3 pb-3 pt-2 space-y-3">
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">
+                Paste product name (copy from Shopee or any store)
+              </label>
+              <textarea
+                value={importTitle}
+                onChange={(e) => setImportTitle(e.target.value)}
+                rows={2}
+                placeholder="e.g. Bambu Lab PLA Basic Filament 1.75mm 1kg White"
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+              />
+            </div>
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <label className="mb-1 block text-xs text-slate-500">Price you paid (RM)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">RM</span>
+                  <input
+                    type="number"
+                    value={importPrice}
+                    onChange={(e) => setImportPrice(e.target.value)}
+                    placeholder="55"
+                    min="1"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 py-2 text-sm text-slate-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleImport}
+                disabled={!importTitle.trim()}
+                className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 transition disabled:opacity-40"
+              >
+                Fill form
+              </button>
+            </div>
+            <p className="text-xs text-slate-400">
+              Extracts material, colour, brand, and cost per kg. Adjust anything afterwards.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Material */}
