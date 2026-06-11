@@ -8,6 +8,29 @@ import { createFilament, updateFilament, deleteFilament } from '@/lib/actions'
 
 const ALL_MATERIALS: FilamentMaterial[] = ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc']
 
+const SWATCHES = [
+  { hex: '#FFFFFF', name: 'White' },
+  { hex: '#F5F0E8', name: 'Natural' },
+  { hex: '#D4D4D4', name: 'Light Gray' },
+  { hex: '#737373', name: 'Gray' },
+  { hex: '#1A1A1A', name: 'Black' },
+  { hex: '#DC2626', name: 'Red' },
+  { hex: '#F97316', name: 'Orange' },
+  { hex: '#FACC15', name: 'Yellow' },
+  { hex: '#84CC16', name: 'Lime' },
+  { hex: '#22C55E', name: 'Green' },
+  { hex: '#14B8A6', name: 'Teal' },
+  { hex: '#38BDF8', name: 'Sky Blue' },
+  { hex: '#3B82F6', name: 'Blue' },
+  { hex: '#6366F1', name: 'Indigo' },
+  { hex: '#A855F7', name: 'Purple' },
+  { hex: '#EC4899', name: 'Pink' },
+  { hex: '#F43F5E', name: 'Rose' },
+  { hex: '#92400E', name: 'Brown' },
+  { hex: '#D4A574', name: 'Beige' },
+  { hex: '#C0C0C0', name: 'Silver' },
+]
+
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
 
@@ -284,29 +307,67 @@ function FilamentForm({
         </select>
       </div>
 
-      {/* Color + swatch */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="col-span-2">
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            Color name <span className="text-red-500">*</span>
-          </label>
+      {/* Color picker */}
+      <div>
+        <label className="mb-2 block text-sm font-medium text-slate-700">Colour</label>
+        <div className="flex flex-wrap gap-2">
+          {SWATCHES.map((s) => {
+            const selected = form.color_hex.toLowerCase() === s.hex.toLowerCase()
+            const isLight = ['#FFFFFF', '#F5F0E8', '#D4D4D4', '#FACC15', '#84CC16', '#D4A574', '#C0C0C0'].includes(s.hex)
+            return (
+              <button
+                key={s.hex}
+                type="button"
+                title={s.name}
+                onClick={() => {
+                  set('color_hex', s.hex)
+                  if (!form.color.trim()) set('color', s.name)
+                }}
+                className={`h-8 w-8 rounded-full border-2 transition-transform ${
+                  selected ? 'border-orange-500 scale-110 shadow-lg' : 'border-transparent hover:scale-105 hover:border-slate-300'
+                }`}
+                style={{ backgroundColor: s.hex }}
+              >
+                {selected && (
+                  <svg className={`m-auto h-3.5 w-3.5 drop-shadow ${isLight ? 'text-slate-700' : 'text-white'}`} viewBox="0 0 12 12" fill="none">
+                    <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Custom hex input */}
+        <div className="mt-3 flex items-center gap-3">
+          <div className="h-7 w-7 shrink-0 rounded-full border border-slate-200 shadow-sm" style={{ backgroundColor: form.color_hex }} />
           <input
             type="text"
-            value={form.color}
-            onChange={(e) => set('color', e.target.value)}
-            placeholder="e.g. Matte Black, Galaxy Blue"
-            className={inputClass}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Colour</label>
-          <input
-            type="color"
             value={form.color_hex}
-            onChange={(e) => set('color_hex', e.target.value)}
-            className="h-[42px] w-full cursor-pointer rounded-xl border border-slate-200 bg-slate-50 p-1"
+            onChange={(e) => {
+              const v = e.target.value
+              if (/^#[0-9a-fA-F]{0,6}$/.test(v)) set('color_hex', v)
+            }}
+            maxLength={7}
+            placeholder="#888888"
+            className="w-28 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-sm text-slate-700 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
           />
+          <span className="text-xs text-slate-400">Custom hex</span>
         </div>
+      </div>
+
+      {/* Color name */}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
+          Color name <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          value={form.color}
+          onChange={(e) => set('color', e.target.value)}
+          placeholder="e.g. Matte Black, Galaxy Blue"
+          className={inputClass}
+        />
       </div>
 
       {/* Brand + Cost */}
