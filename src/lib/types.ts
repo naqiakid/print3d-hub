@@ -53,7 +53,7 @@ export type Printer = {
   bed_type: string[] | null
   pickup_address: string | null
   delivery_available: boolean
-  delivery_fee_rm: number | null
+  delivery_rate_per_km: number | null
 }
 
 export type PlateFilament = {

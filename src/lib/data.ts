@@ -30,7 +30,7 @@ export const printers: Printer[] = [
     bed_type: null,
     pickup_address: null,
     delivery_available: false,
-    delivery_fee_rm: null,
+    delivery_rate_per_km: null,
   },
   {
     id: '2',
@@ -61,7 +61,7 @@ export const printers: Printer[] = [
     bed_type: null,
     pickup_address: null,
     delivery_available: false,
-    delivery_fee_rm: null,
+    delivery_rate_per_km: null,
   },
   {
     id: '3',
@@ -92,7 +92,7 @@ export const printers: Printer[] = [
     bed_type: null,
     pickup_address: null,
     delivery_available: false,
-    delivery_fee_rm: null,
+    delivery_rate_per_km: null,
   },
   {
     id: '4',
@@ -123,7 +123,7 @@ export const printers: Printer[] = [
     bed_type: null,
     pickup_address: null,
     delivery_available: false,
-    delivery_fee_rm: null,
+    delivery_rate_per_km: null,
   },
   {
     id: '5',
@@ -154,7 +154,7 @@ export const printers: Printer[] = [
     bed_type: null,
     pickup_address: null,
     delivery_available: false,
-    delivery_fee_rm: null,
+    delivery_rate_per_km: null,
   },
   {
     id: '6',
@@ -185,7 +185,7 @@ export const printers: Printer[] = [
     bed_type: null,
     pickup_address: null,
     delivery_available: false,
-    delivery_fee_rm: null,
+    delivery_rate_per_km: null,
   },
 ]
 

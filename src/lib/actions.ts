@@ -410,7 +410,7 @@ export async function updateListing(data: {
   markup_percent: number
   pickup_address: string
   delivery_available: boolean
-  delivery_fee_rm: number | null
+  delivery_rate_per_km: number | null
 }): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

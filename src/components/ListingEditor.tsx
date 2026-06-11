@@ -18,9 +18,9 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
   const [contactPhone, setContactPhone] = useState(printer.contact_phone)
   const [electricityRate, setElectricityRate] = useState(String(printer.electricity_rate ?? 0.516))
   const [markupPercent, setMarkupPercent]     = useState(String(printer.markup_percent ?? 30))
-  const [pickupAddress, setPickupAddress]     = useState(printer.pickup_address ?? '')
+  const [pickupAddress, setPickupAddress]         = useState(printer.pickup_address ?? '')
   const [deliveryAvailable, setDeliveryAvailable] = useState(printer.delivery_available ?? false)
-  const [deliveryFeeRm, setDeliveryFeeRm]         = useState(String(printer.delivery_fee_rm ?? ''))
+  const [deliveryRatePerKm, setDeliveryRatePerKm] = useState(String(printer.delivery_rate_per_km ?? '1.00'))
   const [saveError, setSaveError] = useState('')
   const [isPending, startTransition] = useTransition()
 
@@ -33,7 +33,7 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
     setMarkupPercent(String(printer.markup_percent ?? 30))
     setPickupAddress(printer.pickup_address ?? '')
     setDeliveryAvailable(printer.delivery_available ?? false)
-    setDeliveryFeeRm(String(printer.delivery_fee_rm ?? ''))
+    setDeliveryRatePerKm(String(printer.delivery_rate_per_km ?? '1.00'))
     setSaveError('')
     setEditing(false)
   }
@@ -51,7 +51,7 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
         markup_percent: parseFloat(markupPercent) || 30,
         pickup_address: pickupAddress.trim(),
         delivery_available: deliveryAvailable,
-        delivery_fee_rm: deliveryAvailable && deliveryFeeRm ? parseFloat(deliveryFeeRm) : null,
+        delivery_rate_per_km: deliveryAvailable ? (parseFloat(deliveryRatePerKm) || 1.00) : null,
       })
       if (result?.error) {
         setSaveError(result.error)
@@ -111,8 +111,7 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
             <Truck className="h-4 w-4 text-slate-400 shrink-0" />
             {deliveryAvailable
               ? <span className="text-slate-700">
-                  Delivery available
-                  {deliveryFeeRm ? ` · RM${parseFloat(deliveryFeeRm).toFixed(2)} fee` : ' · fee not set'}
+                  Delivery available · RM{parseFloat(deliveryRatePerKm || '1.00').toFixed(2)}/km
                 </span>
               : <span className="text-slate-400">Pickup only</span>}
           </div>
@@ -236,21 +235,47 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
 
         {deliveryAvailable && (
           <div>
-            <label className={labelClass}>Delivery fee (RM)</label>
+            <label className={labelClass}>Delivery rate (RM per km)</label>
+
+            {/* Market rate reference */}
+            <div className="mb-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+              Malaysia market rates: RM 0.70/km (Lalamove motorcycle) · RM 1.00/km (standard) · RM 1.50/km (car/van)
+            </div>
+
+            {/* Quick presets */}
+            <div className="mb-2 grid grid-cols-4 gap-1.5">
+              {['0.70', '1.00', '1.30', '1.50'].map((rate) => (
+                <button
+                  key={rate}
+                  type="button"
+                  onClick={() => setDeliveryRatePerKm(rate)}
+                  className={`rounded-lg border py-1.5 text-center text-xs font-medium transition ${
+                    deliveryRatePerKm === rate
+                      ? 'border-orange-500 bg-orange-50 text-orange-700'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
+                  }`}
+                >
+                  RM {rate}
+                  {rate === '1.00' && <span className="ml-0.5 text-orange-400">★</span>}
+                </button>
+              ))}
+            </div>
+
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">RM</span>
               <input
                 type="number"
-                step="0.50"
+                step="0.10"
                 min="0"
-                value={deliveryFeeRm}
-                onChange={(e) => setDeliveryFeeRm(e.target.value)}
-                placeholder="0.00"
+                value={deliveryRatePerKm}
+                onChange={(e) => setDeliveryRatePerKm(e.target.value)}
+                placeholder="1.00"
                 className={`${inputClass} pl-10`}
               />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">/km</span>
             </div>
             <p className="mt-1 text-xs text-slate-400">
-              Flat rate shown to customers before they submit. Added on top of the print quote.
+              Customers see an estimated fee based on their distance from you. You can adjust the final amount in your quote.
             </p>
           </div>
         )}

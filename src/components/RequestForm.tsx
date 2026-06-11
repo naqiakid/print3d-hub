@@ -237,8 +237,11 @@ export default function RequestForm({
 }) {
   const [requestId, setRequestId]     = useState<string | null>(null)
   const [customerEmail, setCustomerEmail] = useState('')
-  const [fulfillment, setFulfillment] = useState<'pickup' | 'delivery'>('pickup')
+  const [fulfillment, setFulfillment]         = useState<'pickup' | 'delivery'>('pickup')
   const [deliveryAddress, setDeliveryAddress] = useState('')
+  const [deliveryGeoLoading, setDeliveryGeoLoading] = useState(false)
+  const [deliveryEstimate, setDeliveryEstimate]     = useState<{ km: number; fee: number } | null>(null)
+  const [deliveryGeoError, setDeliveryGeoError]     = useState('')
   const [pending, setPending]         = useState(false)
   const [submitError, setSubmitError] = useState('')
   const addInputRef    = useRef<HTMLInputElement>(null)
@@ -292,6 +295,45 @@ export default function RequestForm({
     }, 600)
     return () => { clearTimeout(timer); setOgLoading(false) }
   }, [modelUrl, modelMode])
+
+  // Geocode delivery address and estimate fee (debounced, Nominatim OSM)
+  useEffect(() => {
+    if (fulfillment !== 'delivery' || !deliveryAddress.trim() || !printer.lat || !printer.lng) {
+      setDeliveryEstimate(null)
+      setDeliveryGeoError('')
+      return
+    }
+    setDeliveryGeoLoading(true)
+    setDeliveryGeoError('')
+    const timer = setTimeout(async () => {
+      try {
+        const res  = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(deliveryAddress)}&format=json&limit=1&countrycodes=my`,
+          { headers: { 'User-Agent': 'Print3DHubApp/1.0' } },
+        )
+        const data = await res.json()
+        if (!data?.[0]) { setDeliveryGeoError('Address not found — try adding postcode or city'); setDeliveryGeoLoading(false); return }
+        const cLat = parseFloat(data[0].lat)
+        const cLng = parseFloat(data[0].lon)
+        // Haversine straight-line distance
+        const R    = 6371
+        const dLat = (cLat - printer.lat) * Math.PI / 180
+        const dLng = (cLng - printer.lng) * Math.PI / 180
+        const a    = Math.sin(dLat / 2) ** 2 + Math.cos(printer.lat * Math.PI / 180) * Math.cos(cLat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+        const straight = R * 2 * Math.asin(Math.sqrt(a))
+        const road  = straight * 1.3   // road correction factor
+        const rate  = printer.delivery_rate_per_km ?? 1.00
+        const fee   = Math.ceil(road * rate * 10) / 10  // round up to nearest 0.10
+        setDeliveryEstimate({ km: Math.round(road * 10) / 10, fee })
+        setDeliveryGeoLoading(false)
+      } catch {
+        setDeliveryGeoError('Could not estimate distance')
+        setDeliveryGeoLoading(false)
+      }
+    }, 800)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deliveryAddress, fulfillment])
 
   // Rebuild blob URLs whenever file list changes (all previewable formats)
   useEffect(() => {
@@ -697,26 +739,42 @@ export default function RequestForm({
                 >
                   <p className="text-sm font-semibold text-slate-900">Delivery</p>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    {printer.delivery_fee_rm
-                      ? `+ RM${Number(printer.delivery_fee_rm).toFixed(2)} delivery fee`
-                      : 'Fee to be quoted'}
+                    RM {Number(printer.delivery_rate_per_km ?? 1.00).toFixed(2)}/km · fee based on distance
                   </p>
                 </button>
               )}
             </div>
             {fulfillment === 'delivery' && (
-              <div className="mt-3">
-                <label className="mb-1 block text-xs font-medium text-slate-600">
-                  Delivery address <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={deliveryAddress}
-                  onChange={(e) => setDeliveryAddress(e.target.value)}
-                  required
-                  rows={2}
-                  placeholder="Full address including postcode and city"
-                  className={`${inputClass} resize-none`}
-                />
+              <div className="mt-3 space-y-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    Delivery address <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    required
+                    rows={2}
+                    placeholder="Full address including postcode and city"
+                    className={`${inputClass} resize-none`}
+                  />
+                </div>
+                {deliveryGeoLoading && (
+                  <p className="text-xs text-slate-400">Estimating distance…</p>
+                )}
+                {deliveryEstimate && !deliveryGeoLoading && (
+                  <div className="flex items-center gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-2 text-xs text-green-700">
+                    <span>📍</span>
+                    <span>
+                      ~{deliveryEstimate.km} km from owner ·{' '}
+                      <strong>est. RM {deliveryEstimate.fee.toFixed(2)} delivery fee</strong>
+                      <span className="ml-1 text-green-500">(at RM {Number(printer.delivery_rate_per_km ?? 1.00).toFixed(2)}/km)</span>
+                    </span>
+                  </div>
+                )}
+                {deliveryGeoError && !deliveryGeoLoading && (
+                  <p className="text-xs text-amber-600">{deliveryGeoError}</p>
+                )}
               </div>
             )}
           </div>

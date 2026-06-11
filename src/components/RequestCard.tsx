@@ -460,6 +460,11 @@ export default function RequestCard({ request, printer }: { request: PrintReques
             <div>
               <p className="font-medium text-slate-800">
                 {request.fulfillment === 'delivery' ? 'Delivery requested' : 'Pickup'}
+                {request.fulfillment === 'delivery' && printer.delivery_rate_per_km && (
+                  <span className="ml-1.5 text-xs font-normal text-slate-400">
+                    RM {Number(printer.delivery_rate_per_km).toFixed(2)}/km
+                  </span>
+                )}
               </p>
               {request.fulfillment === 'delivery' && request.delivery_address && (
                 <p className="text-xs text-slate-500 mt-0.5">{request.delivery_address}</p>
