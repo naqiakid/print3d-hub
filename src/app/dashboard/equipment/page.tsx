@@ -2,8 +2,9 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import type { PrintProfile } from '@/lib/types'
+import type { PrintProfile, Filament } from '@/lib/types'
 import EquipmentManager from '@/components/EquipmentManager'
+import FilamentManager from '@/components/FilamentManager'
 
 export default async function EquipmentPage() {
   const supabase = await createClient()
@@ -20,14 +21,23 @@ export default async function EquipmentPage() {
 
   if (!printerData) redirect('/register')
 
-  const { data: profileData } = await supabase
-    .from('print_profiles')
-    .select('*')
-    .eq('printer_id', printerData.id)
-    .order('nozzle_mm', { ascending: true })
+  const [profileResult, filamentResult] = await Promise.all([
+    supabase
+      .from('print_profiles')
+      .select('*')
+      .eq('printer_id', printerData.id)
+      .order('nozzle_mm', { ascending: true }),
+    supabase
+      .from('filaments')
+      .select('*')
+      .eq('owner_id', user.id)
+      .order('material', { ascending: true })
+      .order('created_at', { ascending: true }),
+  ])
 
-  const profiles = (profileData ?? []) as unknown as PrintProfile[]
-  const bedTypes = (printerData.bed_type ?? []) as string[]
+  const profiles  = (profileResult.data  ?? []) as unknown as PrintProfile[]
+  const filaments = (filamentResult.data  ?? []) as unknown as Filament[]
+  const bedTypes  = (printerData.bed_type ?? []) as string[]
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
@@ -38,9 +48,9 @@ export default async function EquipmentPage() {
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
         </Link>
-        <h1 className="text-2xl font-bold text-slate-900">Equipment</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Equipment &amp; Filaments</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Manage the nozzle sizes and bed surfaces available on your printer.
+          Manage the hardware on your printer and the filament rolls you have in stock.
         </p>
       </div>
 
@@ -49,6 +59,17 @@ export default async function EquipmentPage() {
         bedTypes={bedTypes}
         printerId={printerData.id}
       />
+
+      <div className="mt-12">
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-slate-900">Filaments</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Record the filament rolls you have in stock — material, colour, brand, and cost per kg.
+            Used for automatic job pricing. Toggle &quot;in stock&quot; to hide without deleting.
+          </p>
+        </div>
+        <FilamentManager filaments={filaments} ownerId={user.id} />
+      </div>
     </div>
   )
 }

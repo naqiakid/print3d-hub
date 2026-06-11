@@ -242,7 +242,7 @@ export async function createFilament(data: {
   const { error } = await supabase.from('filaments').insert({ ...data, owner_id: user.id })
   if (error) return { error: error.message }
   await syncFilamentCosts(supabase, user.id)
-  revalidatePath('/dashboard/filaments')
+  revalidatePath('/dashboard/equipment')
   revalidatePath('/dashboard/listing')
 }
 
@@ -268,7 +268,7 @@ export async function updateFilament(
     .eq('owner_id', user.id)
   if (error) return { error: error.message }
   await syncFilamentCosts(supabase, user.id)
-  revalidatePath('/dashboard/filaments')
+  revalidatePath('/dashboard/equipment')
   revalidatePath('/dashboard/listing')
 }
 
@@ -284,7 +284,7 @@ export async function deleteFilament(id: string): Promise<{ error: string } | un
     .eq('owner_id', user.id)
   if (error) return { error: error.message }
   await syncFilamentCosts(supabase, user.id)
-  revalidatePath('/dashboard/filaments')
+  revalidatePath('/dashboard/equipment')
   revalidatePath('/dashboard/listing')
 }
 
