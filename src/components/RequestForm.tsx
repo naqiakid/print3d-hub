@@ -118,6 +118,7 @@ function FileUploadSection({
           }>
             <STLViewer
               urls={previewUrls}
+              fileNames={stlItems.map((i) => i.file.name)}
               colors={stlItems.map((i) => i.colorHex || '#e0e0e0')}
               highlightIndex={highlightIndex}
               className="h-full"
@@ -258,7 +259,10 @@ export default function RequestForm({
   const [previewUrls, setPreviewUrls]     = useState<string[]>([])
 
   const defaultProfile = profiles.find((p) => p.is_default) ?? profiles[0] ?? null
-  const stlItems = fileItems.filter((i) => i.file.name.toLowerCase().endsWith('.stl'))
+  // All formats supported by the 3D viewer (STL, 3MF, OBJ)
+  const stlItems = fileItems.filter((i) =>
+    ['.stl', '.3mf', '.obj'].some((ext) => i.file.name.toLowerCase().endsWith(ext))
+  )
 
   function pickMode(mode: ModelMode) {
     setModelMode(mode)
@@ -286,9 +290,11 @@ export default function RequestForm({
     return () => { clearTimeout(timer); setOgLoading(false) }
   }, [modelUrl, modelMode])
 
-  // Rebuild blob URLs whenever file list changes
+  // Rebuild blob URLs whenever file list changes (all previewable formats)
   useEffect(() => {
-    const items = fileItems.filter((i) => i.file.name.toLowerCase().endsWith('.stl'))
+    const items = fileItems.filter((i) =>
+      ['.stl', '.3mf', '.obj'].some((ext) => i.file.name.toLowerCase().endsWith(ext))
+    )
     const urls  = items.map((i) => URL.createObjectURL(i.file))
     setPreviewUrls(urls)
     return () => urls.forEach((u) => URL.revokeObjectURL(u))

@@ -3,19 +3,22 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
+import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 type Props = {
   urls?: string[]
+  fileNames?: string[]      // original file names — used to pick the right loader per URL
   colors?: string[]
   file?: File
-  highlightIndex?: number   // which mesh to spotlight (-1 or undefined = all normal)
+  highlightIndex?: number   // which slot to spotlight (-1 or undefined = all normal)
   className?: string
 }
 
-export default function STLViewer({ urls: urlsProp, colors: colorsProp, file, highlightIndex, className }: Props) {
+export default function STLViewer({ urls: urlsProp, fileNames: fileNamesProp, colors: colorsProp, file, highlightIndex, className }: Props) {
   const mountRef    = useRef<HTMLDivElement>(null)
-  const meshesRef   = useRef<THREE.Mesh[]>([])
+  const objectsRef  = useRef<THREE.Object3D[]>([])  // one entry per URL slot
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const sceneRef    = useRef<THREE.Scene | null>(null)
   const cameraRef   = useRef<THREE.PerspectiveCamera | null>(null)
@@ -25,11 +28,12 @@ export default function STLViewer({ urls: urlsProp, colors: colorsProp, file, hi
   // ── Scene setup ──────────────────────────────────────────────────
   useEffect(() => {
     const mount = mountRef.current
-    meshesRef.current = []
+    objectsRef.current = []
 
     let blobUrl: string | null = null
-    const urls   = file ? ((blobUrl = URL.createObjectURL(file)), [blobUrl]) : (urlsProp ?? [])
-    const colors = colorsProp ?? []
+    const urls      = file ? ((blobUrl = URL.createObjectURL(file)), [blobUrl]) : (urlsProp ?? [])
+    const fileNames = fileNamesProp ?? []
+    const colors    = colorsProp ?? []
 
     if (!mount || urls.length === 0) return
 
@@ -47,7 +51,6 @@ export default function STLViewer({ urls: urlsProp, colors: colorsProp, file, hi
     cameraRef.current = camera
 
     const renderer = new THREE.WebGLRenderer({ antialias: true })
-    // Cap at 2× to avoid 4× GPU work on HiDPI displays
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(w, h)
     mount.appendChild(renderer.domElement)
@@ -66,12 +69,57 @@ export default function STLViewer({ urls: urlsProp, colors: colorsProp, file, hi
     controls.dampingFactor = 0.08
     controls.autoRotate    = false
 
-    const stlLoader = new STLLoader()
-    const group     = new THREE.Group()
-    let loaded   = 0
-    let hasError = false
+    const group   = new THREE.Group()
+    let loaded    = 0
+    let hasError  = false
+
+    function onAllLoaded() {
+      if (loaded !== urls.length || hasError) return
+
+      if (urls.length > 1) {
+        const extents = objectsRef.current.map((obj) =>
+          new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3()).x
+        )
+        const maxExtent = Math.max(...extents)
+        const spacing   = maxExtent * 1.4
+        const totalW    = spacing * (urls.length - 1)
+        objectsRef.current.forEach((obj, j) => {
+          obj.position.x = -totalW / 2 + j * spacing
+        })
+      }
+
+      const box     = new THREE.Box3().setFromObject(group)
+      const size    = box.getSize(new THREE.Vector3())
+      const centre2 = box.getCenter(new THREE.Vector3())
+      const maxDim  = Math.max(size.x, size.y, size.z)
+      const fov     = camera.fov * (Math.PI / 180)
+      const dist    = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.5
+
+      group.position.sub(centre2)
+      camera.position.set(0, dist * 0.4, dist)
+      camera.near = dist / 100
+      camera.far  = dist * 100
+      camera.updateProjectionMatrix()
+      controls.target.set(0, 0, 0)
+      controls.update()
+
+      scene.add(group)
+      renderer.render(scene, camera)
+      setLoading(false)
+    }
+
+    function onError() {
+      if (!hasError) {
+        hasError = true
+        setError('Could not load 3D model')
+        setLoading(false)
+      }
+    }
 
     urls.forEach((url, i) => {
+      const name = fileNames[i] ?? url
+      const ext  = name.split('.').pop()?.toLowerCase() ?? 'stl'
+
       const mat = new THREE.MeshPhongMaterial({
         color:       new THREE.Color(colors[i] || '#cccccc'),
         specular:    new THREE.Color(0x222222),
@@ -80,71 +128,51 @@ export default function STLViewer({ urls: urlsProp, colors: colorsProp, file, hi
         opacity:     1,
       })
 
-      stlLoader.load(
-        url,
-        (geometry) => {
-          geometry.computeVertexNormals()
-          const mesh = new THREE.Mesh(geometry, mat)
-          mesh.userData.index = i
+      // ── STL: loader returns BufferGeometry ────────────────────────
+      function onGeometry(geometry: THREE.BufferGeometry) {
+        geometry.computeVertexNormals()
+        const mesh = new THREE.Mesh(geometry, mat)
+        mesh.userData.index = i
 
-          geometry.computeBoundingBox()
-          const centre = new THREE.Vector3()
-          geometry.boundingBox!.getCenter(centre)
-          geometry.translate(-centre.x, -centre.y, -centre.z)
+        geometry.computeBoundingBox()
+        const centre = new THREE.Vector3()
+        geometry.boundingBox!.getCenter(centre)
+        geometry.translate(-centre.x, -centre.y, -centre.z)
 
-          group.add(mesh)
-          meshesRef.current[i] = mesh
-          loaded++
+        group.add(mesh)
+        objectsRef.current[i] = mesh
+        loaded++
+        onAllLoaded()
+      }
 
-          if (loaded === urls.length && !hasError) {
-            if (urls.length > 1) {
-              const extents = meshesRef.current.map((m) => {
-                const box = new THREE.Box3().setFromObject(m)
-                return box.getSize(new THREE.Vector3()).x
-              })
-              const maxExtent = Math.max(...extents)
-              const spacing   = maxExtent * 1.4
-              const totalW    = spacing * (urls.length - 1)
-              meshesRef.current.forEach((m, j) => {
-                m.position.x = -totalW / 2 + j * spacing
-              })
-            }
+      // ── 3MF / OBJ: loader returns Group ──────────────────────────
+      function onGroupLoaded(obj: THREE.Group) {
+        // Apply our colour material to every mesh in the group
+        obj.traverse((child) => {
+          if (child instanceof THREE.Mesh) child.material = mat
+        })
+        // Centre the group at origin
+        const box    = new THREE.Box3().setFromObject(obj)
+        const centre = box.getCenter(new THREE.Vector3())
+        obj.position.sub(centre)
 
-            const box     = new THREE.Box3().setFromObject(group)
-            const size    = box.getSize(new THREE.Vector3())
-            const centre2 = box.getCenter(new THREE.Vector3())
-            const maxDim  = Math.max(size.x, size.y, size.z)
-            const fov     = camera.fov * (Math.PI / 180)
-            const dist    = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.5
+        obj.userData.index = i
+        group.add(obj)
+        objectsRef.current[i] = obj
+        loaded++
+        onAllLoaded()
+      }
 
-            group.position.sub(centre2)
-            camera.position.set(0, dist * 0.4, dist)
-            camera.near = dist / 100
-            camera.far  = dist * 100
-            camera.updateProjectionMatrix()
-            controls.target.set(0, 0, 0)
-            controls.update()
-
-            scene.add(group)
-            renderer.render(scene, camera)   // one-shot initial render
-            setLoading(false)
-          }
-        },
-        undefined,
-        () => {
-          if (!hasError) {
-            hasError = true
-            setError('Could not load 3D model')
-            setLoading(false)
-          }
-        },
-      )
+      if (ext === '3mf') {
+        new ThreeMFLoader().load(url, onGroupLoaded, undefined, onError)
+      } else if (ext === 'obj') {
+        new OBJLoader().load(url, onGroupLoaded, undefined, onError)
+      } else {
+        new STLLoader().load(url, onGeometry, undefined, onError)
+      }
     })
 
     // ── Render on demand ─────────────────────────────────────────
-    // Only run the animation loop while the user is interacting.
-    // OrbitControls fires 'change' on every frame during damping, so the
-    // loop runs until damping fully settles, then stops automatically.
     let animId: number | null = null
     let idleTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -194,25 +222,33 @@ export default function STLViewer({ urls: urlsProp, colors: colorsProp, file, hi
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [file, (urlsProp ?? []).join(','), (colorsProp ?? []).join(',')])
+  }, [file, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(','), (colorsProp ?? []).join(',')])
 
   // ── Highlight effect ─────────────────────────────────────────────
   useEffect(() => {
-    const meshes = meshesRef.current.filter(Boolean)
-    if (meshes.length === 0) return
+    const objects = objectsRef.current.filter(Boolean)
+    if (objects.length === 0) return
 
     const active = highlightIndex !== undefined && highlightIndex >= 0
 
-    meshes.forEach((mesh, i) => {
-      const mat = mesh.material as THREE.MeshPhongMaterial
-      if (!active) {
-        mat.opacity = 1; mat.transparent = false; mat.emissive.set(0x000000)
-      } else if (i === highlightIndex) {
-        mat.opacity = 1; mat.transparent = false; mat.emissive.set(0x555555)
-      } else {
-        mat.opacity = 0.12; mat.transparent = true; mat.emissive.set(0x000000)
+    objects.forEach((obj, i) => {
+      const applyToMesh = (m: THREE.Mesh) => {
+        const mat = m.material as THREE.MeshPhongMaterial
+        if (!active) {
+          mat.opacity = 1; mat.transparent = false; mat.emissive.set(0x000000)
+        } else if (i === highlightIndex) {
+          mat.opacity = 1; mat.transparent = false; mat.emissive.set(0x555555)
+        } else {
+          mat.opacity = 0.12; mat.transparent = true; mat.emissive.set(0x000000)
+        }
+        mat.needsUpdate = true
       }
-      mat.needsUpdate = true
+
+      if (obj instanceof THREE.Mesh) {
+        applyToMesh(obj)
+      } else {
+        obj.traverse((child) => { if (child instanceof THREE.Mesh) applyToMesh(child) })
+      }
     })
 
     const r = rendererRef.current
