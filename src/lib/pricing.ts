@@ -39,30 +39,6 @@ export const PRINT_ESTIMATES: Record<PrintSize, Record<PrintQuality, { weight_g:
   large:  { draft: { weight_g: 150, hours: 10  }, standard: { weight_g: 200, hours: 18  }, premium: { weight_g: 250, hours: 30 } },
 }
 
-const MODEL_POWER_WATTS: Record<string, number> = {
-  'bambu-x1c':           350,
-  'bambu-p1s':           350,
-  'bambu-p1p':           350,
-  'bambu-a1-mini':       250,
-  'bambu-a1':            250,
-  'prusa-xl':            200,
-  'prusa-mk4s':          120,
-  'prusa-mk3s':          120,
-  'prusa-mini':          100,
-  'creality-k1':         200,
-  'creality-ender3':     65,
-  'creality-cr10':       80,
-  'ankermake-m5c':       180,
-  'voron':               300,
-}
-
-export function getPowerWatts(modelId: string): number {
-  for (const [prefix, watts] of Object.entries(MODEL_POWER_WATTS)) {
-    if (modelId.startsWith(prefix)) return watts
-  }
-  return 150
-}
-
 export type EstimateInput = {
   size: PrintSize
   quality: PrintQuality

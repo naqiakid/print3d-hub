@@ -83,16 +83,10 @@ export default async function DashboardPage() {
             {printer.available ? 'Available' : 'Busy'}
           </span>
           <Link
-            href="/dashboard/filaments"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
-          >
-            Filaments
-          </Link>
-          <Link
             href="/dashboard/equipment"
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
           >
-            Equipment
+            Equipment & Filaments
           </Link>
           <Link
             href="/dashboard/listing"

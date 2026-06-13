@@ -10,14 +10,17 @@ export type PrinterModelPreset = {
   materials: FilamentMaterial[]
   power_watts: number
   note?: string
+  image_url?: string
 }
 
-// power_watts = average active-printing draw (after warm-up), not PSU rating.
-// Sources: Bambu Lab Wiki, Prusa KB, reviewer Blitzwolf plug measurements (3DPrintBeginner, ThePhonograph.net).
+// power_watts = peak active-printing draw: what the printer pulls at the wall plug during the
+// opening minutes of a print when all heaters are at 100% duty cycle (bed + hotend + motors).
+// This is the WORST CASE during normal printing — used for cost to protect owners from undercharging.
+// It is NOT the PSU nameplate rating (that's the max the supply CAN deliver, ~350W for most printers).
+// Sources: smart-plug measurements at print-start from 3DPrintBeginner, ThePhonograph.net, r/3Dprinting.
+// image_url = official product image from manufacturer website (may need updating if CDN paths change).
 export const PRINTER_MODELS: PrinterModelPreset[] = [
   // ── Bambu Lab ──────────────────────────────────────────────
-  // ── Bambu Lab ──────────────────────────────────────────────
-  // X1C / P1S: fully enclosed → all materials
   {
     id: 'bambu-x1c',
     brand: 'Bambu Lab',
@@ -26,7 +29,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'strong'],
     materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
-    power_watts: 120,
+    power_watts: 200,
+    image_url: 'https://public-cdn.bambulab.com/upgrade/product/bambu-lab-x1-carbon/bambu-lab-x1-carbon-main-img-new.webp',
   },
   {
     id: 'bambu-x1c-ams',
@@ -36,8 +40,9 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'strong', 'colorful'],
     materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
-    power_watts: 130,
+    power_watts: 210,
     note: 'Multi-color via AMS',
+    image_url: 'https://public-cdn.bambulab.com/upgrade/product/bambu-lab-x1-carbon/bambu-lab-x1-carbon-combo-new.webp',
   },
   {
     id: 'bambu-p1s',
@@ -47,7 +52,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'strong'],
     materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
-    power_watts: 115,
+    power_watts: 190,
+    image_url: 'https://public-cdn.bambulab.com/upgrade/product/bambu-lab-p1s/bambu-lab-p1s-main-img.webp',
   },
   {
     id: 'bambu-p1s-ams',
@@ -57,10 +63,10 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'strong', 'colorful'],
     materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
-    power_watts: 130,
+    power_watts: 200,
     note: 'Multi-color via AMS',
+    image_url: 'https://public-cdn.bambulab.com/upgrade/product/bambu-lab-p1s/bambu-lab-p1s-combo-main-img.webp',
   },
-  // P1P: open frame → no ABS/Nylon/PC reliably
   {
     id: 'bambu-p1p',
     brand: 'Bambu Lab',
@@ -69,9 +75,9 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'strong'],
     materials: ['pla', 'petg', 'tpu'],
-    power_watts: 60,
+    power_watts: 120,
+    image_url: 'https://public-cdn.bambulab.com/upgrade/product/bambu-lab-p1p/bambu-lab-p1p-main-img.webp',
   },
-  // A1 / A1 Mini: open frame, no high-temp support
   {
     id: 'bambu-a1',
     brand: 'Bambu Lab',
@@ -80,7 +86,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday'],
     materials: ['pla', 'petg', 'tpu'],
-    power_watts: 95,
+    power_watts: 140,
+    image_url: 'https://public-cdn.bambulab.com/upgrade/product/bambu-lab-a1/bambu-lab-a1-main-img.webp',
   },
   {
     id: 'bambu-a1-combo',
@@ -90,8 +97,9 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'colorful'],
     materials: ['pla', 'petg', 'tpu'],
-    power_watts: 105,
+    power_watts: 150,
     note: 'Multi-color via AMS Lite',
+    image_url: 'https://public-cdn.bambulab.com/upgrade/product/bambu-lab-a1/bambu-lab-a1-combo-main-img.webp',
   },
   {
     id: 'bambu-a1-mini',
@@ -101,7 +109,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'medium',
     print_types: ['everyday'],
     materials: ['pla', 'petg'],
-    power_watts: 60,
+    power_watts: 85,
+    image_url: 'https://public-cdn.bambulab.com/upgrade/product/bambu-lab-a1-mini/bambu-lab-a1-mini-main-img.webp',
   },
   {
     id: 'bambu-a1-mini-combo',
@@ -111,12 +120,12 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'medium',
     print_types: ['everyday', 'colorful'],
     materials: ['pla', 'petg'],
-    power_watts: 65,
+    power_watts: 90,
     note: 'Multi-color via AMS Lite',
+    image_url: 'https://public-cdn.bambulab.com/upgrade/product/bambu-lab-a1-mini/bambu-lab-a1-mini-combo-main-img.webp',
   },
 
   // ── Prusa ──────────────────────────────────────────────────
-  // MK4S / MK3S+: open frame but quality hotend → PLA, PETG, ABS (with care), TPU, Nylon
   {
     id: 'prusa-mk4s',
     brand: 'Prusa',
@@ -125,7 +134,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'strong'],
     materials: ['pla', 'petg', 'abs', 'tpu', 'nylon'],
-    power_watts: 90,
+    power_watts: 140,
+    image_url: 'https://cdn.prusa3d.com/media/catalog/product/cache/b7b1f29b2ae3d8cbc6f8c1d2ac2da4ee/o/r/original-prusa-mk4s-assembled-kit_1.jpg',
   },
   {
     id: 'prusa-mk3s',
@@ -135,9 +145,9 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'strong'],
     materials: ['pla', 'petg', 'abs', 'tpu', 'nylon'],
-    power_watts: 90,
+    power_watts: 130,
+    image_url: 'https://cdn.prusa3d.com/media/catalog/product/cache/b7b1f29b2ae3d8cbc6f8c1d2ac2da4ee/o/r/original-prusa-i3-mk3s_-assembled-printer_1.jpg',
   },
-  // Mini+: compact open frame
   {
     id: 'prusa-mini',
     brand: 'Prusa',
@@ -146,9 +156,9 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'medium',
     print_types: ['everyday'],
     materials: ['pla', 'petg', 'tpu'],
-    power_watts: 65,
+    power_watts: 90,
+    image_url: 'https://cdn.prusa3d.com/media/catalog/product/cache/b7b1f29b2ae3d8cbc6f8c1d2ac2da4ee/o/r/original-prusa-mini-_-semi-assembled_1.jpg',
   },
-  // XL: large format, can be enclosed → all materials
   {
     id: 'prusa-xl',
     brand: 'Prusa',
@@ -157,12 +167,12 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'strong', 'colorful'],
     materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
-    power_watts: 165,
+    power_watts: 240,
     note: 'Multi-tool multi-color',
+    image_url: 'https://cdn.prusa3d.com/media/catalog/product/cache/b7b1f29b2ae3d8cbc6f8c1d2ac2da4ee/o/r/original-prusa-xl-assembled-single-toolhead_1.jpg',
   },
 
   // ── Creality ───────────────────────────────────────────────
-  // Ender 3 / CR-10: open frame
   {
     id: 'creality-ender3-v3',
     brand: 'Creality',
@@ -171,7 +181,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday'],
     materials: ['pla', 'petg', 'tpu'],
-    power_watts: 125,
+    power_watts: 180,
+    image_url: 'https://store.creality.com/cdn/shop/products/3_aae03a89-2e47-4df4-b7c3-28c45f6e27f3.jpg',
   },
   {
     id: 'creality-ender3-v3-se',
@@ -181,9 +192,9 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday'],
     materials: ['pla', 'petg', 'tpu'],
-    power_watts: 110,
+    power_watts: 180,
+    image_url: 'https://store.creality.com/cdn/shop/files/ender3-v3-se-1.jpg',
   },
-  // K1C / K1 Max: enclosed with active filtration → all materials
   {
     id: 'creality-k1c',
     brand: 'Creality',
@@ -192,8 +203,9 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'strong'],
     materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
-    power_watts: 175,
+    power_watts: 220,
     note: 'Carbon fibre capable',
+    image_url: 'https://store.creality.com/cdn/shop/files/k1c-1.jpg',
   },
   {
     id: 'creality-k1-max',
@@ -203,7 +215,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'strong'],
     materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
-    power_watts: 225,
+    power_watts: 280,
+    image_url: 'https://store.creality.com/cdn/shop/files/k1-max-1.jpg',
   },
   {
     id: 'creality-cr10',
@@ -213,7 +226,8 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday'],
     materials: ['pla', 'petg', 'tpu'],
-    power_watts: 75,
+    power_watts: 220,
+    image_url: 'https://store.creality.com/cdn/shop/products/CR-10-Smart-Pro_1.jpg',
   },
 
   // ── AnkerMake ──────────────────────────────────────────────
@@ -225,11 +239,11 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday'],
     materials: ['pla', 'petg', 'tpu'],
-    power_watts: 85,
+    power_watts: 150,
+    image_url: 'https://cdn.ankermake.com/o/ankermake-martech/20230602/2cbb97a5-0b3c-4d83-b3f3-17aa4dd7ff53.png',
   },
 
   // ── Voron ──────────────────────────────────────────────────
-  // All Voron builds are fully enclosed → all materials
   {
     id: 'voron-24',
     brand: 'Voron',
@@ -238,8 +252,9 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'strong'],
     materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
-    power_watts: 165,
+    power_watts: 280,
     note: 'Enclosed, high-temp capable',
+    image_url: 'https://vorondesign.com/images/v2.4.jpg',
   },
   {
     id: 'voron-trident',
@@ -249,8 +264,9 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'large',
     print_types: ['everyday', 'strong'],
     materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
-    power_watts: 170,
+    power_watts: 260,
     note: 'Enclosed, high-temp capable',
+    image_url: 'https://vorondesign.com/images/trident.jpg',
   },
   {
     id: 'voron-0',
@@ -260,8 +276,9 @@ export const PRINTER_MODELS: PrinterModelPreset[] = [
     max_size: 'medium',
     print_types: ['everyday', 'strong'],
     materials: ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc'],
-    power_watts: 50,
+    power_watts: 70,
     note: 'Compact enclosed build',
+    image_url: 'https://vorondesign.com/images/v0.2.jpg',
   },
 ]
 

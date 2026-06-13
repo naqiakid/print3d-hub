@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { NOZZLE_SIZES, NOZZLE_HINTS, BED_TYPES, bedLabel } from '@/lib/equipment'
-import { toggleNozzle, addNozzleSize, removeNozzleSize, updateBedTypes } from '@/lib/actions'
+import { toggleNozzle, addNozzleSize, removeNozzleSize, updateBedTypes, updatePrinterCapabilities } from '@/lib/actions'
 import type { PrintProfile } from '@/lib/types'
 
 export default function EquipmentManager({
@@ -19,6 +19,16 @@ export default function EquipmentManager({
   const [bedTypes, setBedTypes] = useState(initialBedTypes)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+
+  // Aggregate current capability state from all profiles
+  const [caps, setCaps] = useState({
+    supports_available:         initial.some((p) => p.supports_available),
+    ironing_available:          initial.some((p) => p.ironing_available),
+    color_change_available:     initial.some((p) => p.color_change_available),
+    pause_insert_available:     initial.some((p) => p.pause_insert_available),
+    fuzzy_skin_available:       initial.some((p) => p.fuzzy_skin_available),
+    text_on_surface_available:  initial.some((p) => p.text_on_surface_available),
+  })
 
   // ── Nozzle helpers ───────────────────────────────────────────
 
@@ -51,6 +61,7 @@ export default function EquipmentManager({
           color_change_available: false,
           pause_insert_available: false,
           fuzzy_skin_available: false,
+          text_on_surface_available: false,
           is_default: false,
           is_active: true,
           created_at: new Date().toISOString(),
@@ -76,6 +87,17 @@ export default function EquipmentManager({
     setBedTypes(next)
     startTransition(async () => {
       const res = await updateBedTypes(printerId, next)
+      if (res?.error) setError(res.error)
+    })
+  }
+
+  // ── Capability helpers ───────────────────────────────────────
+
+  function handleToggleCap(key: keyof typeof caps) {
+    const next = { ...caps, [key]: !caps[key] }
+    setCaps(next)
+    startTransition(async () => {
+      const res = await updatePrinterCapabilities(printerId, next)
       if (res?.error) setError(res.error)
     })
   }
@@ -235,6 +257,60 @@ export default function EquipmentManager({
           <p className="mt-3 text-xs text-slate-400">
             Active: {bedTypes.map(bedLabel).join(' · ')}
           </p>
+        )}
+      </section>
+
+      {/* ── Capabilities ── */}
+      <section>
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-slate-900">Capabilities</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Tick the special print features your printer can do. These are shown to customers on your listing.
+          </p>
+        </div>
+
+        {profiles.length === 0 ? (
+          <p className="text-sm text-slate-400">Add a nozzle size first to enable capabilities.</p>
+        ) : (
+          <div className="space-y-2">
+            {([
+              { key: 'supports_available'        as const, label: 'Support structures', desc: 'Can print overhangs and bridges with supports' },
+              { key: 'ironing_available'         as const, label: 'Ironing',            desc: 'Extra smooth top surface finish (+15% print time)' },
+              { key: 'color_change_available'    as const, label: 'Multi-colour / AMS', desc: 'Swap filament mid-print — manual pause or AMS system' },
+              { key: 'pause_insert_available'    as const, label: 'Embedded inserts',   desc: 'Pause to press-fit nuts, magnets, or other parts' },
+              { key: 'fuzzy_skin_available'      as const, label: 'Fuzzy skin',         desc: 'Textured outer surface for a rough/fabric look' },
+              { key: 'text_on_surface_available' as const, label: 'Text on surface',    desc: 'Emboss or engrave custom text onto the model surface via the slicer' },
+            ] as const).map(({ key, label, desc }) => {
+              const active = caps[key]
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleToggleCap(key)}
+                  disabled={isPending}
+                  className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition disabled:opacity-50 ${
+                    active ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'
+                  }`}
+                >
+                  <div>
+                    <p className={`text-sm font-medium ${active ? 'text-orange-700' : 'text-slate-800'}`}>
+                      {label}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
+                  </div>
+                  <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition ${
+                    active ? 'border-orange-500 bg-orange-500' : 'border-slate-300 bg-white'
+                  }`}>
+                    {active && (
+                      <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
         )}
       </section>
     </div>

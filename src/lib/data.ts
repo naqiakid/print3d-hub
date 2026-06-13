@@ -8,6 +8,7 @@ export const printers: Printer[] = [
     description:
       'Fast, reliable FDM printing for everyday items and functional parts. All prints are quality-checked before pickup.',
     printer_model: 'Bambu Lab X1C',
+    printer_model_id: 'bambu-x1c',
     print_types: ['everyday', 'strong', 'colorful'],
     materials: ['pla', 'petg', 'abs', 'tpu'],
     max_size: 'medium',
@@ -39,6 +40,7 @@ export const printers: Printer[] = [
     description:
       'Budget-friendly prints for hobbyists and makers. Great quality at an affordable price. Perfect for prototypes.',
     printer_model: 'Prusa MK4S',
+    printer_model_id: 'prusa-mk4s',
     print_types: ['everyday'],
     materials: ['pla', 'petg', 'tpu'],
     max_size: 'medium',
@@ -70,6 +72,7 @@ export const printers: Printer[] = [
     description:
       'Engineering-grade prints with tight tolerances. Specializing in mechanical parts, enclosures, and structural components.',
     printer_model: 'Bambu Lab X1C AMS',
+    printer_model_id: 'bambu-x1c-ams',
     print_types: ['strong', 'colorful'],
     materials: ['pla', 'petg', 'abs', 'nylon'],
     max_size: 'medium',
@@ -101,6 +104,7 @@ export const printers: Printer[] = [
     description:
       'Specializing in vibrant multi-color prints for art, decor, and custom designs. Makes your ideas come alive in color.',
     printer_model: 'Bambu Lab P1S AMS',
+    printer_model_id: 'bambu-p1s-ams',
     print_types: ['everyday', 'colorful'],
     materials: ['pla', 'petg'],
     max_size: 'medium',
@@ -132,6 +136,7 @@ export const printers: Printer[] = [
     description:
       'Flexible printing service for all kinds of projects. TPU and standard filaments available. Fast turnaround guaranteed.',
     printer_model: 'Creality K1C',
+    printer_model_id: 'creality-k1c',
     print_types: ['everyday', 'strong'],
     materials: ['pla', 'petg', 'tpu'],
     max_size: 'small',
@@ -163,6 +168,7 @@ export const printers: Printer[] = [
     description:
       'Large format printing for oversized projects. Perfect for cosplay props, display models, and architectural pieces.',
     printer_model: 'Creality CR-10 Smart Pro',
+    printer_model_id: 'creality-cr10',
     print_types: ['everyday', 'strong'],
     materials: ['pla', 'petg', 'abs', 'nylon'],
     max_size: 'large',
@@ -219,6 +225,7 @@ export const mockRequests: PrintRequest[] = [
     notes: 'Prefer black or dark grey color if possible.',
     profile_id: null,
     selected_addons: [],
+    confirmed_addons: [],
     fulfillment: 'pickup' as const,
     delivery_address: null,
     status: 'new',
@@ -256,6 +263,7 @@ export const mockRequests: PrintRequest[] = [
     notes: 'Must be strong enough to hold a 500g camera.',
     profile_id: null,
     selected_addons: [],
+    confirmed_addons: [],
     fulfillment: 'pickup' as const,
     delivery_address: null,
     status: 'quoted',
@@ -293,6 +301,7 @@ export const mockRequests: PrintRequest[] = [
     notes: '3 identical copies. Tight tolerance needed.',
     profile_id: null,
     selected_addons: [],
+    confirmed_addons: [],
     fulfillment: 'pickup' as const,
     delivery_address: null,
     status: 'printing',
@@ -330,6 +339,7 @@ export const mockRequests: PrintRequest[] = [
     notes: 'I will send a photo of my dog.',
     profile_id: null,
     selected_addons: [],
+    confirmed_addons: [],
     fulfillment: 'pickup' as const,
     delivery_address: null,
     status: 'collected',

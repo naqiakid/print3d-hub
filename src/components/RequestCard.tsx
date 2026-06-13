@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useTransition } from 'react'
+import { useState, useRef, useEffect, useTransition, lazy, Suspense } from 'react'
 import { Calendar, FileText, MessageSquare, ExternalLink, Upload, X, Loader2, FileCode2, Plus } from 'lucide-react'
 import type { PrintRequest, RequestStatus, Printer, FilamentMaterial } from '@/lib/types'
 import {
@@ -20,6 +20,9 @@ import {
   DEFAULT_FILAMENT_COST_PER_KG,
 } from '@/lib/pricing'
 import { createClient } from '@/lib/supabase/client'
+import { getPresetById } from '@/lib/printer-models'
+
+const STLViewer = lazy(() => import('./STLViewer'))
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
@@ -57,6 +60,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
   const [showQuoteForm, setShowQuoteForm] = useState(false)
   const [quoteDate, setQuoteDate] = useState('')
   const [quoteMessage, setQuoteMessage] = useState('')
+  const [confirmedAddons, setConfirmedAddons] = useState<Set<string>>(new Set())
   const [actionError, setActionError] = useState('')
   const [isPending, startTransition] = useTransition()
 
@@ -80,13 +84,15 @@ export default function RequestCard({ request, printer }: { request: PrintReques
   const defaultColorHex = request.color && request.color !== 'Any' ? (request.color_hex || '#888888') : '#888888'
   const defaultColorName = request.color && request.color !== 'Any' ? request.color : ''
 
+  const modelPowerWatts = getPresetById(printer.printer_model_id ?? '')?.power_watts ?? 200
+
   const estimate =
     printer.filament_costs && printer.filament_costs[defaultMaterial]
       ? calculateEstimate({
           size: request.size,
           quality: request.quality,
           material: defaultMaterial,
-          power_watts: printer.power_watts ?? 150,
+          power_watts: modelPowerWatts,
           cost_per_kg: printer.filament_costs[defaultMaterial]!,
           electricity_rate: printer.electricity_rate ?? DEFAULT_ELECTRICITY_RATE,
           markup_percent: printer.markup_percent ?? DEFAULT_MARKUP_PERCENT,
@@ -102,7 +108,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
   // Recalculate price whenever per-plate materials/stats or markup changes
   useEffect(() => {
     if (!anyStats) return
-    const powerWatts  = printer.power_watts ?? 150
+    const powerWatts  = modelPowerWatts
     const elecRate    = printer.electricity_rate ?? DEFAULT_ELECTRICITY_RATE
     const markupPct   = quoteMarkup
 
@@ -156,6 +162,11 @@ export default function RequestCard({ request, printer }: { request: PrintReques
     setQuoteMarkup(printer.markup_percent ?? DEFAULT_MARKUP_PERCENT)
     setBreakdown(null)
     setQuotePrice('')
+    // Pre-check every requested addon — owner reviews and unchecks any they couldn't apply
+    const addons = new Set<string>()
+    if (request.supports) addons.add('supports')
+    for (const a of (request.selected_addons ?? [])) addons.add(a)
+    setConfirmedAddons(addons)
     setShowQuoteForm(true)
   }
 
@@ -266,6 +277,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
         totalHours  > 0 ? Math.round(totalHours  * 10) / 10 : null,
         primaryMaterial,
         plateFilaments.length ? plateFilaments : undefined,
+        [...confirmedAddons],
       )
       if (result?.error) setActionError(result.error)
       else setShowQuoteForm(false)
@@ -317,46 +329,154 @@ export default function RequestCard({ request, printer }: { request: PrintReques
       {/* Expanded detail */}
       {expanded && (
         <div className="border-t border-slate-100 px-5 py-4 space-y-4">
-          {/* Specs */}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
-            <div>
-              <span className="text-slate-400">Print type</span>
-              <span className="ml-2 font-medium text-slate-900">{PRINT_TYPE_LABELS[request.print_type]}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-400">Material</span>
-              <span className="font-medium text-slate-900">{MATERIAL_LABELS[request.material]}</span>
-              {request.color && request.color !== 'Any' && (
-                <>
-                  <span className="h-3.5 w-3.5 rounded-full border border-slate-200 shadow-sm" style={{ background: request.color_hex || '#888' }} />
-                  <span className="text-slate-500">{request.color}</span>
-                </>
-              )}
-            </div>
-            <div>
-              <span className="text-slate-400">Size</span>
-              <span className="ml-2 font-medium text-slate-900">{SIZE_LABELS[request.size]}</span>
-            </div>
-            <div>
-              <span className="text-slate-400">Quality</span>
-              <span className="ml-2 font-medium text-slate-900">{QUALITY_LABELS[request.quality]}</span>
-            </div>
-            {(request.supports || (request.selected_addons?.length ?? 0) > 0) && (
-              <div className="col-span-2 flex flex-wrap gap-1.5">
-                {request.supports && (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Supports</span>
-                )}
-                {request.selected_addons?.filter((a) => a !== 'supports').map((addon) => {
-                  const ADDON_LABELS: Record<string, string> = { ironing: 'Ironing', color_change: 'Color change', pause_insert: 'Embedded insert', fuzzy_skin: 'Fuzzy skin' }
-                  return (
-                    <span key={addon} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                      {ADDON_LABELS[addon] ?? addon}
-                    </span>
-                  )
-                })}
+          {/* 3D preview with customer's chosen colors */}
+          {(() => {
+            const stlUrls = (request.stl_urls?.length ?? 0) > 0
+              ? request.stl_urls
+              : request.stl_url ? [request.stl_url]
+              : request.file_url ? [request.file_url]
+              : []
+            if (stlUrls.length === 0) return null
+
+            // Build per-file, per-part color arrays from color_preferences
+            const prefs = request.color_preferences ?? []
+            const fileNames: string[] = []
+            const seenParts = new Set<number>()
+            for (const p of prefs) {
+              if (!seenParts.has(p.part_number)) {
+                seenParts.add(p.part_number)
+                fileNames.push(p.file_name ?? '')
+              }
+            }
+            while (fileNames.length < stlUrls.length) {
+              fileNames.push(stlUrls[fileNames.length].split('/').pop() ?? '')
+            }
+            const colorsByFile = stlUrls.map((_, idx) => {
+              const sorted = prefs
+                .filter((p) => p.part_number === idx + 1)
+                .sort((a, b) => (a.part_index ?? 1) - (b.part_index ?? 1))
+              return {
+                color: sorted[0]?.color_hex || defaultColorHex || '#cccccc',
+                parts: sorted.length > 1 ? sorted.map((p) => p.color_hex || '#cccccc') : [] as string[],
+              }
+            })
+            return (
+              <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 200 }}>
+                <Suspense fallback={
+                  <div className="h-full flex items-center justify-center bg-slate-50 text-xs text-slate-400">
+                    Loading 3D preview…
+                  </div>
+                }>
+                  <STLViewer
+                    urls={stlUrls}
+                    fileNames={fileNames}
+                    colors={colorsByFile.map((c) => c.color)}
+                    partColors={colorsByFile.map((c) => c.parts)}
+                    className="h-full"
+                  />
+                </Suspense>
               </div>
-            )}
-          </div>
+            )
+          })()}
+
+          {/* Specs */}
+          {(() => {
+            // Parse special lines out of notes so they can get their own callout sections
+            const rawNotes = (request.notes ?? '').replace(/^\[\d+\.?\d*×\d+\.?\d*×\d+\.?\d*mm\]\s*/, '').trim()
+            const insertMatch  = rawNotes.match(/\nEmbedded inserts: ([^\n]+)/)
+            const surfaceMatch = rawNotes.match(/\nSurface text: "([^"]+)"/)
+            const insertText  = insertMatch?.[1]?.trim() ?? null
+            const surfaceText = surfaceMatch?.[1]?.trim() ?? null
+            const cleanNotes  = rawNotes
+              .replace(/\nEmbedded inserts: [^\n]+/, '')
+              .replace(/\nSurface text: "[^"]*"/, '')
+              .trim()
+
+            const hasSupports = request.supports || request.selected_addons?.includes('supports')
+            // Tags shown inline: ironing, fuzzy_skin, color_change (AMS). pause_insert and text_on_surface get callout sections.
+            const inlineTags = (request.selected_addons ?? []).filter(
+              (a) => !['supports', 'pause_insert', 'text_on_surface'].includes(a),
+            )
+            const ADDON_LABELS: Record<string, string> = {
+              ironing: 'Ironing',
+              color_change: 'Multi-color / AMS',
+              fuzzy_skin: 'Fuzzy skin',
+            }
+
+            return (
+              <>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+                  <div>
+                    <span className="text-slate-400">Print type</span>
+                    <span className="ml-2 font-medium text-slate-900">{PRINT_TYPE_LABELS[request.print_type]}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Material</span>
+                    <span className="font-medium text-slate-900">{MATERIAL_LABELS[request.material]}</span>
+                    {request.color && request.color !== 'Any' && (
+                      <>
+                        <span className="h-3.5 w-3.5 rounded-full border border-slate-200 shadow-sm" style={{ background: request.color_hex || '#888' }} />
+                        <span className="text-slate-500">{request.color}</span>
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Size</span>
+                    {(() => {
+                      const m = request.notes?.match(/^\[(\d+\.?\d*)×(\d+\.?\d*)×(\d+\.?\d*)mm\]/)
+                      return m
+                        ? <span className="ml-2 font-medium text-slate-900">{m[1]} × {m[2]} × {m[3]} mm</span>
+                        : <span className="ml-2 font-medium text-slate-900">{SIZE_LABELS[request.size]}</span>
+                    })()}
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Quality</span>
+                    <span className="ml-2 font-medium text-slate-900">{QUALITY_LABELS[request.quality]}</span>
+                  </div>
+                  {(hasSupports || inlineTags.length > 0) && (
+                    <div className="col-span-2 flex flex-wrap gap-1.5">
+                      {hasSupports && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Supports</span>
+                      )}
+                      {inlineTags.map((addon) => (
+                        <span key={addon} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                          {ADDON_LABELS[addon] ?? addon}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Embedded inserts callout */}
+                {request.selected_addons?.includes('pause_insert') && (
+                  <div className="rounded-xl border border-yellow-100 bg-yellow-50 px-4 py-3">
+                    <p className="text-xs font-semibold text-yellow-700 mb-1">⏸ Embedded inserts requested</p>
+                    {insertText
+                      ? <p className="text-sm text-yellow-900">{insertText}</p>
+                      : <p className="text-xs text-yellow-600 italic">Customer did not specify details — ask before slicing.</p>}
+                  </div>
+                )}
+
+                {/* Surface text callout */}
+                {request.selected_addons?.includes('text_on_surface') && (
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+                    <p className="text-xs font-semibold text-indigo-700 mb-1">✏️ Text on surface requested</p>
+                    {surfaceText
+                      ? <p className="text-sm font-medium text-indigo-900">"{surfaceText}"</p>
+                      : <p className="text-xs text-indigo-600 italic">Customer did not enter text — ask before slicing.</p>}
+                  </div>
+                )}
+
+                {/* Notes — special lines already extracted above */}
+                {cleanNotes ? (
+                  <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 whitespace-pre-line">
+                    <MessageSquare className="mb-0.5 mr-1 inline h-3.5 w-3.5 text-slate-400" />
+                    {cleanNotes}
+                  </div>
+                ) : null}
+              </>
+            )
+          })()}
 
           {/* Customer's per-part color preferences */}
           {(request.color_preferences?.length ?? 0) > 0 && (
@@ -417,13 +537,6 @@ export default function RequestCard({ request, printer }: { request: PrintReques
             </div>
           )}
 
-          {/* Notes */}
-          {request.notes && (
-            <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              <MessageSquare className="mb-0.5 mr-1 inline h-3.5 w-3.5 text-slate-400" />
-              {request.notes}
-            </div>
-          )}
 
           {/* STL files */}
           {((request.stl_urls?.length ?? 0) > 0 || request.stl_url || request.file_url) && (
@@ -603,6 +716,72 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                   </div>
                 )}
               </div>
+
+              {/* ── Feature confirmation checklist ── */}
+              {(() => {
+                const addonsToConfirm: { key: string; label: string; detail?: string }[] = []
+                const rawNotes = (request.notes ?? '').replace(/^\[\d+\.?\d*×\d+\.?\d*×\d+\.?\d*mm\]\s*/, '').trim()
+                const insertText  = rawNotes.match(/\nEmbedded inserts: ([^\n]+)/)?.[1]?.trim()
+                const surfaceText = rawNotes.match(/\nSurface text: "([^"]+)"/)?.[1]?.trim()
+
+                if (request.supports || request.selected_addons?.includes('supports'))
+                  addonsToConfirm.push({ key: 'supports', label: 'Support structures' })
+                for (const a of (request.selected_addons ?? [])) {
+                  if (a === 'supports') continue
+                  const LABELS: Record<string, string> = {
+                    ironing: 'Ironing (smooth top)',
+                    color_change: 'Multi-color / AMS',
+                    fuzzy_skin: 'Fuzzy skin texture',
+                    pause_insert: 'Embedded inserts',
+                    text_on_surface: 'Text on surface',
+                  }
+                  addonsToConfirm.push({
+                    key: a,
+                    label: LABELS[a] ?? a,
+                    detail: a === 'pause_insert' ? insertText : a === 'text_on_surface' ? (surfaceText ? `"${surfaceText}"` : undefined) : undefined,
+                  })
+                }
+
+                if (addonsToConfirm.length === 0) return null
+                return (
+                  <div className="rounded-xl border border-orange-200 bg-white p-3">
+                    <p className="text-xs font-semibold text-slate-700 mb-0.5">Confirm applied features</p>
+                    <p className="text-[11px] text-slate-400 mb-3">
+                      These were requested by the customer. Tick what you have set up in the sliced file — uncheck anything you couldn&apos;t apply.
+                    </p>
+                    <div className="space-y-2">
+                      {addonsToConfirm.map(({ key, label, detail }) => {
+                        const checked = confirmedAddons.has(key)
+                        return (
+                          <label key={key} className="flex items-start gap-2.5 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setConfirmedAddons((prev) => {
+                                  const next = new Set(prev)
+                                  if (next.has(key)) next.delete(key)
+                                  else next.add(key)
+                                  return next
+                                })
+                              }}
+                              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-orange-500"
+                            />
+                            <div>
+                              <span className={`text-xs font-medium ${checked ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
+                                {label}
+                              </span>
+                              {detail && (
+                                <p className={`text-[11px] mt-0.5 ${checked ? 'text-slate-500' : 'text-slate-300'}`}>{detail}</p>
+                              )}
+                            </div>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* ── Price breakdown (always visible) ── */}
               {(() => {

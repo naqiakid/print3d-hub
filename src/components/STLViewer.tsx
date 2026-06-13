@@ -10,22 +10,37 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 type Props = {
   urls?: string[]
   fileNames?: string[]      // original file names — used to pick the right loader per URL
-  colors?: string[]
+  colors?: string[]         // one colour per URL (whole-object fallback)
+  partColors?: string[][]   // per-URL array of per-part colours (for multi-object 3MF)
   file?: File
   highlightIndex?: number   // which slot to spotlight (-1 or undefined = all normal)
   className?: string
 }
 
-export default function STLViewer({ urls: urlsProp, fileNames: fileNamesProp, colors: colorsProp, file, highlightIndex, className }: Props) {
+export default function STLViewer({
+  urls: urlsProp,
+  fileNames: fileNamesProp,
+  colors: colorsProp,
+  partColors: partColorsProp,
+  file,
+  highlightIndex,
+  className,
+}: Props) {
   const mountRef    = useRef<HTMLDivElement>(null)
-  const objectsRef  = useRef<THREE.Object3D[]>([])  // one entry per URL slot
+  const objectsRef  = useRef<THREE.Object3D[]>([])
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const sceneRef    = useRef<THREE.Scene | null>(null)
   const cameraRef   = useRef<THREE.PerspectiveCamera | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
 
-  // ── Scene setup ──────────────────────────────────────────────────
+  // Refs so the scene-setup effect can read current colours without them being deps
+  const colorsRef     = useRef<string[]>([])
+  const partColorsRef = useRef<string[][]>([])
+  colorsRef.current     = colorsProp     ?? []
+  partColorsRef.current = partColorsProp ?? []
+
+  // ── Scene setup (re-runs only when URLs / file names change) ────
   useEffect(() => {
     const mount = mountRef.current
     objectsRef.current = []
@@ -33,7 +48,6 @@ export default function STLViewer({ urls: urlsProp, fileNames: fileNamesProp, co
     let blobUrl: string | null = null
     const urls      = file ? ((blobUrl = URL.createObjectURL(file)), [blobUrl]) : (urlsProp ?? [])
     const fileNames = fileNamesProp ?? []
-    const colors    = colorsProp ?? []
 
     if (!mount || urls.length === 0) return
 
@@ -44,7 +58,18 @@ export default function STLViewer({ urls: urlsProp, fileNames: fileNamesProp, co
     const h = mount.clientHeight || 320
 
     const scene  = new THREE.Scene()
-    scene.background = new THREE.Color(0xf8f9fa)
+    // Gradient background: light blue-gray at top → medium slate at bottom.
+    // Gives contrast against both dark and light print colors.
+    const bgCanvas = document.createElement('canvas')
+    bgCanvas.width  = 2
+    bgCanvas.height = 512
+    const bgCtx = bgCanvas.getContext('2d')!
+    const grad  = bgCtx.createLinearGradient(0, 0, 0, 512)
+    grad.addColorStop(0, '#dde5ef')
+    grad.addColorStop(1, '#7a92a8')
+    bgCtx.fillStyle = grad
+    bgCtx.fillRect(0, 0, 2, 512)
+    scene.background = new THREE.CanvasTexture(bgCanvas)
     sceneRef.current = scene
 
     const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 10000)
@@ -56,11 +81,13 @@ export default function STLViewer({ urls: urlsProp, fileNames: fileNamesProp, co
     mount.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.5))
-    const dir1 = new THREE.DirectionalLight(0xffffff, 1.2)
-    dir1.position.set(1, 2, 3)
+    // Hemisphere light provides sky (warm white) + ground (cool blue) fill so
+    // dark-colored objects still show 3D form instead of going fully black.
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x8faabf, 0.8))
+    const dir1 = new THREE.DirectionalLight(0xffffff, 1.0)
+    dir1.position.set(2, 3, 4)
     scene.add(dir1)
-    const dir2 = new THREE.DirectionalLight(0xffffff, 0.6)
+    const dir2 = new THREE.DirectionalLight(0xffffff, 0.4)
     dir2.position.set(-2, -1, -1)
     scene.add(dir2)
 
@@ -72,6 +99,16 @@ export default function STLViewer({ urls: urlsProp, fileNames: fileNamesProp, co
     const group   = new THREE.Group()
     let loaded    = 0
     let hasError  = false
+
+    function makeMat(color: string) {
+      return new THREE.MeshPhongMaterial({
+        color:       new THREE.Color(color || '#cccccc'),
+        specular:    new THREE.Color(0x222222),
+        shininess:   30,
+        transparent: false,
+        opacity:     1,
+      })
+    }
 
     function onAllLoaded() {
       if (loaded !== urls.length || hasError) return
@@ -120,18 +157,10 @@ export default function STLViewer({ urls: urlsProp, fileNames: fileNamesProp, co
       const name = fileNames[i] ?? url
       const ext  = name.split('.').pop()?.toLowerCase() ?? 'stl'
 
-      const mat = new THREE.MeshPhongMaterial({
-        color:       new THREE.Color(colors[i] || '#cccccc'),
-        specular:    new THREE.Color(0x222222),
-        shininess:   30,
-        transparent: false,
-        opacity:     1,
-      })
-
       // ── STL: loader returns BufferGeometry ────────────────────────
       function onGeometry(geometry: THREE.BufferGeometry) {
         geometry.computeVertexNormals()
-        const mesh = new THREE.Mesh(geometry, mat)
+        const mesh = new THREE.Mesh(geometry, makeMat(colorsRef.current[i] || '#cccccc'))
         mesh.userData.index = i
 
         geometry.computeBoundingBox()
@@ -147,11 +176,19 @@ export default function STLViewer({ urls: urlsProp, fileNames: fileNamesProp, co
 
       // ── 3MF / OBJ: loader returns Group ──────────────────────────
       function onGroupLoaded(obj: THREE.Group) {
-        // Apply our colour material to every mesh in the group
-        obj.traverse((child) => {
-          if (child instanceof THREE.Mesh) child.material = mat
-        })
-        // Centre the group at origin
+        const parts = partColorsRef.current[i]
+        if (parts && parts.length > 0) {
+          // Apply a distinct colour to each top-level child (one per 3MF object)
+          obj.children.forEach((child, j) => {
+            const mat = makeMat(parts[j] || colorsRef.current[i] || '#cccccc')
+            child.traverse((c) => { if (c instanceof THREE.Mesh) c.material = mat })
+          })
+        } else {
+          // Single colour for the whole model
+          const mat = makeMat(colorsRef.current[i] || '#cccccc')
+          obj.traverse((child) => { if (child instanceof THREE.Mesh) child.material = mat })
+        }
+
         const box    = new THREE.Box3().setFromObject(obj)
         const centre = box.getCenter(new THREE.Vector3())
         obj.position.sub(centre)
@@ -222,7 +259,48 @@ export default function STLViewer({ urls: urlsProp, fileNames: fileNamesProp, co
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [file, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(','), (colorsProp ?? []).join(',')])
+  }, [file, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(',')])
+
+  // ── Live colour updates (no scene rebuild) ───────────────────────
+  useEffect(() => {
+    const objects = objectsRef.current.filter(Boolean)
+    if (objects.length === 0) return
+
+    objects.forEach((obj, i) => {
+      const parts    = (partColorsProp ?? [])[i]
+      const objColor = (colorsProp ?? [])[i] || '#cccccc'
+
+      if (parts && parts.length > 0 && obj instanceof THREE.Group) {
+        obj.children.forEach((child, j) => {
+          const color = parts[j] || objColor
+          child.traverse((c) => {
+            if (c instanceof THREE.Mesh) {
+              const mat = c.material as THREE.MeshPhongMaterial
+              mat.color.set(new THREE.Color(color))
+              mat.needsUpdate = true
+            }
+          })
+        })
+      } else {
+        obj.traverse((c) => {
+          if (c instanceof THREE.Mesh) {
+            const mat = c.material as THREE.MeshPhongMaterial
+            mat.color.set(new THREE.Color(objColor))
+            mat.needsUpdate = true
+          }
+        })
+      }
+    })
+
+    const r = rendererRef.current
+    const s = sceneRef.current
+    const c = cameraRef.current
+    if (r && s && c) r.render(s, c)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    (colorsProp ?? []).join(','),
+    (partColorsProp ?? []).map((a) => (a ?? []).join(',')).join('|'),
+  ])
 
   // ── Highlight effect ─────────────────────────────────────────────
   useEffect(() => {

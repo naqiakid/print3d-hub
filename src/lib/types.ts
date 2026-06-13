@@ -31,6 +31,7 @@ export type Printer = {
   name: string
   description: string
   printer_model: string
+  printer_model_id: string | null
   print_types: PrintType[]
   materials: FilamentMaterial[]
   max_size: PrintSize
@@ -64,6 +65,8 @@ export type PlateFilament = {
 
 export type ColorPreference = {
   part_number: number
+  part_index?: number
+  part_name?: string
   file_name: string
   color: string
   color_hex: string
@@ -98,6 +101,7 @@ export type PrintRequest = {
   notes: string
   profile_id: string | null
   selected_addons: string[]
+  confirmed_addons: string[]
   fulfillment: 'pickup' | 'delivery'
   delivery_address: string | null
   status: RequestStatus
@@ -120,6 +124,7 @@ export type PrintProfile = {
   color_change_available: boolean
   pause_insert_available: boolean
   fuzzy_skin_available: boolean
+  text_on_surface_available: boolean
   is_default: boolean
   is_active: boolean
   created_at: string

@@ -131,6 +131,13 @@ CREATE POLICY "requests_owner_update"
     )
   );
 
+-- Customers can accept or decline a quoted request (no auth needed).
+-- UUID is unguessable — knowing the request ID is the security model.
+CREATE POLICY "requests_customer_accept_decline"
+  ON requests FOR UPDATE
+  USING (status = 'quoted')
+  WITH CHECK (status IN ('accepted', 'cancelled'));
+
 
 -- ── 4. REVIEWS ──────────────────────────────────────────────
 

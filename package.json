@@ -11,8 +11,11 @@
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
+    "@types/leaflet": "^1.9.21",
     "@types/three": "^0.184.1",
     "gcode-preview": "^2.18.0",
+    "jszip": "^3.10.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.14.0",
     "next": "16.2.6",
     "react": "19.2.4",

@@ -6,7 +6,7 @@ import {
   Link2, FileUp, PenLine, ExternalLink, Download,
 } from 'lucide-react'
 import type { Printer, PrintProfile, PrintQuality, Filament, FilamentMaterial } from '@/lib/types'
-import { MATERIAL_LABELS } from '@/lib/types'
+import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { submitRequest } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 
@@ -17,6 +17,13 @@ const inputClass =
 
 type ModelMode = 'link' | 'file' | 'describe' | null
 
+export type ThreeMfPart = {
+  name: string
+  color: string
+  colorHex: string
+  filamentId?: string
+}
+
 export type FileItem = {
   id: string
   file: File
@@ -26,6 +33,8 @@ export type FileItem = {
   color: string
   colorHex: string
   filamentId?: string
+  parts?: ThreeMfPart[]                          // set after parsing a multi-object 3MF
+  dimensions?: { x: number; y: number; z: number } // computed from model geometry
 }
 
 const ACCEPTED_FORMATS = '.stl,.3mf,.obj'
@@ -38,6 +47,129 @@ const MODEL_SITES = [
   { name: 'Cults3D', url: 'cults3d.com' },
   { name: 'MyMiniFactory', url: 'myminifactory.com' },
 ]
+
+// Parse a .3mf file and return the names of its mesh objects (returns [] if 0 or 1 object).
+// Handles both standard 3MF and Bambu Lab's split-object format (3D/Objects/*.model).
+async function parse3mfParts(file: File): Promise<string[]> {
+  try {
+    const { default: JSZip } = await import('jszip')
+    const zip = await JSZip.loadAsync(await file.arrayBuffer())
+
+    // ── Strategy 1: Bambu Lab model_settings.config ──────────────────────────
+    // Bambu Studio splits each object into a separate 3D/Objects/*.model file
+    // and stores human-readable names in Metadata/model_settings.config
+    const configEntry = zip.file('Metadata/model_settings.config')
+    if (configEntry) {
+      const xml = await configEntry.async('text')
+      const doc = new DOMParser().parseFromString(xml, 'text/xml')
+      const names = Array.from(doc.getElementsByTagName('object')).map((obj, i) => {
+        const nameMeta = Array.from(obj.getElementsByTagName('metadata'))
+          .find((m) => m.getAttribute('key') === 'name')
+        const raw = nameMeta?.getAttribute('value') ?? ''
+        // Strip file extension (.stl, .obj, etc.) and trim
+        return raw.replace(/\.[a-z0-9]+$/i, '').trim() || `Part ${i + 1}`
+      })
+      if (names.length >= 2) return names
+    }
+
+    // ── Strategy 2: Scan all .model files for mesh objects ───────────────────
+    // Standard 3MF packs all meshes in 3D/3dmodel.model; some slicers use
+    // per-object files in 3D/Objects/*.model (without a config file)
+    const modelPaths = Object.keys(zip.files).filter((f) => /\.model$/i.test(f))
+    const names: string[] = []
+    for (const modelPath of modelPaths) {
+      const entry = zip.file(modelPath)
+      if (!entry) continue
+      const xml  = await entry.async('text')
+      const doc  = new DOMParser().parseFromString(xml, 'text/xml')
+      const mesh = Array.from(doc.getElementsByTagName('object')).filter(
+        (o) =>
+          o.getElementsByTagName('mesh').length > 0 &&
+          o.getAttribute('type') !== 'support',
+      )
+      for (const obj of mesh) {
+        const n = obj.getAttribute('name')?.trim()
+        names.push(n || `Part ${names.length + 1}`)
+      }
+    }
+    if (names.length >= 2) return names
+
+    return []
+  } catch {
+    return []
+  }
+}
+
+// Compute bounding-box dimensions (mm) from uploaded model files without loading Three.js.
+// Binary STL: parse float32 vertices directly from ArrayBuffer.
+// 3MF: unzip and read <vertex> elements with DOMParser.
+async function computeModelDimensions(file: File): Promise<{ x: number; y: number; z: number } | null> {
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  try {
+    if (ext === 'stl') {
+      const buf = await file.arrayBuffer()
+      if (buf.byteLength < 84) return null
+      const view = new DataView(buf)
+      const triCount = view.getUint32(80, true)
+      if (triCount < 1 || triCount > 5_000_000) return null
+      if (buf.byteLength < 84 + triCount * 50) return null
+      let minX = Infinity, maxX = -Infinity
+      let minY = Infinity, maxY = -Infinity
+      let minZ = Infinity, maxZ = -Infinity
+      for (let i = 0; i < triCount; i++) {
+        const b = 84 + i * 50
+        for (let v = 0; v < 3; v++) {
+          const vb = b + 12 + v * 12
+          const x = view.getFloat32(vb,     true)
+          const y = view.getFloat32(vb + 4, true)
+          const z = view.getFloat32(vb + 8, true)
+          if (x < minX) minX = x; if (x > maxX) maxX = x
+          if (y < minY) minY = y; if (y > maxY) maxY = y
+          if (z < minZ) minZ = z; if (z > maxZ) maxZ = z
+        }
+      }
+      if (!isFinite(minX)) return null
+      return {
+        x: Math.round((maxX - minX) * 10) / 10,
+        y: Math.round((maxY - minY) * 10) / 10,
+        z: Math.round((maxZ - minZ) * 10) / 10,
+      }
+    } else if (ext === '3mf') {
+      const { default: JSZip } = await import('jszip')
+      const zip = await JSZip.loadAsync(await file.arrayBuffer())
+      const modelPaths = Object.keys(zip.files).filter((f) => /\.model$/i.test(f))
+      let minX = Infinity, maxX = -Infinity
+      let minY = Infinity, maxY = -Infinity
+      let minZ = Infinity, maxZ = -Infinity
+      let found = false
+      for (const path of modelPaths) {
+        const entry = zip.file(path)
+        if (!entry) continue
+        const xml = await entry.async('text')
+        const doc = new DOMParser().parseFromString(xml, 'text/xml')
+        const verts = doc.getElementsByTagName('vertex')
+        for (let i = 0; i < verts.length; i++) {
+          const x = parseFloat(verts[i].getAttribute('x') ?? '0')
+          const y = parseFloat(verts[i].getAttribute('y') ?? '0')
+          const z = parseFloat(verts[i].getAttribute('z') ?? '0')
+          if (x < minX) minX = x; if (x > maxX) maxX = x
+          if (y < minY) minY = y; if (y > maxY) maxY = y
+          if (z < minZ) minZ = z; if (z > maxZ) maxZ = z
+          found = true
+        }
+      }
+      if (!found || !isFinite(minX)) return null
+      return {
+        x: Math.round((maxX - minX) * 10) / 10,
+        y: Math.round((maxY - minY) * 10) / 10,
+        z: Math.round((maxZ - minZ) * 10) / 10,
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FileUploadSection — MUST be defined at module level so its identity is stable
@@ -54,10 +186,22 @@ type FileUploadSectionProps = {
   onHoverChange: (id: string | null) => void
   onRemove: (id: string) => void
   onUpdateColor: (id: string, color: string, hex: string, filamentId?: string) => void
+  onUpdatePartColor: (id: string, partIdx: number, color: string, hex: string, filamentId?: string) => void
   filaments: Filament[]
   addMoreRef: React.RefObject<HTMLInputElement | null>
   onDrop: (files: FileList | File[]) => void
   onAddMore: (files: FileList) => void
+}
+
+// A single colour-picker row — one per file (no parts) or one per part (3MF)
+type ColorRow = {
+  item: FileItem
+  partIdx: number        // -1 = whole file row, ≥0 = specific part
+  label: string          // part name or "Part N" / "Color"
+  color: string
+  colorHex: string
+  filamentId?: string
+  isFirstForItem: boolean
 }
 
 function FileUploadSection({
@@ -69,11 +213,19 @@ function FileUploadSection({
   onHoverChange,
   onRemove,
   onUpdateColor,
+  onUpdatePartColor,
   filaments,
   addMoreRef,
   onDrop,
   onAddMore,
 }: FileUploadSectionProps) {
+  const [tooltip, setTooltip] = useState<{ mat: FilamentMaterial; x: number; y: number } | null>(null)
+
+  const MAT_ORDER: FilamentMaterial[] = ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc']
+  const filamentGroups = MAT_ORDER
+    .map((mat) => ({ mat, items: filaments.filter((f) => f.material === mat) }))
+    .filter((g) => g.items.length > 0)
+
   if (fileItems.length === 0) {
     return (
       <label
@@ -87,7 +239,7 @@ function FileUploadSection({
         <div>
           <p className={`font-medium text-slate-700 ${compact ? 'text-xs' : 'text-sm'}`}>Drop your model files here</p>
           <p className="text-xs text-slate-400 mt-0.5">or click to browse · STL, 3MF, OBJ accepted</p>
-          {!compact && <p className="text-xs text-slate-400">Multi-part model? Upload all files together.</p>}
+          {!compact && <p className="text-xs text-slate-400">3MF files will be split into parts automatically.</p>}
         </div>
         <input
           type="file"
@@ -106,6 +258,31 @@ function FileUploadSection({
 
   const hasViewer = stlItems.length > 0 && previewUrls.length > 0
 
+  // Flatten file items into colour-picker rows. For 3MF with parts, one row per part.
+  const colorRows: ColorRow[] = []
+  for (let fileIdx = 0; fileIdx < fileItems.length; fileIdx++) {
+    const item = fileItems[fileIdx]
+    if (item.parts && item.parts.length > 0) {
+      item.parts.forEach((part, pi) => {
+        colorRows.push({
+          item, partIdx: pi,
+          label: part.name,
+          color: part.color, colorHex: part.colorHex, filamentId: part.filamentId,
+          isFirstForItem: pi === 0,
+        })
+      })
+    } else {
+      const totalFiles = fileItems.length
+      const totalRows  = fileItems.reduce((n, i) => n + (i.parts?.length ?? 1), 0)
+      colorRows.push({
+        item, partIdx: -1,
+        label: totalRows > 1 ? `Part ${fileIdx + 1}` : 'Color',
+        color: item.color, colorHex: item.colorHex, filamentId: item.filamentId,
+        isFirstForItem: true,
+      })
+    }
+  }
+
   return (
     <div className="space-y-0">
       {/* Viewer full-width */}
@@ -120,6 +297,7 @@ function FileUploadSection({
               urls={previewUrls}
               fileNames={stlItems.map((i) => i.file.name)}
               colors={stlItems.map((i) => i.colorHex || '#e0e0e0')}
+              partColors={stlItems.map((i) => i.parts?.map((p) => p.colorHex || '#e0e0e0') ?? [])}
               highlightIndex={highlightIndex}
               className="h-full"
             />
@@ -134,48 +312,92 @@ function FileUploadSection({
         </div>
       )}
 
-      {/* Part list — compact rows, scrollable */}
-      <div className={`rounded-xl border border-slate-200 bg-white overflow-hidden ${hasViewer && fileItems.length > 4 ? 'max-h-48 overflow-y-auto' : ''}`}>
-        {fileItems.map((item, idx) => {
-          const stlIdx    = stlItems.findIndex((si) => si.id === item.id)
+      {/* Part list — compact rows */}
+      <div className={`rounded-xl border border-slate-200 bg-white overflow-hidden ${hasViewer && colorRows.length > 4 ? 'max-h-48 overflow-y-auto' : ''}`}>
+        {colorRows.map((row, rowIdx) => {
+          const stlIdx    = stlItems.findIndex((si) => si.id === row.item.id)
           const isStl     = stlIdx >= 0
-          const isHovered = hoveredFileId === item.id
+          const isHovered = hoveredFileId === row.item.id
+          const is3mfPart = row.partIdx >= 0
+
+          function handleColorUpdate(color: string, hex: string, filamentId?: string) {
+            if (is3mfPart) {
+              onUpdatePartColor(row.item.id, row.partIdx, color, hex, filamentId)
+            } else {
+              onUpdateColor(row.item.id, color, hex, filamentId)
+            }
+          }
+
           return (
             <div
-              key={item.id}
+              key={`${row.item.id}-${row.partIdx}`}
               className={`flex items-center gap-2 px-3 py-2.5 border-b border-slate-100 last:border-b-0 transition-colors cursor-default ${
                 isHovered && isStl ? 'bg-orange-50' : 'hover:bg-slate-50'
-              }`}
-              onMouseEnter={() => isStl && onHoverChange(item.id)}
+              } ${is3mfPart && !row.isFirstForItem ? 'pl-5' : ''}`}
+              onMouseEnter={() => isStl && onHoverChange(row.item.id)}
               onMouseLeave={() => onHoverChange(null)}
             >
+              {/* 3MF file badge — only on the first part row */}
+              {is3mfPart && row.isFirstForItem && (
+                <span className="shrink-0 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-600">3MF</span>
+              )}
+              {is3mfPart && !row.isFirstForItem && (
+                <span className="shrink-0 w-6" /> /* indent spacer */
+              )}
+
               {/* Part label */}
-              <span className={`shrink-0 text-sm font-semibold w-12 ${isHovered && isStl ? 'text-orange-600' : 'text-slate-700'}`}>
-                {fileItems.length > 1 ? `Part ${idx + 1}` : 'Color'}
+              <span className={`shrink-0 ${
+                is3mfPart
+                  ? `text-xs font-medium leading-tight w-24 break-words ${isHovered ? 'text-orange-600' : 'text-slate-600'}`
+                  : `text-sm font-semibold w-12 ${isHovered && isStl ? 'text-orange-600' : 'text-slate-700'}`
+              }`}>
+                {row.label}
               </span>
 
               {filaments.length > 0 ? (
-                /* Filament swatches from owner's inventory */
+                /* Filament swatches grouped by material type */
                 <>
-                  <div className="flex flex-wrap gap-1 flex-1 min-w-0">
-                    {filaments.map((f) => (
-                      <button
-                        key={f.id}
-                        type="button"
-                        title={`${MATERIAL_LABELS[f.material as FilamentMaterial] ?? f.material} — ${f.color}${f.brand ? ` (${f.brand})` : ''}`}
-                        onClick={() => onUpdateColor(item.id, f.color, f.color_hex, f.id)}
-                        className={`h-6 w-6 rounded-full border-2 transition-all shrink-0 ${
-                          item.filamentId === f.id
-                            ? 'border-orange-500 scale-110 shadow-md'
-                            : 'border-slate-200 hover:border-slate-400 hover:scale-105'
-                        }`}
-                        style={{ backgroundColor: f.color_hex }}
-                      />
+                  <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                    {filamentGroups.map(({ mat, items }) => (
+                      <div key={mat} className="flex items-center gap-2">
+                        <div className="shrink-0 flex items-center gap-1">
+                          <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400 w-9">
+                            {MATERIAL_LABELS[mat]}
+                          </span>
+                          <button
+                            type="button"
+                            onMouseEnter={(e) => {
+                              const r = e.currentTarget.getBoundingClientRect()
+                              setTooltip({ mat, x: r.left + r.width / 2, y: r.top })
+                            }}
+                            onMouseLeave={() => setTooltip(null)}
+                            className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[8px] font-bold text-slate-500 hover:bg-blue-100 hover:text-blue-600 transition cursor-help"
+                          >
+                            ?
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {items.map((f) => (
+                            <button
+                              key={f.id}
+                              type="button"
+                              title={`${f.color}${f.brand ? ` (${f.brand})` : ''}`}
+                              onClick={() => handleColorUpdate(f.color, f.color_hex, f.id)}
+                              className={`h-6 w-6 rounded-full border-2 transition-all shrink-0 ${
+                                row.filamentId === f.id
+                                  ? 'border-orange-500 scale-110 shadow-md'
+                                  : 'border-slate-200 hover:border-slate-400 hover:scale-105'
+                              }`}
+                              style={{ backgroundColor: f.color_hex }}
+                            />
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
-                  <span className={`shrink-0 text-xs max-w-[110px] truncate ${item.filamentId ? 'text-slate-600' : 'text-slate-400 italic'}`}>
-                    {item.filamentId
-                      ? (() => { const f = filaments.find((x) => x.id === item.filamentId); return f ? `${MATERIAL_LABELS[f.material as FilamentMaterial] ?? f.material} · ${f.color}` : '' })()
+                  <span className={`shrink-0 text-xs max-w-[110px] truncate ${row.filamentId ? 'text-slate-600' : 'text-slate-400 italic'}`}>
+                    {row.filamentId
+                      ? (() => { const f = filaments.find((x) => x.id === row.filamentId); return f ? `${MATERIAL_LABELS[f.material as FilamentMaterial] ?? f.material} · ${f.color}` : '' })()
                       : 'pick a color'}
                   </span>
                 </>
@@ -184,40 +406,84 @@ function FileUploadSection({
                 <>
                   <input
                     type="color"
-                    value={item.colorHex}
-                    onChange={(e) => onUpdateColor(item.id, item.color, e.target.value)}
+                    value={row.colorHex}
+                    onChange={(e) => handleColorUpdate(row.color, e.target.value)}
                     className="h-7 w-7 cursor-pointer rounded-lg border border-slate-200 p-0.5 shrink-0"
                     title="Pick color"
                   />
                   <input
                     type="text"
                     placeholder="Color name (e.g. Red)"
-                    value={item.color}
-                    onChange={(e) => onUpdateColor(item.id, e.target.value, item.colorHex)}
+                    value={row.color}
+                    onChange={(e) => handleColorUpdate(e.target.value, row.colorHex)}
                     className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-orange-400 focus:bg-white focus:outline-none transition"
                   />
                 </>
               )}
 
-              {/* Status + remove */}
-              {item.uploading && <Loader2 className="h-3.5 w-3.5 animate-spin text-orange-400 shrink-0" />}
-              {item.url && !item.uploading && <span className="shrink-0 text-xs text-green-500">✓</span>}
-              {item.error && <span className="shrink-0 text-xs text-red-500">!</span>}
-              <button type="button" onClick={() => onRemove(item.id)}
-                className="shrink-0 rounded-full p-0.5 text-slate-300 hover:text-red-400 transition">
-                <X className="h-3.5 w-3.5" />
-              </button>
+              {/* Status indicators + remove — only on first row for this file */}
+              {row.isFirstForItem && (
+                <>
+                  {row.item.uploading && <Loader2 className="h-3.5 w-3.5 animate-spin text-orange-400 shrink-0" />}
+                  {row.item.url && !row.item.uploading && <span className="shrink-0 text-xs text-green-500">✓</span>}
+                  {row.item.error && <span className="shrink-0 text-xs text-red-500">!</span>}
+                  <button type="button" onClick={() => onRemove(row.item.id)}
+                    className="shrink-0 rounded-full p-0.5 text-slate-300 hover:text-red-400 transition">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              )}
             </div>
           )
         })}
       </div>
 
-      <button type="button" onClick={() => addMoreRef.current?.click()}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-500 hover:text-orange-600 transition mt-2">
-        <Plus className="h-3.5 w-3.5" /> Add more files
-      </button>
+      <div className="flex flex-wrap items-center gap-3 mt-2">
+        <button type="button" onClick={() => addMoreRef.current?.click()}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-500 hover:text-orange-600 transition">
+          <Plus className="h-3.5 w-3.5" /> Add more files
+        </button>
+        {fileItems.filter((i) => i.dimensions).map((item, idx) => {
+          const d = item.dimensions!
+          return (
+            <span key={item.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">
+              <Ruler className="h-3 w-3 text-slate-400 shrink-0" />
+              {fileItems.filter((i) => i.dimensions).length > 1 ? `File ${idx + 1}: ` : ''}
+              {d.x} × {d.y} × {d.z} mm
+            </span>
+          )
+        })}
+      </div>
       <input ref={addMoreRef} type="file" accept={ACCEPTED_FORMATS} multiple className="hidden"
         onChange={(e) => { if (e.target.files) { onAddMore(e.target.files); e.target.value = '' } }} />
+
+      {/* Hover tooltip — fixed so overflow:hidden on the part list doesn't clip it */}
+      {tooltip && (
+        <div
+          style={{
+            position: 'fixed',
+            left: tooltip.x,
+            top: tooltip.y,
+            transform: 'translate(-50%, calc(-100% - 8px))',
+            zIndex: 9999,
+          }}
+          className="pointer-events-none rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-snug text-white shadow-xl max-w-[200px] text-center"
+        >
+          <strong className="block mb-0.5">{MATERIAL_LABELS[tooltip.mat]}</strong>
+          {MATERIAL_DESCRIPTIONS[tooltip.mat]}
+          <div style={{
+            position: 'absolute',
+            left: '50%',
+            top: '100%',
+            transform: 'translateX(-50%)',
+            width: 0,
+            height: 0,
+            borderLeft: '5px solid transparent',
+            borderRight: '5px solid transparent',
+            borderTop: '5px solid #1e293b',
+          }} />
+        </div>
+      )}
     </div>
   )
 }
@@ -244,6 +510,10 @@ export default function RequestForm({
   const [deliveryGeoError, setDeliveryGeoError]     = useState('')
   const [pending, setPending]         = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [selectedCaps, setSelectedCaps] = useState<Set<string>>(new Set())
+  const [surfaceText, setSurfaceText]   = useState('')
+  const [insertNotes, setInsertNotes]   = useState('')
+  const [capTooltip, setCapTooltip]     = useState<{ key: string; x: number; y: number } | null>(null)
   const addInputRef    = useRef<HTMLInputElement>(null)
   const linkUploadRef  = useRef<HTMLInputElement>(null)
 
@@ -315,15 +585,14 @@ export default function RequestForm({
         if (!data?.[0]) { setDeliveryGeoError('Address not found — try adding postcode or city'); setDeliveryGeoLoading(false); return }
         const cLat = parseFloat(data[0].lat)
         const cLng = parseFloat(data[0].lon)
-        // Haversine straight-line distance
         const R    = 6371
         const dLat = (cLat - printer.lat) * Math.PI / 180
         const dLng = (cLng - printer.lng) * Math.PI / 180
         const a    = Math.sin(dLat / 2) ** 2 + Math.cos(printer.lat * Math.PI / 180) * Math.cos(cLat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
         const straight = R * 2 * Math.asin(Math.sqrt(a))
-        const road  = straight * 1.3   // road correction factor
+        const road  = straight * 1.3
         const rate  = printer.delivery_rate_per_km ?? 1.00
-        const fee   = Math.ceil(road * rate * 10) / 10  // round up to nearest 0.10
+        const fee   = Math.ceil(road * rate * 10) / 10
         setDeliveryEstimate({ km: Math.round(road * 10) / 10, fee })
         setDeliveryGeoLoading(false)
       } catch {
@@ -335,7 +604,7 @@ export default function RequestForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deliveryAddress, fulfillment])
 
-  // Rebuild blob URLs whenever file list changes (all previewable formats)
+  // Rebuild blob URLs whenever file list changes
   useEffect(() => {
     const items = fileItems.filter((i) =>
       ['.stl', '.3mf', '.obj'].some((ext) => i.file.name.toLowerCase().endsWith(ext))
@@ -364,12 +633,42 @@ export default function RequestForm({
       .map((f) => ({ id: crypto.randomUUID(), file: f, url: null, uploading: true, error: '', color: '', colorHex: '#e0e0e0' }))
     if (!newItems.length) return
     setFileItems((prev) => [...prev, ...newItems])
-    newItems.forEach((item) => uploadFile(item))
+    newItems.forEach((item) => {
+      uploadFile(item)
+      // For 3MF files, parse part names in parallel with upload
+      if (item.file.name.toLowerCase().endsWith('.3mf')) {
+        parse3mfParts(item.file).then((partNames) => {
+          if (partNames.length >= 2) {
+            setFileItems((prev) => prev.map((i) =>
+              i.id === item.id
+                ? { ...i, parts: partNames.map((name) => ({ name, color: '', colorHex: '#e0e0e0' })) }
+                : i,
+            ))
+          }
+        })
+      }
+      // Compute bounding-box dimensions for STL and 3MF
+      if (/\.(stl|3mf)$/i.test(item.file.name)) {
+        computeModelDimensions(item.file).then((dims) => {
+          if (dims) {
+            setFileItems((prev) => prev.map((i) => i.id === item.id ? { ...i, dimensions: dims } : i))
+          }
+        })
+      }
+    })
   }, [uploadFile])
 
-  const removeFile     = useCallback((id: string) => setFileItems((prev) => prev.filter((i) => i.id !== id)), [])
+  const removeFile      = useCallback((id: string) => setFileItems((prev) => prev.filter((i) => i.id !== id)), [])
+
   const updateFileColor = useCallback((id: string, color: string, hex: string, filamentId?: string) =>
     setFileItems((prev) => prev.map((i) => i.id === id ? { ...i, color, colorHex: hex, filamentId } : i)), [])
+
+  const updatePartColor = useCallback((id: string, partIdx: number, color: string, hex: string, filamentId?: string) =>
+    setFileItems((prev) => prev.map((i) => {
+      if (i.id !== id || !i.parts) return i
+      const parts = i.parts.map((p, idx) => idx === partIdx ? { ...p, color, colorHex: hex, filamentId } : p)
+      return { ...i, parts }
+    })), [])
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -380,7 +679,6 @@ export default function RequestForm({
     const form  = e.currentTarget
     const notes = (form.elements.namedItem('notes') as HTMLInputElement)?.value ?? ''
 
-    // Compute deadline date from type
     const todayStr = new Date().toISOString().split('T')[0]
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
     const farFuture = new Date(); farFuture.setDate(farFuture.getDate() + 180)
@@ -394,18 +692,43 @@ export default function RequestForm({
       deadlineType === 'anytime' ? 'Anytime — no rush. ' : ''
     const notesWithQty = urgencyPrefix + (quantity > 1 ? `Quantity: ${quantity} copies.${notes ? ` ${notes}` : ''}` : notes)
 
-    const stlUrls    = fileItems.map((i) => i.url).filter(Boolean) as string[]
-    const colorPrefs = fileItems.filter((i) => i.url).map((item, idx) => ({
-      part_number: idx + 1,
-      file_name:   item.file.name,
-      color:       item.color || 'Any',
-      color_hex:   item.colorHex || '#e0e0e0',
-    }))
+    // Derive size tier + store actual dimensions from computed bounding boxes
+    const primaryDims = fileItems.find((i) => i.dimensions)?.dimensions ?? null
+    const autoSize: 'small' | 'medium' | 'large' = primaryDims
+      ? Math.max(primaryDims.x, primaryDims.y, primaryDims.z) <= 100 ? 'small'
+      : Math.max(primaryDims.x, primaryDims.y, primaryDims.z) <= 250 ? 'medium'
+      : 'large'
+      : 'medium'
+    const dimsPrefix = primaryDims ? `[${primaryDims.x}×${primaryDims.y}×${primaryDims.z}mm] ` : ''
 
-    const hasColorPref   = colorPrefs.some((p) => p.color !== 'Any')
-    const primaryColor   = colorPrefs.length > 1 ? 'Multi-color' : (colorPrefs[0]?.color || 'Any')
-    const primaryHex     = colorPrefs[0]?.color_hex || '#888888'
-    const isMultiColor   = colorPrefs.length > 1 && hasColorPref
+    const stlUrls = fileItems.map((i) => i.url).filter(Boolean) as string[]
+
+    // Build colour preferences — one entry per part for 3MF files, one per file otherwise
+    const colorPrefs = fileItems.filter((i) => i.url).flatMap((item, fileIdx) => {
+      if (item.parts && item.parts.length > 0) {
+        return item.parts.map((p, pi) => ({
+          part_number: fileIdx + 1,
+          part_index:  pi + 1,
+          part_name:   p.name,
+          file_name:   item.file.name,
+          color:       p.color || 'Any',
+          color_hex:   p.colorHex || '#e0e0e0',
+          filament_id: p.filamentId,
+        }))
+      }
+      return [{
+        part_number: fileIdx + 1,
+        file_name:   item.file.name,
+        color:       item.color || 'Any',
+        color_hex:   item.colorHex || '#e0e0e0',
+        filament_id: item.filamentId,
+      }]
+    })
+
+    const hasColorPref = colorPrefs.some((p) => p.color !== 'Any')
+    const primaryColor = colorPrefs.length > 1 ? 'Multi-color' : (colorPrefs[0]?.color || 'Any')
+    const primaryHex   = colorPrefs[0]?.color_hex || '#888888'
+    const isMultiColor = colorPrefs.length > 1 && hasColorPref
 
     const result = await submitRequest({
       printer_id:     printer.id,
@@ -417,11 +740,13 @@ export default function RequestForm({
       material:       'pla',
       color:          hasColorPref ? primaryColor : 'Any',
       color_hex:      hasColorPref ? primaryHex : '#888888',
-      supports:       false,
-      size:           'medium',
+      supports:       selectedCaps.has('supports'),
+      size:           autoSize,
       quality:        quality as PrintQuality,
       deadline:       deadlineValue,
-      notes:          notesWithQty,
+      notes:          dimsPrefix + notesWithQty
+                      + (selectedCaps.has('pause_insert') && insertNotes.trim() ? `\nEmbedded inserts: ${insertNotes.trim()}` : '')
+                      + (selectedCaps.has('text_on_surface') && surfaceText.trim() ? `\nSurface text: "${surfaceText.trim()}"` : ''),
       model_url:      modelMode === 'link' && modelUrl.trim() ? modelUrl.trim() : null,
       model_title:    ogPreview?.title ?? null,
       model_image:    ogPreview?.image ?? null,
@@ -430,7 +755,7 @@ export default function RequestForm({
       weight_g:       null,
       print_hours:    null,
       profile_id:     defaultProfile?.id ?? null,
-      selected_addons: isMultiColor ? ['color_change'] : [],
+      selected_addons: [...new Set(Array.from(selectedCaps))],
       color_preferences: colorPrefs.length ? colorPrefs : undefined,
       fulfillment,
       delivery_address: fulfillment === 'delivery' ? deliveryAddress.trim() || null : null,
@@ -483,8 +808,26 @@ export default function RequestForm({
     modelMode === 'file'     ? (fileItems.length === 0 || allUploaded) :
     true
   const formVisible = modelMode !== null
-  const deadlineReady = deadlineType !== 'date'  // ASAP/Anytime are always ready; date needs input (enforced by required attr)
   const canSubmit   = !!(formVisible && modelReady && quality && !pending)
+
+  const availableCaps = {
+    supports:        profiles.some((p) => p.supports_available),
+    ironing:         profiles.some((p) => p.ironing_available),
+    color_change:    profiles.some((p) => p.color_change_available),
+    pause_insert:    profiles.some((p) => p.pause_insert_available),
+    fuzzy_skin:      profiles.some((p) => p.fuzzy_skin_available),
+    text_on_surface: profiles.some((p) => p.text_on_surface_available),
+  }
+  const hasAnyCap = Object.values(availableCaps).some(Boolean)
+
+  const CAP_INFO: Record<string, { label: string; desc: string }> = {
+    supports:        { label: 'Support structures',   desc: 'Temporary scaffold that holds up overhanging parts — removed after printing. Needed if your model has floating sections or steep overhangs.' },
+    ironing:         { label: 'Ironing (smooth top)', desc: 'The nozzle makes a slow second pass over flat top surfaces for an ultra-smooth, glossy finish. Adds ~15% to print time.' },
+    color_change:    { label: 'Multi-color / AMS',    desc: 'Filament colors switch automatically during printing. Ideal for logos, text, and multi-color designs on a single print.' },
+    pause_insert:    { label: 'Embedded inserts',     desc: 'The printer pauses so you can drop in brass heat-set nuts, magnets, or other metal parts before it continues.' },
+    fuzzy_skin:      { label: 'Fuzzy skin texture',   desc: 'Adds a rough, matte, grip-friendly texture to the outer walls. Great for aesthetic effect or ergonomic grip.' },
+    text_on_surface: { label: 'Text on surface',      desc: 'The slicer embosses or engraves custom text directly onto the model surface — raised or recessed lettering without editing the original file.' },
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
@@ -563,7 +906,6 @@ export default function RequestForm({
               </div>
             )}
 
-            {/* Upload panel — shown once URL is entered */}
             {modelUrl.trim() && (
               <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
                 <div className="flex items-start gap-3">
@@ -573,8 +915,8 @@ export default function RequestForm({
                   <div>
                     <p className="text-sm font-semibold text-blue-900">Upload the model files for a 3D preview</p>
                     <p className="mt-0.5 text-xs text-blue-600">
-                      Download the STL files from the link above, then drop them here.
-                      You&apos;ll be able to see each part in 3D and pick a color for each one.
+                      Download the STL or 3MF files from the link above, then drop them here.
+                      3MF files will be split into parts automatically so you can pick a color for each one.
                     </p>
                   </div>
                 </div>
@@ -587,6 +929,7 @@ export default function RequestForm({
                   onHoverChange={setHoveredFileId}
                   onRemove={removeFile}
                   onUpdateColor={updateFileColor}
+                  onUpdatePartColor={updatePartColor}
                   filaments={filaments}
                   addMoreRef={addInputRef}
                   onDrop={addFiles}
@@ -609,6 +952,7 @@ export default function RequestForm({
             onHoverChange={setHoveredFileId}
             onRemove={removeFile}
             onUpdateColor={updateFileColor}
+            onUpdatePartColor={updatePartColor}
             filaments={filaments}
             addMoreRef={addInputRef}
             onDrop={addFiles}
@@ -644,6 +988,129 @@ export default function RequestForm({
               })}
             </div>
           </div>
+
+          {/* ── Print options (capabilities) ── */}
+          {hasAnyCap && (
+            <div>
+              <h3 className="mb-1 text-sm font-semibold text-slate-700">Print options</h3>
+              <p className="mb-3 text-xs text-slate-400">Optional — select any special features you need for this print</p>
+              <div className="space-y-2">
+                {(Object.entries(availableCaps) as [string, boolean][])
+                  .filter(([, available]) => available)
+                  .map(([key]) => {
+                    const info = CAP_INFO[key]
+                    const isOn = selectedCaps.has(key)
+                    const isConflicted =
+                      (key === 'ironing' && selectedCaps.has('fuzzy_skin')) ||
+                      (key === 'fuzzy_skin' && selectedCaps.has('ironing'))
+                    return (
+                      <div key={key}>
+                        <div className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition ${
+                          isConflicted ? 'border-slate-100 bg-slate-50 opacity-50' :
+                          isOn ? 'border-orange-300 bg-orange-50' : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}>
+                          {/* Toggle switch */}
+                          <button
+                            type="button"
+                            disabled={isConflicted}
+                            onClick={() => {
+                              setSelectedCaps((prev) => {
+                                const next = new Set(prev)
+                                if (next.has(key)) {
+                                  next.delete(key)
+                                } else {
+                                  next.add(key)
+                                  if (key === 'ironing') next.delete('fuzzy_skin')
+                                  if (key === 'fuzzy_skin') next.delete('ironing')
+                                }
+                                return next
+                              })
+                              if (key === 'text_on_surface') setSurfaceText('')
+                              if (key === 'pause_insert') setInsertNotes('')
+                            }}
+                            className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                              isConflicted ? 'cursor-not-allowed bg-slate-200' :
+                              isOn ? 'cursor-pointer bg-orange-500' : 'cursor-pointer bg-slate-200'
+                            }`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ${isOn ? 'translate-x-4' : 'translate-x-0'}`} />
+                          </button>
+                          <span className={`flex-1 text-sm ${isOn ? 'font-medium text-orange-800' : 'text-slate-700'}`}>{info.label}</span>
+                          {isConflicted && (
+                            <span className="text-[10px] text-slate-400 italic shrink-0">
+                              conflicts with {key === 'ironing' ? 'Fuzzy skin' : 'Ironing'}
+                            </span>
+                          )}
+                          {/* ? tooltip */}
+                          <button
+                            type="button"
+                            onMouseEnter={(e) => {
+                              const r = e.currentTarget.getBoundingClientRect()
+                              setCapTooltip({ key, x: r.left + r.width / 2, y: r.top })
+                            }}
+                            onMouseLeave={() => setCapTooltip(null)}
+                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-blue-100 hover:text-blue-600 transition cursor-help"
+                          >
+                            ?
+                          </button>
+                        </div>
+                        {/* Embedded inserts input */}
+                        {key === 'pause_insert' && isOn && (
+                          <div className="mt-1.5 ml-12">
+                            <input
+                              type="text"
+                              value={insertNotes}
+                              onChange={(e) => setInsertNotes(e.target.value)}
+                              placeholder="e.g. 4× M3 heat-set nuts, holes on the bottom face"
+                              maxLength={120}
+                              className={inputClass}
+                            />
+                            <p className="mt-1 text-xs text-slate-400">Describe the insert size, quantity, and location — the owner will pause the print at the right layer</p>
+                          </div>
+                        )}
+                        {/* Surface text input */}
+                        {key === 'text_on_surface' && isOn && (
+                          <div className="mt-1.5 ml-12">
+                            <input
+                              type="text"
+                              value={surfaceText}
+                              onChange={(e) => setSurfaceText(e.target.value)}
+                              placeholder="e.g. My Name, Hello World, 2024"
+                              maxLength={50}
+                              className={inputClass}
+                            />
+                            <p className="mt-1 text-xs text-slate-400">Max 50 characters · the owner will place the text on the model surface</p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+              </div>
+
+              {/* Fixed tooltip */}
+              {capTooltip && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    left: capTooltip.x,
+                    top: capTooltip.y,
+                    transform: 'translate(-50%, calc(-100% - 8px))',
+                    zIndex: 9999,
+                  }}
+                  className="pointer-events-none rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-snug text-white shadow-xl max-w-[220px] text-center"
+                >
+                  <strong className="block mb-0.5">{CAP_INFO[capTooltip.key].label}</strong>
+                  {CAP_INFO[capTooltip.key].desc}
+                  <div style={{
+                    position: 'absolute', left: '50%', top: '100%',
+                    transform: 'translateX(-50%)', width: 0, height: 0,
+                    borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
+                    borderTop: '5px solid #1e293b',
+                  }} />
+                </div>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">How many copies? <span className="text-red-500">*</span></label>

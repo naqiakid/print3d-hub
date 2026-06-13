@@ -56,6 +56,7 @@ export async function createProfile(data: {
   color_change_available: boolean
   pause_insert_available: boolean
   fuzzy_skin_available: boolean
+  text_on_surface_available: boolean
   is_default: boolean
 }): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
@@ -88,6 +89,7 @@ export async function updateProfile(
     color_change_available: boolean
     pause_insert_available: boolean
     fuzzy_skin_available: boolean
+    text_on_surface_available: boolean
     is_default: boolean
   }
 ): Promise<{ error: string } | undefined> {
@@ -409,6 +411,8 @@ export async function updateListing(data: {
   electricity_rate: number
   markup_percent: number
   pickup_address: string
+  lat?: number | null
+  lng?: number | null
   delivery_available: boolean
   delivery_rate_per_km: number | null
 }): Promise<{ error: string } | undefined> {
@@ -457,6 +461,7 @@ export async function sendQuote(
   printHours?: number | null,
   material?: string,
   plateFilaments?: { material: string; color: string; color_hex: string }[],
+  confirmedAddons?: string[],
 ): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
   const {
@@ -476,6 +481,7 @@ export async function sendQuote(
       ...(printHours != null       && { print_hours: printHours }),
       ...(material                 && { material }),
       ...(plateFilaments?.length   && { plate_filaments: plateFilaments }),
+      ...(confirmedAddons          && { confirmed_addons: confirmedAddons }),
     })
     .eq('id', requestId)
 
@@ -718,4 +724,38 @@ export async function updateBedTypes(
 
   if (error) return { error: error.message }
   revalidatePath('/dashboard/equipment')
+}
+
+export async function updatePrinterCapabilities(
+  printerId: string,
+  caps: {
+    supports_available: boolean
+    ironing_available: boolean
+    color_change_available: boolean
+    pause_insert_available: boolean
+    fuzzy_skin_available: boolean
+    text_on_surface_available: boolean
+  },
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  // Verify ownership
+  const { data: printer } = await supabase
+    .from('printers')
+    .select('id')
+    .eq('id', printerId)
+    .eq('owner_id', user.id)
+    .maybeSingle()
+  if (!printer) return { error: 'Not authorised' }
+
+  const { error } = await supabase
+    .from('print_profiles')
+    .update(caps)
+    .eq('printer_id', printerId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/equipment')
+  revalidatePath('/dashboard/listing')
 }

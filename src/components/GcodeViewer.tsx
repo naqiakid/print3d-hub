@@ -75,9 +75,10 @@ type Props = {
   urls: string[]
   colors?: string[]
   className?: string
+  baseHeight?: string   // overrides the default collapsed height (e.g. 'h-56' for compact layouts)
 }
 
-export default function GcodeViewer({ urls, colors, className }: Props) {
+export default function GcodeViewer({ urls, colors, className, baseHeight }: Props) {
   const mountRef     = useRef<HTMLDivElement>(null)
   const fullViewRef  = useRef<RenderedView | null>(null)
   const modelViewRef = useRef<RenderedView | null>(null)
@@ -130,7 +131,7 @@ export default function GcodeViewer({ urls, colors, className }: Props) {
         canvas,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         extrusionColor:  extrusionColor as any,   // library accepts arrays (T0/T1 tool indexing)
-        backgroundColor: '#0f172a',
+        backgroundColor: '#2e4a62',
         renderTravel:    false,
         renderTubes:     true,
       })
@@ -227,11 +228,11 @@ export default function GcodeViewer({ urls, colors, className }: Props) {
     active.preview.render()
   }
 
-  const heightClass = expanded ? 'h-[520px]' : 'h-[360px]'
+  const heightClass = expanded ? 'h-[520px]' : (baseHeight ?? 'h-[360px]')
   const isLoaded    = started && !loading && !error
 
   return (
-    <div className={`relative overflow-hidden rounded-xl bg-slate-900 ${heightClass} ${className ?? ''}`}>
+    <div className={`relative overflow-hidden rounded-xl bg-[#2e4a62] ${heightClass} ${className ?? ''}`}>
       {/* Canvas mount — position:relative so absolute-positioned canvases anchor here */}
       <div ref={mountRef} className="relative w-full h-full" />
 
@@ -352,7 +353,7 @@ export default function GcodeViewer({ urls, colors, className }: Props) {
 
       {/* ── Loading overlay ── */}
       {loading && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#2e4a62]">
           <div className="flex flex-col items-center gap-2">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-600 border-t-orange-500" />
             <span className="text-xs text-slate-400">{status}</span>
@@ -362,7 +363,7 @@ export default function GcodeViewer({ urls, colors, className }: Props) {
 
       {/* ── Error ── */}
       {error && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#2e4a62]">
           <p className="text-xs text-slate-500 px-4 text-center">{error}</p>
         </div>
       )}
