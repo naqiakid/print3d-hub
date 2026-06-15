@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { Plus, Pencil, Trash2, Package, ExternalLink, X } from 'lucide-react'
+import { useState, useTransition, useRef } from 'react'
+import { Plus, Pencil, Trash2, Package, Upload, FileBox, X } from 'lucide-react'
 import type { CatalogItem, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
+import { createClient } from '@/lib/supabase/client'
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
@@ -14,6 +15,7 @@ type FormState = {
   description: string
   photo_url: string
   model_url: string
+  stl_urls: string[]
   allow_custom_text: boolean
   text_prompt: string
   allow_color_choice: boolean
@@ -30,6 +32,7 @@ const BLANK: FormState = {
   description: '',
   photo_url: '',
   model_url: '',
+  stl_urls: [],
   allow_custom_text: false,
   text_prompt: 'Text to add',
   allow_color_choice: true,
@@ -47,6 +50,7 @@ function itemToForm(item: CatalogItem): FormState {
     description: item.description,
     photo_url: item.photo_url ?? '',
     model_url: item.model_url ?? '',
+    stl_urls: item.stl_urls ?? [],
     allow_custom_text: item.allow_custom_text,
     text_prompt: item.text_prompt,
     allow_color_choice: item.allow_color_choice,
@@ -113,6 +117,7 @@ export default function CatalogManager({
       description: form.description.trim(),
       photo_url: form.photo_url.trim() || null,
       model_url: form.model_url.trim() || null,
+      stl_urls: form.stl_urls,
       allow_custom_text: form.allow_custom_text,
       text_prompt: form.text_prompt.trim() || 'Text to add',
       allow_color_choice: form.allow_color_choice,
@@ -137,6 +142,7 @@ export default function CatalogManager({
           ...data,
           photo_url: data.photo_url,
           model_url: data.model_url,
+          stl_urls: data.stl_urls,
           base_price: data.base_price,
         }
         setItems((prev) => [newItem, ...prev])
@@ -291,6 +297,42 @@ function CatalogForm({
   isPending: boolean
   error: string
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+
+  async function handleStlFiles(files: FileList | null) {
+    if (!files || files.length === 0) return
+    const allowed = Array.from(files).filter((f) =>
+      ['.stl', '.3mf'].some((ext) => f.name.toLowerCase().endsWith(ext))
+    )
+    if (allowed.length === 0) {
+      setUploadError('Only .stl and .3mf files are accepted.')
+      return
+    }
+    setUploading(true)
+    setUploadError('')
+    const supabase = createClient()
+    const newUrls: string[] = []
+    for (const file of allowed) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `catalog/${Date.now()}-${safeName}`
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('stl-files')
+        .upload(path, file)
+      if (uploadErr || !uploadData) {
+        setUploadError(uploadErr?.message ?? 'Upload failed')
+        setUploading(false)
+        return
+      }
+      const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
+      newUrls.push(urlData.publicUrl)
+    }
+    set('stl_urls', [...form.stl_urls, ...newUrls])
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   return (
     <>
       {/* Name + description */}
@@ -328,6 +370,47 @@ function CatalogForm({
           <input value={form.model_url} onChange={(e) => set('model_url', e.target.value)}
             placeholder="https://www.makerworld.com/..." className={inputClass} />
         </div>
+      </div>
+
+      {/* 3D model upload */}
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-600">3D model files for preview (optional)</label>
+        <p className="mb-2 text-[11px] text-slate-400">Upload .stl or .3mf files — customers can spin and view the model before ordering.</p>
+
+        {form.stl_urls.length > 0 && (
+          <div className="mb-2 space-y-1.5">
+            {form.stl_urls.map((url, i) => {
+              const filename = url.split('/').pop()?.split('?')[0] ?? `File ${i + 1}`
+              return (
+                <div key={url} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <FileBox className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                  <span className="flex-1 truncate text-xs text-slate-600">{filename}</span>
+                  <button type="button"
+                    onClick={() => set('stl_urls', form.stl_urls.filter((_, idx) => idx !== i))}
+                    className="text-slate-300 hover:text-red-400 transition">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".stl,.3mf"
+          multiple
+          className="hidden"
+          onChange={(e) => handleStlFiles(e.target.files)}
+        />
+        <button type="button" disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-2.5 text-xs font-medium text-slate-500 hover:border-orange-400 hover:text-orange-600 disabled:opacity-50 transition">
+          <Upload className="h-3.5 w-3.5" />
+          {uploading ? 'Uploading…' : 'Choose .stl / .3mf files'}
+        </button>
+        {uploadError && <p className="mt-1 text-[11px] text-red-500">{uploadError}</p>}
       </div>
 
       {/* Customisation options */}

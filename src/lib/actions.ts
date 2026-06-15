@@ -802,6 +802,7 @@ type CatalogItemData = {
   description: string
   photo_url?: string | null
   model_url?: string | null
+  stl_urls?: string[]
   allow_custom_text: boolean
   text_prompt: string
   allow_color_choice: boolean

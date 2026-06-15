@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS catalog_items (
   description           text        NOT NULL DEFAULT '',
   photo_url             text,                         -- single showcase photo
   model_url             text,                         -- link to original design
+  stl_urls              text[]      NOT NULL DEFAULT '{}',  -- uploaded model files for 3D preview
 
   -- Customisation the owner offers for this product
   allow_custom_text     boolean     NOT NULL DEFAULT false,

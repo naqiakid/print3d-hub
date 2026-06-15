@@ -4,6 +4,7 @@ import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import type { Printer, CatalogItem, PrintProfile, Filament } from '@/lib/types'
 import CatalogOrderForm from '@/components/CatalogOrderForm'
+import STLViewer from '@/components/STLViewerWrapper'
 
 export default async function CatalogOrderPage({
   params,
@@ -108,6 +109,13 @@ export default async function CatalogOrderPage({
           )}
         </div>
       </div>
+
+      {/* 3D preview */}
+      {item.stl_urls?.length > 0 && (
+        <div className="mb-8">
+          <STLViewer urls={item.stl_urls} />
+        </div>
+      )}
 
       <h2 className="mb-6 text-lg font-bold text-slate-900">Customise your order</h2>
 
