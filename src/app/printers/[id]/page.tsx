@@ -2,10 +2,10 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
   ArrowLeft, Star, Clock, Zap, Box, MapPin, Truck, Check, X,
-  Layers, ChevronRight,
+  Layers, ChevronRight, Package,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import type { Printer, Filament, PrintProfile } from '@/lib/types'
+import type { Printer, Filament, PrintProfile, CatalogItem } from '@/lib/types'
 import {
   PRINT_TYPE_LABELS,
   PRINT_TYPE_DESCRIPTIONS,
@@ -49,7 +49,7 @@ export default async function PrinterDetailPage({
   if (!data) notFound()
   const printer = data as unknown as Printer
 
-  const [{ data: filamentData }, { data: profileData }] = await Promise.all([
+  const [{ data: filamentData }, { data: profileData }, { data: catalogData }] = await Promise.all([
     supabase
       .from('filaments')
       .select('*')
@@ -63,10 +63,18 @@ export default async function PrinterDetailPage({
       .eq('printer_id', printer.id)
       .eq('is_active', true)
       .order('is_default', { ascending: false }),
+    supabase
+      .from('catalog_items')
+      .select('*')
+      .eq('printer_id', printer.id)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: false }),
   ])
 
   const filaments = (filamentData ?? []) as unknown as Filament[]
-  const profiles = (profileData ?? []) as unknown as PrintProfile[]
+  const profiles  = (profileData  ?? []) as unknown as PrintProfile[]
+  const catalog   = (catalogData  ?? []) as unknown as CatalogItem[]
 
   const preset = findPreset(printer.printer_model)
   const brand = preset?.brand ?? printer.printer_model.split(' ')[0]
@@ -445,6 +453,64 @@ export default async function PrinterDetailPage({
           </div>
         </div>
       </div>
+
+      {/* ── Product catalog ── */}
+      {catalog.length > 0 && (
+        <div className="mt-10">
+          <h2 className="mb-1 text-xl font-bold text-slate-900">Available prints</h2>
+          <p className="mb-6 text-sm text-slate-500">
+            Ready-to-order designs from this maker — customise and order directly.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {catalog.map((item) => {
+              const badges: string[] = []
+              if (item.allow_custom_text)    badges.push('Custom text')
+              if (item.allow_color_choice)   badges.push('Color choice')
+              if (item.allow_resize)         badges.push('Resize')
+              if (item.allow_material_choice) badges.push('Material choice')
+
+              return (
+                <div key={item.id} className="group rounded-2xl border border-slate-200 bg-white overflow-hidden hover:border-orange-200 hover:shadow-md transition">
+                  {/* Photo */}
+                  <div className="h-44 w-full overflow-hidden bg-slate-100 flex items-center justify-center">
+                    {item.photo_url
+                      ? <img src={item.photo_url} alt={item.name} className="h-full w-full object-cover group-hover:scale-105 transition duration-300" />
+                      : <Package className="h-12 w-12 text-slate-300" />}
+                  </div>
+
+                  {/* Info */}
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className="font-semibold text-slate-900 leading-snug">{item.name}</p>
+                      {item.base_price && (
+                        <p className="shrink-0 text-sm font-bold text-orange-600">From RM{item.base_price.toFixed(2)}</p>
+                      )}
+                    </div>
+                    {item.description && (
+                      <p className="text-xs text-slate-500 line-clamp-2 mb-3">{item.description}</p>
+                    )}
+                    {badges.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        {badges.map((b) => (
+                          <span key={b} className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[11px] font-medium text-orange-600">
+                            {b}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <Link
+                      href={`/order/${printer.id}/${item.id}`}
+                      className="block w-full rounded-xl bg-orange-500 py-2 text-center text-sm font-semibold text-white hover:bg-orange-600 transition"
+                    >
+                      Order this
+                    </Link>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

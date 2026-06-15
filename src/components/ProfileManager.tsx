@@ -149,7 +149,7 @@ export default function ProfileManager({
                     <p className="text-xs text-slate-500 mt-0.5">
                       {nozzleLabel(p.nozzle_mm)} nozzle
                       &nbsp;·&nbsp;
-                      Infill {p.infill_draft}% / {p.infill_standard}% / {p.infill_premium}%
+                      Infill: functional {p.infill_draft}% · presentable {p.infill_standard}% · display {p.infill_premium}%
                     </p>
                     <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
                       {[
@@ -307,16 +307,16 @@ function ProfileForm({
       {/* Infill per quality */}
       <div>
         <label className="mb-2 block text-sm font-medium text-slate-700">
-          Infill % per quality level
+          Infill % per finish tier
         </label>
         <p className="mb-3 text-xs text-slate-400">
           More infill = stronger + heavier = higher cost. Defaults are 15 / 25 / 40.
         </p>
         <div className="grid grid-cols-3 gap-3">
           {([
-            { key: 'infill_draft' as const,    label: 'Draft',    hint: 'prototypes' },
-            { key: 'infill_standard' as const, label: 'Standard', hint: 'most jobs' },
-            { key: 'infill_premium' as const,  label: 'Premium',  hint: 'high strength' },
+            { key: 'infill_draft' as const,    label: 'Functional',      hint: 'prototypes, fast prints' },
+            { key: 'infill_standard' as const, label: 'Presentable',     hint: 'most jobs' },
+            { key: 'infill_premium' as const,  label: 'Display quality', hint: 'best finish' },
           ]).map(({ key, label, hint }) => (
             <div key={key}>
               <p className="mb-1 text-xs font-medium text-slate-600">{label}</p>

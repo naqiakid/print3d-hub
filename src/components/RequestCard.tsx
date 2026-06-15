@@ -308,7 +308,37 @@ export default function RequestCard({ request, printer }: { request: PrintReques
               {STATUS_LABELS[request.status]}
             </span>
           </div>
-          <p className="text-sm text-slate-500 truncate">{request.description}</p>
+          {/* Key job info — what the owner needs at a glance */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-1">
+            {/* Material + color */}
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+              {request.color && request.color !== 'Any' && (
+                <span className="h-2.5 w-2.5 rounded-full border border-slate-300 shrink-0" style={{ background: request.color_hex || '#888' }} />
+              )}
+              {MATERIAL_LABELS[request.material] ?? request.material}
+              {request.color && request.color !== 'Any' ? ` · ${request.color}` : ''}
+            </span>
+            {/* Finish expectation */}
+            {request.quality && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                {request.quality === 'functional' ? 'Functional' : request.quality === 'presentable' ? 'Presentable' : 'Display quality'}
+              </span>
+            )}
+            {/* Supports */}
+            {(request.supports || request.selected_addons?.includes('supports')) && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Supports</span>
+            )}
+            {(request.declined_addons ?? []).includes('supports') && (
+              <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-500">✗ No supports</span>
+            )}
+            {/* Other key options */}
+            {(request.selected_addons ?? []).filter((a) => ['ironing', 'fuzzy_skin', 'color_change', 'pause_insert', 'text_on_surface'].includes(a)).map((a) => (
+              <span key={a} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                {a === 'ironing' ? 'Ironing' : a === 'fuzzy_skin' ? 'Fuzzy skin' : a === 'color_change' ? 'Multi-color' : a === 'pause_insert' ? 'Inserts' : 'Surface text'}
+              </span>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400 truncate">{request.description}</p>
         </div>
         <div className="shrink-0 text-right text-xs">
           <div className={`flex items-center gap-1 mb-1 ${isUrgent ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
@@ -393,8 +423,12 @@ export default function RequestCard({ request, printer }: { request: PrintReques
               .trim()
 
             const hasSupports = request.supports || request.selected_addons?.includes('supports')
+            const declinedSupports = (request.declined_addons ?? []).includes('supports')
             // Tags shown inline: ironing, fuzzy_skin, color_change (AMS). pause_insert and text_on_surface get callout sections.
             const inlineTags = (request.selected_addons ?? []).filter(
+              (a) => !['supports', 'pause_insert', 'text_on_surface'].includes(a),
+            )
+            const declinedInlineTags = (request.declined_addons ?? []).filter(
               (a) => !['supports', 'pause_insert', 'text_on_surface'].includes(a),
             )
             const ADDON_LABELS: Record<string, string> = {
@@ -433,14 +467,22 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                     <span className="text-slate-400">Quality</span>
                     <span className="ml-2 font-medium text-slate-900">{QUALITY_LABELS[request.quality]}</span>
                   </div>
-                  {(hasSupports || inlineTags.length > 0) && (
+                  {(hasSupports || declinedSupports || inlineTags.length > 0 || declinedInlineTags.length > 0) && (
                     <div className="col-span-2 flex flex-wrap gap-1.5">
                       {hasSupports && (
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Supports</span>
                       )}
+                      {declinedSupports && (
+                        <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-500">✗ No supports</span>
+                      )}
                       {inlineTags.map((addon) => (
                         <span key={addon} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
                           {ADDON_LABELS[addon] ?? addon}
+                        </span>
+                      ))}
+                      {declinedInlineTags.map((addon) => (
+                        <span key={`no-${addon}`} className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-500">
+                          ✗ No {(ADDON_LABELS[addon] ?? addon).toLowerCase()}
                         </span>
                       ))}
                     </div>
@@ -742,43 +784,67 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                   })
                 }
 
-                if (addonsToConfirm.length === 0) return null
+                const declinedAddons = request.declined_addons ?? []
+                const ADDON_CONFIRM_LABELS: Record<string, string> = {
+                  supports: 'Support structures',
+                  ironing: 'Ironing (smooth top)',
+                  color_change: 'Multi-color / AMS',
+                  fuzzy_skin: 'Fuzzy skin texture',
+                  pause_insert: 'Embedded inserts',
+                  text_on_surface: 'Text on surface',
+                }
+
+                if (addonsToConfirm.length === 0 && declinedAddons.length === 0) return null
                 return (
                   <div className="rounded-xl border border-orange-200 bg-white p-3">
                     <p className="text-xs font-semibold text-slate-700 mb-0.5">Confirm applied features</p>
                     <p className="text-[11px] text-slate-400 mb-3">
                       These were requested by the customer. Tick what you have set up in the sliced file — uncheck anything you couldn&apos;t apply.
                     </p>
-                    <div className="space-y-2">
-                      {addonsToConfirm.map(({ key, label, detail }) => {
-                        const checked = confirmedAddons.has(key)
-                        return (
-                          <label key={key} className="flex items-start gap-2.5 cursor-pointer group">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => {
-                                setConfirmedAddons((prev) => {
-                                  const next = new Set(prev)
-                                  if (next.has(key)) next.delete(key)
-                                  else next.add(key)
-                                  return next
-                                })
-                              }}
-                              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-orange-500"
-                            />
-                            <div>
-                              <span className={`text-xs font-medium ${checked ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
-                                {label}
-                              </span>
-                              {detail && (
-                                <p className={`text-[11px] mt-0.5 ${checked ? 'text-slate-500' : 'text-slate-300'}`}>{detail}</p>
-                              )}
-                            </div>
-                          </label>
-                        )
-                      })}
-                    </div>
+                    {addonsToConfirm.length > 0 && (
+                      <div className="space-y-2">
+                        {addonsToConfirm.map(({ key, label, detail }) => {
+                          const checked = confirmedAddons.has(key)
+                          return (
+                            <label key={key} className="flex items-start gap-2.5 cursor-pointer group">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  setConfirmedAddons((prev) => {
+                                    const next = new Set(prev)
+                                    if (next.has(key)) next.delete(key)
+                                    else next.add(key)
+                                    return next
+                                  })
+                                }}
+                                className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-orange-500"
+                              />
+                              <div>
+                                <span className={`text-xs font-medium ${checked ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
+                                  {label}
+                                </span>
+                                {detail && (
+                                  <p className={`text-[11px] mt-0.5 ${checked ? 'text-slate-500' : 'text-slate-300'}`}>{detail}</p>
+                                )}
+                              </div>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {declinedAddons.length > 0 && (
+                      <div className={`${addonsToConfirm.length > 0 ? 'mt-3 pt-3 border-t border-slate-100' : ''}`}>
+                        <p className="text-[11px] font-semibold text-red-500 mb-1">Customer said NO to:</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {declinedAddons.map((key) => (
+                            <span key={key} className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-500">
+                              ✗ {ADDON_CONFIRM_LABELS[key] ?? key}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })()}

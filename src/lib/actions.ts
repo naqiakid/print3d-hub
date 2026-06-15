@@ -344,19 +344,23 @@ export async function submitRequest(data: {
   print_hours?: number | null
   profile_id?: string | null
   selected_addons?: string[]
+  declined_addons?: string[]
   color_preferences?: { part_number: number; file_name: string; color: string; color_hex: string }[]
   fulfillment?: 'pickup' | 'delivery'
   delivery_address?: string | null
+  catalog_item_id?: string | null
 }): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
 
   // Strip optional columns that may not exist yet if migrations haven't run
-  const { color_preferences, fulfillment, delivery_address, ...baseData } = data
+  const { color_preferences, fulfillment, delivery_address, declined_addons, catalog_item_id, ...baseData } = data
   const insertPayload = {
     ...baseData,
     ...(color_preferences?.length ? { color_preferences } : {}),
     ...(fulfillment ? { fulfillment } : {}),
     ...(delivery_address ? { delivery_address } : {}),
+    ...(declined_addons?.length ? { declined_addons } : {}),
+    ...(catalog_item_id ? { catalog_item_id } : {}),
   }
 
   const { data: inserted, error } = await supabase
@@ -400,6 +404,37 @@ export async function submitRequest(data: {
     })
 
   return { id: inserted.id }
+}
+
+// Allows a customer to revise material, color, and print options before the quote is accepted.
+// Requires knowing the request ID (UUID security model — same as accept/decline).
+export async function updateRequest(
+  requestId: string,
+  data: {
+    material: string
+    color: string
+    color_hex: string
+    selected_addons: string[]
+    declined_addons: string[]
+    notes?: string
+  },
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('requests')
+    .update({
+      material:        data.material,
+      color:           data.color,
+      color_hex:       data.color_hex,
+      selected_addons: data.selected_addons,
+      declined_addons: data.declined_addons,
+      ...(data.notes !== undefined ? { notes: data.notes } : {}),
+      status: 'new',  // revert to new so owner re-reviews
+    })
+    .eq('id', requestId)
+    .in('status', ['new', 'quoted'])
+  if (error) return { error: error.message }
+  return { success: true }
 }
 
 export async function updateListing(data: {
@@ -758,4 +793,79 @@ export async function updatePrinterCapabilities(
   if (error) return { error: error.message }
   revalidatePath('/dashboard/equipment')
   revalidatePath('/dashboard/listing')
+}
+
+// ── Catalog item CRUD ──────────────────────────────────────────
+
+type CatalogItemData = {
+  name: string
+  description: string
+  photo_url?: string | null
+  model_url?: string | null
+  allow_custom_text: boolean
+  text_prompt: string
+  allow_color_choice: boolean
+  allow_resize: boolean
+  resize_min_pct: number
+  resize_max_pct: number
+  allow_material_choice: boolean
+  available_materials: string[]
+  base_price?: number | null
+}
+
+export async function createCatalogItem(
+  printerId: string,
+  data: CatalogItemData,
+): Promise<{ error: string } | { id: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { data: inserted, error } = await supabase
+    .from('catalog_items')
+    .insert({ printer_id: printerId, ...data })
+    .select('id')
+    .single()
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/catalog')
+  revalidatePath(`/printers/${printerId}`)
+  return { id: inserted.id }
+}
+
+export async function updateCatalogItem(
+  itemId: string,
+  data: CatalogItemData,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('catalog_items')
+    .update(data)
+    .eq('id', itemId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/catalog')
+  return { success: true }
+}
+
+export async function deleteCatalogItem(
+  itemId: string,
+  printerId: string,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('catalog_items')
+    .update({ is_active: false })
+    .eq('id', itemId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/catalog')
+  revalidatePath(`/printers/${printerId}`)
+  return { success: true }
 }

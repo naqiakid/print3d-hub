@@ -13,7 +13,7 @@ export type PrintType = 'everyday' | 'strong' | 'colorful'
 /** @deprecated use FilamentMaterial */
 export type MaterialFeel = FilamentMaterial
 export type PrintSize = 'small' | 'medium' | 'large'
-export type PrintQuality = 'draft' | 'standard' | 'premium'
+export type PrintQuality = 'functional' | 'presentable' | 'display'
 export type RequestStatus =
   | 'new'
   | 'quoted'
@@ -101,7 +101,9 @@ export type PrintRequest = {
   notes: string
   profile_id: string | null
   selected_addons: string[]
+  declined_addons: string[]
   confirmed_addons: string[]
+  catalog_item_id: string | null
   fulfillment: 'pickup' | 'delivery'
   delivery_address: string | null
   status: RequestStatus
@@ -139,6 +141,27 @@ export type Filament = {
   color_hex: string
   cost_per_kg: number
   in_stock: boolean
+  created_at: string
+}
+
+export type CatalogItem = {
+  id: string
+  printer_id: string
+  name: string
+  description: string
+  photo_url: string | null
+  model_url: string | null
+  allow_custom_text: boolean
+  text_prompt: string
+  allow_color_choice: boolean
+  allow_resize: boolean
+  resize_min_pct: number
+  resize_max_pct: number
+  allow_material_choice: boolean
+  available_materials: string[]
+  base_price: number | null
+  sort_order: number
+  is_active: boolean
   created_at: string
 }
 
@@ -190,9 +213,9 @@ export const SIZE_LABELS: Record<PrintSize, string> = {
 }
 
 export const QUALITY_LABELS: Record<PrintQuality, string> = {
-  draft: 'Draft — faster, rougher finish',
-  standard: 'Standard — balanced quality',
-  premium: 'Premium — slow, smooth finish',
+  functional:  'Functional — shape matters, surface marks are fine',
+  presentable: 'Presentable — looks good, layer lines acceptable',
+  display:     'Display quality — as close to the reference as possible',
 }
 
 export const STATUS_LABELS: Record<RequestStatus, string> = {

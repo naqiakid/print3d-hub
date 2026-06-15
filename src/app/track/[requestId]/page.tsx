@@ -1,12 +1,13 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import type { PrintRequest, Printer } from '@/lib/types'
+import type { PrintRequest, Printer, FilamentMaterial } from '@/lib/types'
 import { STATUS_LABELS, MATERIAL_LABELS, SIZE_LABELS, QUALITY_LABELS } from '@/lib/types'
 import { formatRM } from '@/lib/pricing'
 import QuoteActions from '@/components/QuoteActions'
 import STLViewer from '@/components/STLViewerWrapper'
 import GcodeViewer from '@/components/GcodeViewerWrapper'
+import ReviseRequest from '@/components/ReviseRequest'
 
 const TIMELINE: { status: string; label: string }[] = [
   { status: 'new',       label: 'Request received' },
@@ -51,11 +52,11 @@ export default async function TrackPage({
 
   const { data: printerData } = await supabase
     .from('printers')
-    .select('name, contact_phone, turnaround, pickup_address')
+    .select('name, contact_phone, turnaround, pickup_address, materials')
     .eq('id', request.printer_id)
     .maybeSingle()
 
-  const printer = printerData as Pick<Printer, 'name' | 'contact_phone' | 'turnaround' | 'pickup_address'> | null
+  const printer = printerData as Pick<Printer, 'name' | 'contact_phone' | 'turnaround' | 'pickup_address' | 'materials'> | null
 
   // Parse special lines out of notes once — used in both the quote card and order summary
   const rawNotes = (request.notes ?? '')
@@ -399,6 +400,20 @@ export default async function TrackPage({
           </div>
         )}
       </div>
+
+      {/* Revise request */}
+      {['new', 'quoted'].includes(request.status) && printer?.materials && (
+        <ReviseRequest
+          requestId={requestId}
+          currentMaterial={request.material}
+          currentColor={request.color}
+          currentColorHex={request.color_hex}
+          currentSelectedAddons={request.selected_addons ?? []}
+          currentDeclinedAddons={request.declined_addons ?? []}
+          availableMaterials={printer.materials as FilamentMaterial[]}
+          status={request.status}
+        />
+      )}
 
       {/* Contact */}
       {printer?.contact_phone && (

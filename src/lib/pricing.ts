@@ -4,9 +4,9 @@ export const DEFAULT_ELECTRICITY_RATE = 0.516
 export const DEFAULT_MARKUP_PERCENT   = 30
 
 export const DEFAULT_INFILL: Record<string, number> = {
-  draft:    15,
-  standard: 25,
-  premium:  40,
+  functional:  15,
+  presentable: 25,
+  display:     40,
 }
 
 export const NOZZLE_OPTIONS = [
@@ -34,9 +34,9 @@ export const DEFAULT_FILAMENT_COST_PER_KG: Record<FilamentMaterial, number> = {
 }
 
 export const PRINT_ESTIMATES: Record<PrintSize, Record<PrintQuality, { weight_g: number; hours: number }>> = {
-  small:  { draft: { weight_g: 15,  hours: 1.5 }, standard: { weight_g: 20,  hours: 2.5 }, premium: { weight_g: 25,  hours: 4  } },
-  medium: { draft: { weight_g: 60,  hours: 4   }, standard: { weight_g: 80,  hours: 7   }, premium: { weight_g: 100, hours: 12 } },
-  large:  { draft: { weight_g: 150, hours: 10  }, standard: { weight_g: 200, hours: 18  }, premium: { weight_g: 250, hours: 30 } },
+  small:  { functional: { weight_g: 15,  hours: 1.5 }, presentable: { weight_g: 20,  hours: 2.5 }, display: { weight_g: 25,  hours: 4  } },
+  medium: { functional: { weight_g: 60,  hours: 4   }, presentable: { weight_g: 80,  hours: 7   }, display: { weight_g: 100, hours: 12 } },
+  large:  { functional: { weight_g: 150, hours: 10  }, presentable: { weight_g: 200, hours: 18  }, display: { weight_g: 250, hours: 30 } },
 }
 
 export type EstimateInput = {
@@ -61,15 +61,24 @@ export type EstimateResult = {
   suggested_price: number
 }
 
+// Map legacy DB values to current quality keys
+const QUALITY_COMPAT: Record<string, PrintQuality> = {
+  draft:    'functional',
+  standard: 'presentable',
+  premium:  'display',
+}
+
 export function calculateEstimate(input: EstimateInput): EstimateResult {
   const {
-    size, quality, power_watts, cost_per_kg,
+    size, power_watts, cost_per_kg,
     electricity_rate = DEFAULT_ELECTRICITY_RATE,
     markup_percent   = DEFAULT_MARKUP_PERCENT,
     nozzle_mm        = 0.4,
     custom_infill,
     ironing          = false,
   } = input
+
+  const quality = QUALITY_COMPAT[input.quality] ?? input.quality
 
   const base = PRINT_ESTIMATES[size][quality]
 
@@ -114,8 +123,8 @@ export function calculatePriceRange(input: PriceRangeInput): { price_min: number
 
     const base = { material, cost_per_kg, ...input }
     prices.push(
-      calculateEstimate({ ...base, size: 'small', quality: 'draft'   }).suggested_price,
-      calculateEstimate({ ...base, size: 'large', quality: 'premium' }).suggested_price,
+      calculateEstimate({ ...base, size: 'small', quality: 'functional' }).suggested_price,
+      calculateEstimate({ ...base, size: 'large', quality: 'display'   }).suggested_price,
     )
   }
 

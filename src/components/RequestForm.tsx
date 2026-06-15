@@ -3,19 +3,33 @@
 import { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react'
 import {
   CheckCircle, Upload, X, Loader2, FileBox, Plus, Ruler,
-  Link2, FileUp, PenLine, ExternalLink, Download,
+  Link2, FileUp, ExternalLink, Download, HelpCircle,
 } from 'lucide-react'
 import type { Printer, PrintProfile, PrintQuality, Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { submitRequest } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
+import { SIZE_LABELS } from '@/lib/types'
 
 const STLViewer = lazy(() => import('./STLViewer'))
+
+const COLOR_PRESETS = [
+  { name: 'Black',    hex: '#1a1a1a' },
+  { name: 'White',    hex: '#f5f5f5' },
+  { name: 'Grey',     hex: '#6b7280' },
+  { name: 'Natural',  hex: '#d4b896' },
+  { name: 'Red',      hex: '#dc2626' },
+  { name: 'Blue',     hex: '#2563eb' },
+  { name: 'Green',    hex: '#16a34a' },
+  { name: 'Yellow',   hex: '#ca8a04' },
+  { name: 'Orange',   hex: '#ea580c' },
+  { name: 'Purple',   hex: '#7c3aed' },
+]
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
 
-type ModelMode = 'link' | 'file' | 'describe' | null
+type ModelMode = 'link' | 'file' | null
 
 export type ThreeMfPart = {
   name: string
@@ -100,9 +114,30 @@ async function parse3mfParts(file: File): Promise<string[]> {
   }
 }
 
+// Parse "256 × 256 × 256 mm" → { x, y, z }
+function parseBuildVolume(s: string): { x: number; y: number; z: number } | null {
+  const nums = s.match(/[\d.]+/g)?.map(Number)
+  if (!nums || nums.length < 3) return null
+  return { x: nums[0], y: nums[1], z: nums[2] }
+}
+
+// Check if a model bounding box fits inside the printer build volume.
+// Sorts both sets of dimensions so the check is valid for any 90° rotation.
+function fitsInVolume(
+  model: { x: number; y: number; z: number },
+  printer: { x: number; y: number; z: number },
+): boolean {
+  const m = [model.x, model.y, model.z].sort((a, b) => a - b)
+  const p = [printer.x, printer.y, printer.z].sort((a, b) => a - b)
+  return m[0] <= p[0] && m[1] <= p[1] && m[2] <= p[2]
+}
+
 // Compute bounding-box dimensions (mm) from uploaded model files without loading Three.js.
 // Binary STL: parse float32 vertices directly from ArrayBuffer.
 // 3MF: unzip and read <vertex> elements with DOMParser.
+// Yield control back to the browser so the UI stays responsive during heavy loops.
+const yieldToMain = () => new Promise<void>((r) => setTimeout(r, 0))
+
 async function computeModelDimensions(file: File): Promise<{ x: number; y: number; z: number } | null> {
   const ext = file.name.split('.').pop()?.toLowerCase()
   try {
@@ -116,7 +151,9 @@ async function computeModelDimensions(file: File): Promise<{ x: number; y: numbe
       let minX = Infinity, maxX = -Infinity
       let minY = Infinity, maxY = -Infinity
       let minZ = Infinity, maxZ = -Infinity
+      // Yield every 50k triangles so the browser can repaint between chunks.
       for (let i = 0; i < triCount; i++) {
+        if (i > 0 && i % 50_000 === 0) await yieldToMain()
         const b = 84 + i * 50
         for (let v = 0; v < 3; v++) {
           const vb = b + 12 + v * 12
@@ -148,7 +185,9 @@ async function computeModelDimensions(file: File): Promise<{ x: number; y: numbe
         const xml = await entry.async('text')
         const doc = new DOMParser().parseFromString(xml, 'text/xml')
         const verts = doc.getElementsByTagName('vertex')
+        // Yield every 50k vertices for large 3MF files.
         for (let i = 0; i < verts.length; i++) {
+          if (i > 0 && i % 50_000 === 0) await yieldToMain()
           const x = parseFloat(verts[i].getAttribute('x') ?? '0')
           const y = parseFloat(verts[i].getAttribute('y') ?? '0')
           const z = parseFloat(verts[i].getAttribute('z') ?? '0')
@@ -191,6 +230,7 @@ type FileUploadSectionProps = {
   addMoreRef: React.RefObject<HTMLInputElement | null>
   onDrop: (files: FileList | File[]) => void
   onAddMore: (files: FileList) => void
+  buildVolume?: string | null
 }
 
 // A single colour-picker row — one per file (no parts) or one per part (3MF)
@@ -218,6 +258,7 @@ function FileUploadSection({
   addMoreRef,
   onDrop,
   onAddMore,
+  buildVolume,
 }: FileUploadSectionProps) {
   const [tooltip, setTooltip] = useState<{ mat: FilamentMaterial; x: number; y: number } | null>(null)
 
@@ -445,9 +486,24 @@ function FileUploadSection({
         </button>
         {fileItems.filter((i) => i.dimensions).map((item, idx) => {
           const d = item.dimensions!
+          const pv = buildVolume ? parseBuildVolume(buildVolume) : null
+          const fits = pv ? fitsInVolume(d, pv) : null
           return (
-            <span key={item.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">
-              <Ruler className="h-3 w-3 text-slate-400 shrink-0" />
+            <span
+              key={item.id}
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                fits === null
+                  ? 'bg-slate-100 text-slate-500'
+                  : fits
+                  ? 'bg-green-50 text-green-700 border border-green-200'
+                  : 'bg-red-50 text-red-700 border border-red-200'
+              }`}
+            >
+              {fits === null
+                ? <Ruler className="h-3 w-3 text-slate-400 shrink-0" />
+                : fits
+                ? <span className="font-bold">✓</span>
+                : <span className="font-bold">✗</span>}
               {fileItems.filter((i) => i.dimensions).length > 1 ? `File ${idx + 1}: ` : ''}
               {d.x} × {d.y} × {d.z} mm
             </span>
@@ -511,6 +567,7 @@ export default function RequestForm({
   const [pending, setPending]         = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [selectedCaps, setSelectedCaps] = useState<Set<string>>(new Set())
+  const [declinedCaps, setDeclinedCaps] = useState<Set<string>>(new Set())
   const [surfaceText, setSurfaceText]   = useState('')
   const [insertNotes, setInsertNotes]   = useState('')
   const [capTooltip, setCapTooltip]     = useState<{ key: string; x: number; y: number } | null>(null)
@@ -530,6 +587,10 @@ export default function RequestForm({
 
   const [quality, setQuality]         = useState<PrintQuality | ''>('')
   const [quantity, setQuantity]       = useState(1)
+  const [material, setMaterial]       = useState<FilamentMaterial | ''>('')
+  const [requestColor, setRequestColor]     = useState('Any')
+  const [requestColorHex, setRequestColorHex] = useState('#888888')
+  const [linkSize, setLinkSize] = useState<'small' | 'medium' | 'large'>('medium')
   const [deadlineType, setDeadlineType] = useState<'asap' | 'anytime' | 'date'>('date')
   const [hoveredFileId, setHoveredFileId] = useState<string | null>(null)
   const [previewUrls, setPreviewUrls]     = useState<string[]>([])
@@ -730,18 +791,28 @@ export default function RequestForm({
     const primaryHex   = colorPrefs[0]?.color_hex || '#888888'
     const isMultiColor = colorPrefs.length > 1 && hasColorPref
 
+    const derivedPrintType =
+      selectedCaps.has('color_change') ? 'colorful'
+      : (material && ['abs', 'nylon', 'pc'].includes(material)) ? 'strong'
+      : 'everyday'
+
+    // For link mode: use the color picker. For file mode: use per-part colors if set.
+    const effectiveColor    = modelMode === 'file' && hasColorPref ? primaryColor    : requestColor
+    const effectiveColorHex = modelMode === 'file' && hasColorPref ? primaryHex      : requestColorHex
+    const effectiveSize     = modelMode === 'link' && !primaryDims ? linkSize : autoSize
+
     const result = await submitRequest({
       printer_id:     printer.id,
       customer_name:  (form.elements.namedItem('name') as HTMLInputElement).value,
       customer_email: (form.elements.namedItem('email') as HTMLInputElement).value,
       customer_phone: (form.elements.namedItem('phone') as HTMLInputElement).value,
       description:    (form.elements.namedItem('description') as HTMLTextAreaElement).value,
-      print_type:     'everyday',
-      material:       'pla',
-      color:          hasColorPref ? primaryColor : 'Any',
-      color_hex:      hasColorPref ? primaryHex : '#888888',
+      print_type:     derivedPrintType,
+      material:       material as FilamentMaterial,
+      color:          effectiveColor,
+      color_hex:      effectiveColorHex,
       supports:       selectedCaps.has('supports'),
-      size:           autoSize,
+      size:           effectiveSize,
       quality:        quality as PrintQuality,
       deadline:       deadlineValue,
       notes:          dimsPrefix + notesWithQty
@@ -756,6 +827,7 @@ export default function RequestForm({
       print_hours:    null,
       profile_id:     defaultProfile?.id ?? null,
       selected_addons: [...new Set(Array.from(selectedCaps))],
+      declined_addons: [...declinedCaps],
       color_preferences: colorPrefs.length ? colorPrefs : undefined,
       fulfillment,
       delivery_address: fulfillment === 'delivery' ? deliveryAddress.trim() || null : null,
@@ -804,11 +876,11 @@ export default function RequestForm({
   }
 
   const modelReady =
-    modelMode === 'link'     ? modelUrl.trim().length > 0 :
-    modelMode === 'file'     ? (fileItems.length === 0 || allUploaded) :
-    true
+    modelMode === 'link' ? modelUrl.trim().length > 0 :
+    modelMode === 'file' ? (fileItems.length > 0 && allUploaded) :
+    false
   const formVisible = modelMode !== null
-  const canSubmit   = !!(formVisible && modelReady && quality && !pending)
+  const canSubmit   = !!(formVisible && modelReady && quality && material && !pending)
 
   const availableCaps = {
     supports:        profiles.some((p) => p.supports_available),
@@ -820,13 +892,49 @@ export default function RequestForm({
   }
   const hasAnyCap = Object.values(availableCaps).some(Boolean)
 
-  const CAP_INFO: Record<string, { label: string; desc: string }> = {
-    supports:        { label: 'Support structures',   desc: 'Temporary scaffold that holds up overhanging parts — removed after printing. Needed if your model has floating sections or steep overhangs.' },
-    ironing:         { label: 'Ironing (smooth top)', desc: 'The nozzle makes a slow second pass over flat top surfaces for an ultra-smooth, glossy finish. Adds ~15% to print time.' },
+  // Options where the customer may not know what's best — show 3-state control
+  const OWNER_DECIDE_CAPS: Record<string, { label: string; desc: string }> = {
+    supports:   { label: 'Support structures',   desc: 'Temporary scaffold that holds up overhanging parts — removed after printing. Needed if your model has floating sections or steep overhangs.' },
+    ironing:    { label: 'Ironing (smooth top)', desc: 'The nozzle makes a slow second pass over flat top surfaces for an ultra-smooth finish. Adds ~15% to print time.' },
+    fuzzy_skin: { label: 'Fuzzy skin texture',   desc: 'Adds a rough, matte, grip-friendly texture to the outer walls. Great for aesthetic effect or ergonomic grip.' },
+  }
+  // Options that always require a customer decision
+  const CUSTOMER_CAPS: Record<string, { label: string; desc: string }> = {
     color_change:    { label: 'Multi-color / AMS',    desc: 'Filament colors switch automatically during printing. Ideal for logos, text, and multi-color designs on a single print.' },
     pause_insert:    { label: 'Embedded inserts',     desc: 'The printer pauses so you can drop in brass heat-set nuts, magnets, or other metal parts before it continues.' },
-    fuzzy_skin:      { label: 'Fuzzy skin texture',   desc: 'Adds a rough, matte, grip-friendly texture to the outer walls. Great for aesthetic effect or ergonomic grip.' },
     text_on_surface: { label: 'Text on surface',      desc: 'The slicer embosses or engraves custom text directly onto the model surface — raised or recessed lettering without editing the original file.' },
+  }
+
+  function capState(key: string): 'owner' | 'yes' | 'no' {
+    if (selectedCaps.has(key)) return 'yes'
+    if (declinedCaps.has(key)) return 'no'
+    return 'owner'
+  }
+
+  function setCapState(key: string, state: 'owner' | 'yes' | 'no') {
+    setSelectedCaps((prev) => {
+      const next = new Set(prev)
+      if (state === 'yes') {
+        next.add(key)
+        // ironing / fuzzy_skin conflict
+        if (key === 'ironing') next.delete('fuzzy_skin')
+        if (key === 'fuzzy_skin') next.delete('ironing')
+      } else {
+        next.delete(key)
+      }
+      return next
+    })
+    setDeclinedCaps((prev) => {
+      const next = new Set(prev)
+      if (state === 'no') {
+        next.add(key)
+        if (key === 'ironing') next.delete('fuzzy_skin')
+        if (key === 'fuzzy_skin') next.delete('ironing')
+      } else {
+        next.delete(key)
+      }
+      return next
+    })
   }
 
   return (
@@ -843,23 +951,76 @@ export default function RequestForm({
           )}
         </div>
 
-        {buildVolume && (
-          <div className="mb-3 flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-            <Ruler className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            Max print size: <span className="font-medium text-slate-700">{buildVolume}</span> — make sure your model fits.
-          </div>
-        )}
+        {buildVolume && (() => {
+          const pv = parseBuildVolume(buildVolume)
+          const withDims = fileItems.filter((i) => i.dimensions)
+          const oversized = pv ? withDims.filter((i) => !fitsInVolume(i.dimensions!, pv)) : []
+          const allFit = pv && withDims.length > 0 && oversized.length === 0
+
+          if (allFit) {
+            return (
+              <div className="mb-3 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
+                <span className="font-bold text-green-500 text-sm">✓</span>
+                <span>
+                  <span className="font-semibold">Fits on this printer</span>
+                  {' '}— build volume {buildVolume}
+                </span>
+              </div>
+            )
+          }
+
+          if (oversized.length > 0) {
+            return (
+              <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                <p className="font-semibold mb-0.5">
+                  ✗ {oversized.length === 1 ? 'File exceeds' : 'Some files exceed'} this printer&apos;s build volume ({buildVolume})
+                </p>
+                {oversized.map((i, idx) => {
+                  const d = i.dimensions!
+                  const largest = Math.max(d.x, d.y, d.z)
+                  const printerLargest = pv ? Math.max(pv.x, pv.y, pv.z) : 0
+                  return (
+                    <p key={i.id} className="text-red-600">
+                      {withDims.length > 1 ? `File ${idx + 1}: ` : ''}{d.x} × {d.y} × {d.z} mm
+                      {largest > printerLargest && (
+                        <span className="ml-1 text-red-500">(largest dim {largest}mm, printer max {printerLargest}mm)</span>
+                      )}
+                    </p>
+                  )
+                })}
+                <p className="mt-1 text-red-500">The owner may be able to split the model into parts — include a note below.</p>
+              </div>
+            )
+          }
+
+          // No files uploaded yet — static hint
+          return (
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              <Ruler className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              Max print size: <span className="font-medium text-slate-700">{buildVolume}</span> — dimensions will be checked when you upload a file.
+            </div>
+          )
+        })()}
 
         {modelMode === null && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {[
-              { mode: 'link'     as const, icon: Link2,  title: 'Paste a link',    desc: 'Found it on MakerWorld, Printables, Thingiverse, etc.' },
-              { mode: 'file'     as const, icon: FileUp, title: 'Upload a file',   desc: 'Have an STL, 3MF, or OBJ file ready to go.' },
-              { mode: 'describe' as const, icon: PenLine,title: "I'll describe it",desc: "No file yet — you'll describe what you need below." },
+              {
+                mode: 'link' as const,
+                icon: Link2,
+                title: 'I have a reference',
+                desc: 'Share a link to what you want — MakerWorld, Printables, Thingiverse, a product page, or any reference image.',
+              },
+              {
+                mode: 'file' as const,
+                icon: FileUp,
+                title: 'I have the 3D file',
+                desc: 'Upload your own STL, 3MF, or OBJ — modelled yourself or downloaded and ready to print.',
+              },
             ].map(({ mode, icon: Icon, title, desc }) => (
               <button key={mode} type="button" onClick={() => pickMode(mode)}
-                className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 p-5 text-center hover:border-orange-400 hover:bg-orange-50 transition">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+                className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 p-6 text-center hover:border-orange-400 hover:bg-orange-50 transition">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100">
                   <Icon className="h-5 w-5 text-slate-500" />
                 </div>
                 <p className="text-sm font-semibold text-slate-800">{title}</p>
@@ -874,7 +1035,7 @@ export default function RequestForm({
           <div className="space-y-3">
             <div className="relative">
               <input type="url" value={modelUrl} onChange={(e) => setModelUrl(e.target.value)}
-                placeholder="https://makerworld.com/models/..." className={`${inputClass} pr-9`} autoFocus />
+                placeholder="https://www.thingiverse.com/thing:... or any reference link" className={`${inputClass} pr-9`} autoFocus />
               {ogLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-orange-400" />}
             </div>
 
@@ -913,10 +1074,9 @@ export default function RequestForm({
                     <Download className="h-4 w-4 text-blue-500" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-blue-900">Upload the model files for a 3D preview</p>
+                    <p className="text-sm font-semibold text-blue-900">Have the file too? Upload it for a 3D preview</p>
                     <p className="mt-0.5 text-xs text-blue-600">
-                      Download the STL or 3MF files from the link above, then drop them here.
-                      3MF files will be split into parts automatically so you can pick a color for each one.
+                      Optional — the link above is enough. If you already downloaded the STL or 3MF, you can drop it here so the owner gets a preview and dimension check.
                     </p>
                   </div>
                 </div>
@@ -934,6 +1094,7 @@ export default function RequestForm({
                   addMoreRef={addInputRef}
                   onDrop={addFiles}
                   onAddMore={addFiles}
+                  buildVolume={buildVolume}
                 />
                 <input ref={linkUploadRef} type="file" accept={ACCEPTED_FORMATS} multiple className="hidden"
                   onChange={(e) => { if (e.target.files) { addFiles(e.target.files); e.target.value = '' } }} />
@@ -957,35 +1118,90 @@ export default function RequestForm({
             addMoreRef={addInputRef}
             onDrop={addFiles}
             onAddMore={addFiles}
+            buildVolume={buildVolume}
           />
         )}
 
-        {modelMode === 'describe' && (
-          <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-            No problem — describe what you need in the field below. The owner will work with you on the design.
-          </div>
-        )}
       </div>
+
+      {/* ── Material, Color, Size ─────────────────────────── */}
+      {formVisible && (
+        <>
+          {/* Material */}
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-slate-700">Material <span className="text-red-500">*</span></h3>
+            <p className="mb-3 text-xs text-slate-400">Which filament do you want your print in?</p>
+            <div className="space-y-2">
+              {printer.materials.map((mat) => (
+                <button key={mat} type="button" onClick={() => setMaterial(mat)}
+                  className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${material === mat ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'}`}>
+                  <p className={`text-sm font-medium ${material === mat ? 'text-orange-700' : 'text-slate-800'}`}>{MATERIAL_LABELS[mat]}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{MATERIAL_DESCRIPTIONS[mat]}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Color */}
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-slate-700">Color</h3>
+            <p className="mb-3 text-xs text-slate-400">What color do you want? Leave as &quot;Any&quot; if you&apos;re flexible.</p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              <button type="button" onClick={() => { setRequestColor('Any'); setRequestColorHex('#888888') }}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${requestColor === 'Any' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'}`}>
+                Any / Owner decides
+              </button>
+              {COLOR_PRESETS.map(({ name, hex }) => (
+                <button key={name} type="button" onClick={() => { setRequestColor(name); setRequestColorHex(hex) }}
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${requestColor === name ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'}`}>
+                  <span className="h-3 w-3 rounded-full border border-slate-200 shrink-0" style={{ background: hex }} />
+                  {name}
+                </button>
+              ))}
+            </div>
+            {requestColor !== 'Any' && (
+              <p className="text-xs text-slate-400">Selected: <span className="font-medium text-slate-700">{requestColor}</span></p>
+            )}
+          </div>
+
+          {/* Size — only for link mode without file dimensions */}
+          {modelMode === 'link' && !fileItems.some((i) => i.dimensions) && (
+            <div>
+              <h3 className="mb-1 text-sm font-semibold text-slate-700">Approximate size</h3>
+              <p className="mb-3 text-xs text-slate-400">Best guess — the owner will confirm from the reference.</p>
+              <div className="grid grid-cols-3 gap-2">
+                {(['small', 'medium', 'large'] as const).map((s) => (
+                  <button key={s} type="button" onClick={() => setLinkSize(s)}
+                    className={`rounded-xl border px-3 py-3 text-center transition ${linkSize === s ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
+                    <p className="text-sm font-medium capitalize">{s}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{SIZE_LABELS[s].split(' ')[1]}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* ── Sections B + C ───────────────────────────────────── */}
       {formVisible && (
         <>
           <div>
-            <h3 className="mb-1 text-sm font-semibold text-slate-700">Quality <span className="text-red-500">*</span></h3>
-            <p className="mb-3 text-xs text-slate-400">Higher quality = slower print, smoother finish</p>
+            <h3 className="mb-1 text-sm font-semibold text-slate-700">Finish expectation <span className="text-red-500">*</span></h3>
+            <p className="mb-3 text-xs text-slate-400">How important is the surface finish to you? The owner will decide the best settings to achieve it.</p>
             <div className="grid grid-cols-3 gap-2">
-              {(['draft', 'standard', 'premium'] as PrintQuality[]).map((q) => {
-                const infill = q === 'draft' ? (defaultProfile?.infill_draft ?? 15) : q === 'standard' ? (defaultProfile?.infill_standard ?? 25) : (defaultProfile?.infill_premium ?? 40)
-                const desc   = q === 'draft' ? 'Fast, rough finish' : q === 'standard' ? 'Balanced — most jobs' : 'Slow, smooth finish'
-                return (
-                  <button key={q} type="button" onClick={() => setQuality(q)}
-                    className={`rounded-xl border px-3 py-3 text-center transition ${quality === q ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
-                    <p className="text-sm font-medium capitalize">{q}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{infill}% infill</p>
-                    <p className="text-xs text-slate-400">{desc}</p>
-                  </button>
-                )
-              })}
+              {([
+                { q: 'functional'  as PrintQuality, label: 'Functional',      desc: 'Shape matters most, minor surface marks are fine',       infill: defaultProfile?.infill_draft    ?? 15 },
+                { q: 'presentable' as PrintQuality, label: 'Presentable',     desc: 'Looks good, layer lines acceptable',                     infill: defaultProfile?.infill_standard ?? 25 },
+                { q: 'display'     as PrintQuality, label: 'Display quality', desc: 'As smooth as possible, closest to the reference',        infill: defaultProfile?.infill_premium  ?? 40 },
+              ]).map(({ q, label, desc, infill }) => (
+                <button key={q} type="button" onClick={() => setQuality(q)}
+                  className={`rounded-xl border px-3 py-3 text-center transition ${quality === q ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
+                  <p className="text-sm font-medium">{label}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{infill}% infill</p>
+                  <p className="text-xs text-slate-400">{desc}</p>
+                </button>
+              ))}
             </div>
           </div>
 
@@ -993,65 +1209,114 @@ export default function RequestForm({
           {hasAnyCap && (
             <div>
               <h3 className="mb-1 text-sm font-semibold text-slate-700">Print options</h3>
-              <p className="mb-3 text-xs text-slate-400">Optional — select any special features you need for this print</p>
+              <p className="mb-3 text-xs text-slate-400">Not sure? Leave on <span className="font-medium text-slate-500">Owner decides</span> — the owner will apply what suits your model best.</p>
+
+              {/* ── Owner-decide options (3-state) ── */}
+              {Object.entries(OWNER_DECIDE_CAPS).some(([key]) => availableCaps[key as keyof typeof availableCaps]) && (
+                <div className="space-y-2 mb-3">
+                  {(Object.entries(OWNER_DECIDE_CAPS) as [string, { label: string; desc: string }][])
+                    .filter(([key]) => availableCaps[key as keyof typeof availableCaps])
+                    .map(([key, info]) => {
+                      const state = capState(key)
+                      const conflicted =
+                        (key === 'ironing' && capState('fuzzy_skin') === 'yes') ||
+                        (key === 'fuzzy_skin' && capState('ironing') === 'yes')
+                      return (
+                        <div key={key} className={`rounded-xl border px-3 py-2.5 transition ${
+                          conflicted ? 'border-slate-100 bg-slate-50 opacity-40' :
+                          state === 'yes' ? 'border-orange-300 bg-orange-50' :
+                          state === 'no'  ? 'border-slate-200 bg-slate-50' :
+                          'border-slate-200 bg-white'
+                        }`}>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`text-sm font-medium truncate ${state === 'no' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                                {info.label}
+                              </span>
+                              <button
+                                type="button"
+                                onMouseEnter={(e) => setCapTooltip({ key, x: e.clientX, y: e.clientY })}
+                                onMouseLeave={() => setCapTooltip(null)}
+                                className="shrink-0 text-slate-300 hover:text-slate-500 transition"
+                                tabIndex={-1}
+                              >
+                                <HelpCircle className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            {/* 3-state segmented control */}
+                            <div className="flex shrink-0 rounded-lg border border-slate-200 overflow-hidden text-xs">
+                              {(['owner', 'yes', 'no'] as const).map((s) => (
+                                <button
+                                  key={s}
+                                  type="button"
+                                  disabled={conflicted}
+                                  onClick={() => setCapState(key, s)}
+                                  className={`px-2.5 py-1 transition font-medium ${
+                                    state === s
+                                      ? s === 'yes' ? 'bg-orange-500 text-white'
+                                      : s === 'no'  ? 'bg-slate-200 text-slate-600'
+                                      : 'bg-slate-100 text-slate-600'
+                                      : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                                  } ${s !== 'no' ? 'border-r border-slate-200' : ''}`}
+                                >
+                                  {s === 'owner' ? 'Owner decides' : s === 'yes' ? 'Yes' : 'No'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          {conflicted && (
+                            <p className="mt-1 text-[11px] text-slate-400">
+                              Conflicts with {key === 'ironing' ? 'fuzzy skin' : 'ironing'} — set that to Owner decides first
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })}
+                </div>
+              )}
+
+              {/* ── Customer-driven options (binary toggle) ── */}
               <div className="space-y-2">
-                {(Object.entries(availableCaps) as [string, boolean][])
-                  .filter(([, available]) => available)
+                {(Object.entries(CUSTOMER_CAPS) as [string, { label: string; desc: string }][])
+                  .filter(([key]) => availableCaps[key as keyof typeof availableCaps])
                   .map(([key]) => {
-                    const info = CAP_INFO[key]
+                    const info = CUSTOMER_CAPS[key]
                     const isOn = selectedCaps.has(key)
-                    const isConflicted =
-                      (key === 'ironing' && selectedCaps.has('fuzzy_skin')) ||
-                      (key === 'fuzzy_skin' && selectedCaps.has('ironing'))
                     return (
                       <div key={key}>
                         <div className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition ${
-                          isConflicted ? 'border-slate-100 bg-slate-50 opacity-50' :
                           isOn ? 'border-orange-300 bg-orange-50' : 'border-slate-200 bg-white hover:border-slate-300'
                         }`}>
                           {/* Toggle switch */}
                           <button
                             type="button"
-                            disabled={isConflicted}
                             onClick={() => {
                               setSelectedCaps((prev) => {
                                 const next = new Set(prev)
-                                if (next.has(key)) {
-                                  next.delete(key)
-                                } else {
-                                  next.add(key)
-                                  if (key === 'ironing') next.delete('fuzzy_skin')
-                                  if (key === 'fuzzy_skin') next.delete('ironing')
-                                }
+                                if (next.has(key)) next.delete(key)
+                                else next.add(key)
                                 return next
                               })
-                              if (key === 'text_on_surface') setSurfaceText('')
-                              if (key === 'pause_insert') setInsertNotes('')
+                              if (!selectedCaps.has(key) === false) {
+                                if (key === 'text_on_surface') setSurfaceText('')
+                                if (key === 'pause_insert') setInsertNotes('')
+                              }
                             }}
-                            className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                              isConflicted ? 'cursor-not-allowed bg-slate-200' :
-                              isOn ? 'cursor-pointer bg-orange-500' : 'cursor-pointer bg-slate-200'
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                              isOn ? 'bg-orange-500' : 'bg-slate-200'
                             }`}
                           >
                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ${isOn ? 'translate-x-4' : 'translate-x-0'}`} />
                           </button>
                           <span className={`flex-1 text-sm ${isOn ? 'font-medium text-orange-800' : 'text-slate-700'}`}>{info.label}</span>
-                          {isConflicted && (
-                            <span className="text-[10px] text-slate-400 italic shrink-0">
-                              conflicts with {key === 'ironing' ? 'Fuzzy skin' : 'Ironing'}
-                            </span>
-                          )}
-                          {/* ? tooltip */}
                           <button
                             type="button"
-                            onMouseEnter={(e) => {
-                              const r = e.currentTarget.getBoundingClientRect()
-                              setCapTooltip({ key, x: r.left + r.width / 2, y: r.top })
-                            }}
+                            onMouseEnter={(e) => setCapTooltip({ key, x: e.clientX, y: e.clientY })}
                             onMouseLeave={() => setCapTooltip(null)}
-                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-500 hover:bg-blue-100 hover:text-blue-600 transition cursor-help"
+                            className="text-slate-300 hover:text-slate-500 transition"
+                            tabIndex={-1}
                           >
-                            ?
+                            <HelpCircle className="h-3.5 w-3.5" />
                           </button>
                         </div>
                         {/* Embedded inserts input */}
@@ -1099,8 +1364,8 @@ export default function RequestForm({
                   }}
                   className="pointer-events-none rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-snug text-white shadow-xl max-w-[220px] text-center"
                 >
-                  <strong className="block mb-0.5">{CAP_INFO[capTooltip.key].label}</strong>
-                  {CAP_INFO[capTooltip.key].desc}
+                  <strong className="block mb-0.5">{(OWNER_DECIDE_CAPS[capTooltip.key] ?? CUSTOMER_CAPS[capTooltip.key])?.label}</strong>
+                  {(OWNER_DECIDE_CAPS[capTooltip.key] ?? CUSTOMER_CAPS[capTooltip.key])?.desc}
                   <div style={{
                     position: 'absolute', left: '50%', top: '100%',
                     transform: 'translateX(-50%)', width: 0, height: 0,
