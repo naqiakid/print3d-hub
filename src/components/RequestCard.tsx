@@ -86,15 +86,15 @@ export default function RequestCard({ request, printer }: { request: PrintReques
   // Delivery cost breakdown (delivery orders only)
   const [deliveryCost, setDeliveryCost] = useState('')
 
-  // Model file upload for quote (when customer only gave a link)
-  const quoteStlInputRef = useRef<HTMLInputElement>(null)
-  const [quoteStlUrls, setQuoteStlUrls] = useState<string[]>([])
-  const [stlUploading, setStlUploading] = useState(false)
-
   // Quote model upload (3D file for customer 360° review)
   const previewInputRef = useRef<HTMLInputElement>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewUploading, setPreviewUploading] = useState(false)
+
+  // Delivery auto-calculation
+  const [deliveryCalcKm, setDeliveryCalcKm] = useState<number | null>(null)
+  const [deliveryCalcLoading, setDeliveryCalcLoading] = useState(false)
+  const [deliveryCalcError, setDeliveryCalcError] = useState('')
 
   const defaultMaterial = (request.material ?? 'pla') as FilamentMaterial
   const defaultColorHex = request.color && request.color !== 'Any' ? (request.color_hex || '#888888') : '#888888'
@@ -167,6 +167,44 @@ export default function RequestCard({ request, printer }: { request: PrintReques
     updatingFromPrice.current = false
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quoteMarkup, anyStats])
+
+  // Auto-calculate delivery cost when quote form opens
+  useEffect(() => {
+    if (!showQuoteForm || request.fulfillment !== 'delivery') return
+    if (!request.delivery_address?.trim() || !printer.lat || !printer.lng) {
+      setDeliveryCalcError('Cannot calculate — missing address or printer location.')
+      return
+    }
+    setDeliveryCalcLoading(true)
+    setDeliveryCalcError('')
+    setDeliveryCalcKm(null)
+    fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(request.delivery_address)}&format=json&limit=1&countrycodes=my`,
+      { headers: { 'User-Agent': 'Print3DHubApp/1.0' } },
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data?.[0]) { setDeliveryCalcError('Delivery address not found'); setDeliveryCalcLoading(false); return }
+        const cLat = parseFloat(data[0].lat)
+        const cLng = parseFloat(data[0].lon)
+        const R = 6371
+        const dLat = (cLat - printer.lat) * Math.PI / 180
+        const dLng = (cLng - printer.lng) * Math.PI / 180
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(printer.lat * Math.PI / 180) * Math.cos(cLat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+        const straight = R * 2 * Math.asin(Math.sqrt(a))
+        const road = straight * 1.3
+        const rate = printer.delivery_rate_per_km ?? 1.00
+        const fee = Math.ceil(road * rate * 10) / 10
+        setDeliveryCalcKm(Math.round(road * 10) / 10)
+        setDeliveryCost(fee.toFixed(2))
+        setDeliveryCalcLoading(false)
+      })
+      .catch(() => {
+        setDeliveryCalcError('Could not calculate distance')
+        setDeliveryCalcLoading(false)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showQuoteForm, request.fulfillment])
 
   function handleQuotePriceChange(val: string) {
     setQuotePrice(val)
@@ -270,22 +308,6 @@ export default function RequestCard({ request, printer }: { request: PrintReques
     setGcodeItems((prev) => prev.filter((i) => i.id !== id))
   }
 
-  async function handleStlUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setStlUploading(true)
-    const supabase = createClient()
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    const path = `quote/${request.id}_${Date.now()}_${safeName}`
-    const { data: uploadData } = await supabase.storage.from('stl-files').upload(path, file)
-    if (uploadData) {
-      const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
-      setQuoteStlUrls([urlData.publicUrl])
-    }
-    setStlUploading(false)
-    if (quoteStlInputRef.current) quoteStlInputRef.current.value = ''
-  }
-
   async function handlePreviewUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -326,10 +348,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
       }))
       // Primary material = first plate's material, or customer's requested material
       const primaryMaterial = gcodeItems[0]?.material ?? defaultMaterial
-      const parsedDeliveryCost   = parseFloat(deliveryCost) > 0 ? parseFloat(deliveryCost) : null
-      const mergedStlUrls        = quoteStlUrls.length > 0
-        ? [...(request.stl_urls ?? []), ...quoteStlUrls]
-        : undefined
+      const parsedDeliveryCost = parseFloat(deliveryCost) > 0 ? parseFloat(deliveryCost) : null
 
       const result = await sendQuote(
         request.id,
@@ -343,7 +362,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
         plateFilaments.length ? plateFilaments : undefined,
         [...confirmedAddons],
         parsedDeliveryCost,
-        mergedStlUrls,
+        undefined,
         previewUrl ?? undefined,
       )
       if (result?.error) setActionError(result.error)
@@ -828,6 +847,42 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                 )}
               </div>
 
+              {/* Quote model upload — 3D file for customer 360° review */}
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-slate-600">
+                  3D model preview <span className="text-red-500">*</span>
+                </p>
+                <p className="mb-2 text-[11px] text-slate-400">
+                  Upload the model file (.stl / .3mf) that will be printed.
+                  The customer can rotate it 360° to review the shape
+                  {request.selected_addons?.includes('text_on_surface') ? ' and text placement' : ''} before confirming.
+                </p>
+                {previewUrl ? (
+                  <div className="space-y-2">
+                    <Suspense fallback={<div className="h-48 rounded-xl bg-slate-100 animate-pulse" />}>
+                      <STLViewer
+                        urls={[previewUrl]}
+                        colors={[gcodeItems[0]?.colorHex || defaultColorHex || '#e0e0e0']}
+                        className="h-48 w-full rounded-xl border border-slate-200"
+                      />
+                    </Suspense>
+                    <button type="button" onClick={() => setPreviewUrl(null)}
+                      className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-red-500 transition">
+                      <X className="h-3 w-3" /> Remove model
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input ref={previewInputRef} type="file" accept=".stl,.3mf,.obj" className="hidden" onChange={handlePreviewUpload} />
+                    <button type="button" disabled={previewUploading} onClick={() => previewInputRef.current?.click()}
+                      className="flex items-center gap-2 rounded-xl border border-dashed border-orange-300 px-4 py-2.5 text-xs font-medium text-orange-500 hover:bg-orange-50 disabled:opacity-50 transition">
+                      <Upload className="h-3.5 w-3.5" />
+                      {previewUploading ? 'Uploading…' : 'Upload .stl / .3mf model file'}
+                    </button>
+                  </>
+                )}
+              </div>
+
               {/* ── Feature confirmation checklist ── */}
               {(() => {
                 const addonsToConfirm: { key: string; label: string; detail?: string }[] = []
@@ -1058,85 +1113,23 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                     )}
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-blue-700">Delivery cost (optional)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">RM</span>
-                      <input
-                        type="number" min="0" step="0.50"
-                        value={deliveryCost}
-                        onChange={(e) => setDeliveryCost(e.target.value)}
-                        placeholder="0.00"
-                        className="w-full rounded-lg border border-blue-200 bg-white pl-8 pr-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
-                      />
-                    </div>
-                    <p className="mt-1 text-[11px] text-blue-500">Customer will see a print + delivery breakdown on their tracking page.</p>
+                    <p className="mb-1 text-xs font-medium text-blue-700">Delivery cost</p>
+                    {deliveryCalcLoading ? (
+                      <div className="flex items-center gap-1.5 text-xs text-blue-500">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Calculating distance…
+                      </div>
+                    ) : deliveryCalcError ? (
+                      <p className="text-xs text-red-500">{deliveryCalcError}</p>
+                    ) : deliveryCalcKm != null ? (
+                      <div className="rounded-lg border border-blue-200 bg-white px-3 py-2 flex items-center justify-between">
+                        <span className="text-xs text-blue-600">~{deliveryCalcKm} km road distance</span>
+                        <span className="text-sm font-bold text-blue-800">RM {deliveryCost}</span>
+                      </div>
+                    ) : null}
+                    <p className="mt-1 text-[11px] text-blue-500">Auto-calculated from your rate × estimated road distance. Customer sees a print + delivery breakdown on their tracking page.</p>
                   </div>
                 </div>
               )}
-
-              {/* ── Model file (when customer only gave a link) ── */}
-              {(request.stl_urls?.length ?? 0) === 0 && !request.stl_url && (
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">Attach 3D model preview (optional)</label>
-                  <p className="mb-2 text-[11px] text-slate-400">
-                    Customer gave a link, not a file. Attach the prepared model so they can preview it in 3D on their tracking page.
-                  </p>
-                  {quoteStlUrls.length > 0 ? (
-                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                      <FileText className="h-3.5 w-3.5 shrink-0 text-orange-500" />
-                      <span className="flex-1 truncate text-xs text-slate-600">Model attached ✓</span>
-                      <button type="button" onClick={() => setQuoteStlUrls([])} className="text-slate-300 hover:text-red-400 transition">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <input ref={quoteStlInputRef} type="file" accept=".stl,.3mf" className="hidden" onChange={handleStlUpload} />
-                      <button type="button" disabled={stlUploading} onClick={() => quoteStlInputRef.current?.click()}
-                        className="flex items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-2 text-xs font-medium text-slate-500 hover:border-orange-400 hover:text-orange-600 disabled:opacity-50 transition">
-                        <Upload className="h-3.5 w-3.5" />
-                        {stlUploading ? 'Uploading…' : 'Attach .stl / .3mf file'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Quote model upload — 3D file for customer 360° review */}
-              <div>
-                <p className="mb-1.5 text-xs font-medium text-slate-600">
-                  3D model preview <span className="text-red-500">*</span>
-                </p>
-                <p className="mb-2 text-[11px] text-slate-400">
-                  Upload the model file (.stl / .3mf) that will be printed.
-                  The customer can rotate it 360° to review the shape
-                  {request.selected_addons?.includes('text_on_surface') ? ' and text placement' : ''} before confirming.
-                </p>
-                {previewUrl ? (
-                  <div className="space-y-2">
-                    <Suspense fallback={<div className="h-48 rounded-xl bg-slate-100 animate-pulse" />}>
-                      <STLViewer
-                        urls={[previewUrl]}
-                        colors={[gcodeItems[0]?.colorHex || defaultColorHex || '#e0e0e0']}
-                        className="h-48 w-full rounded-xl border border-slate-200"
-                      />
-                    </Suspense>
-                    <button type="button" onClick={() => setPreviewUrl(null)}
-                      className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-red-500 transition">
-                      <X className="h-3 w-3" /> Remove model
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <input ref={previewInputRef} type="file" accept=".stl,.3mf,.obj" className="hidden" onChange={handlePreviewUpload} />
-                    <button type="button" disabled={previewUploading} onClick={() => previewInputRef.current?.click()}
-                      className="flex items-center gap-2 rounded-xl border border-dashed border-orange-300 px-4 py-2.5 text-xs font-medium text-orange-500 hover:bg-orange-50 disabled:opacity-50 transition">
-                      <Upload className="h-3.5 w-3.5" />
-                      {previewUploading ? 'Uploading…' : 'Upload .stl / .3mf model file'}
-                    </button>
-                  </>
-                )}
-              </div>
 
               <div className="flex gap-2">
                 <button onClick={handleSendQuote}
