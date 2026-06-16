@@ -17,6 +17,8 @@ import {
   formatRM,
   DEFAULT_ELECTRICITY_RATE,
   DEFAULT_MARKUP_PERCENT,
+  DEFAULT_MACHINE_RATE,
+  DEFAULT_WASTE_PERCENT,
   DEFAULT_FILAMENT_COST_PER_KG,
 } from '@/lib/pricing'
 import { createClient } from '@/lib/supabase/client'
@@ -72,6 +74,8 @@ export default function RequestCard({ request, printer }: { request: PrintReques
   const [breakdown, setBreakdown] = useState<{
     perPlate: { label: string; cost: number }[]
     electricityCost: number
+    machineCost: number
+    wasteCost: number
     baseCost: number
     markup: number
     total: number
@@ -79,6 +83,14 @@ export default function RequestCard({ request, printer }: { request: PrintReques
     electricityRate: number
     markupPct: number
   } | null>(null)
+
+  // Delivery cost breakdown (delivery orders only)
+  const [deliveryCost, setDeliveryCost] = useState('')
+
+  // Model file upload for quote (when customer only gave a link)
+  const quoteStlInputRef = useRef<HTMLInputElement>(null)
+  const [quoteStlUrls, setQuoteStlUrls] = useState<string[]>([])
+  const [stlUploading, setStlUploading] = useState(false)
 
   const defaultMaterial = (request.material ?? 'pla') as FilamentMaterial
   const defaultColorHex = request.color && request.color !== 'Any' ? (request.color_hex || '#888888') : '#888888'
@@ -94,8 +106,10 @@ export default function RequestCard({ request, printer }: { request: PrintReques
           material: defaultMaterial,
           power_watts: modelPowerWatts,
           cost_per_kg: printer.filament_costs[defaultMaterial]!,
-          electricity_rate: printer.electricity_rate ?? DEFAULT_ELECTRICITY_RATE,
-          markup_percent: printer.markup_percent ?? DEFAULT_MARKUP_PERCENT,
+          electricity_rate:      printer.electricity_rate      ?? DEFAULT_ELECTRICITY_RATE,
+          markup_percent:        printer.markup_percent        ?? DEFAULT_MARKUP_PERCENT,
+          machine_rate_per_hour: printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE,
+          waste_percent:         printer.waste_percent         ?? DEFAULT_WASTE_PERCENT,
         })
       : null
 
@@ -124,13 +138,18 @@ export default function RequestCard({ request, printer }: { request: PrintReques
         }
       })
 
+    const machineRate       = printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE
+    const wastePct          = printer.waste_percent         ?? DEFAULT_WASTE_PERCENT
     const totalFilamentCost = perPlate.reduce((s, p) => s + p.cost, 0)
     const electricityCost   = totalHours > 0 ? totalHours * (powerWatts / 1000) * elecRate : 0
-    const baseCost          = totalFilamentCost + electricityCost
+    const machineCost       = totalHours > 0 ? totalHours * machineRate : 0
+    const subtotal          = totalFilamentCost + electricityCost + machineCost
+    const wasteCost         = subtotal * (wastePct / 100)
+    const baseCost          = subtotal + wasteCost
     const markup            = baseCost * (markupPct / 100)
     const total             = baseCost + markup
 
-    setBreakdown({ perPlate, electricityCost, baseCost, markup, total, powerWatts, electricityRate: elecRate, markupPct })
+    setBreakdown({ perPlate, electricityCost, machineCost, wasteCost, baseCost, markup, total, powerWatts, electricityRate: elecRate, markupPct })
     if (!updatingFromPrice.current) setQuotePrice(total.toFixed(2))
     updatingFromPrice.current = false
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -246,6 +265,22 @@ export default function RequestCard({ request, printer }: { request: PrintReques
     setGcodeItems((prev) => prev.filter((i) => i.id !== id))
   }
 
+  async function handleStlUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setStlUploading(true)
+    const supabase = createClient()
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const path = `quote/${request.id}_${Date.now()}_${safeName}`
+    const { data: uploadData } = await supabase.storage.from('stl-files').upload(path, file)
+    if (uploadData) {
+      const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
+      setQuoteStlUrls([urlData.publicUrl])
+    }
+    setStlUploading(false)
+    if (quoteStlInputRef.current) quoteStlInputRef.current.value = ''
+  }
+
   function handleStatusUpdate(newStatus: RequestStatus) {
     setActionError('')
     startTransition(async () => {
@@ -267,6 +302,11 @@ export default function RequestCard({ request, printer }: { request: PrintReques
       }))
       // Primary material = first plate's material, or customer's requested material
       const primaryMaterial = gcodeItems[0]?.material ?? defaultMaterial
+      const parsedDeliveryCost   = parseFloat(deliveryCost) > 0 ? parseFloat(deliveryCost) : null
+      const mergedStlUrls        = quoteStlUrls.length > 0
+        ? [...(request.stl_urls ?? []), ...quoteStlUrls]
+        : undefined
+
       const result = await sendQuote(
         request.id,
         Math.round(finalPrice * 100) / 100,
@@ -278,6 +318,8 @@ export default function RequestCard({ request, printer }: { request: PrintReques
         primaryMaterial,
         plateFilaments.length ? plateFilaments : undefined,
         [...confirmedAddons],
+        parsedDeliveryCost,
+        mergedStlUrls,
       )
       if (result?.error) setActionError(result.error)
       else setShowQuoteForm(false)
@@ -884,6 +926,18 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                             </span>
                             <span className="font-medium text-slate-800 tabular-nums">RM {bd.electricityCost.toFixed(2)}</span>
                           </div>
+                          {bd.machineCost > 0 && (
+                            <div className="flex justify-between text-slate-600">
+                              <span className="text-slate-500">Machine ({fmtHours(totalHours)} × RM{printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE}/hr)</span>
+                              <span className="font-medium text-slate-800 tabular-nums">RM {bd.machineCost.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {bd.wasteCost > 0 && (
+                            <div className="flex justify-between text-slate-600">
+                              <span className="text-slate-500">Waste & maintenance ({printer.waste_percent ?? DEFAULT_WASTE_PERCENT}%)</span>
+                              <span className="font-medium text-slate-800 tabular-nums">RM {bd.wasteCost.toFixed(2)}</span>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <>
@@ -895,6 +949,18 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                             <span className="text-slate-500">Electricity (~{est!.hours}h estimate)</span>
                             <span className="font-medium text-slate-800 tabular-nums">RM {est!.electricity_cost.toFixed(2)}</span>
                           </div>
+                          {est!.machine_cost > 0 && (
+                            <div className="flex justify-between text-slate-600">
+                              <span className="text-slate-500">Machine (~{est!.hours}h estimate)</span>
+                              <span className="font-medium text-slate-800 tabular-nums">RM {est!.machine_cost.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {est!.waste_cost > 0 && (
+                            <div className="flex justify-between text-slate-600">
+                              <span className="text-slate-500">Waste & maintenance ({printer.waste_percent ?? DEFAULT_WASTE_PERCENT}%)</span>
+                              <span className="font-medium text-slate-800 tabular-nums">RM {est!.waste_cost.toFixed(2)}</span>
+                            </div>
+                          )}
                         </>
                       )}
 
@@ -949,6 +1015,65 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                 <input type="text" placeholder="Any notes for the customer..." value={quoteMessage}
                   onChange={(e) => setQuoteMessage(e.target.value)} className={inputClass} />
               </div>
+
+              {/* ── Delivery cost (delivery orders only) ── */}
+              {request.fulfillment === 'delivery' && (
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold text-blue-800">🚚 Delivery order</p>
+                      {request.delivery_address && (
+                        <p className="text-xs text-blue-600 mt-0.5 line-clamp-1">{request.delivery_address}</p>
+                      )}
+                    </div>
+                    {printer.delivery_rate_per_km && (
+                      <span className="shrink-0 text-xs text-blue-500">RM {Number(printer.delivery_rate_per_km).toFixed(2)}/km</span>
+                    )}
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-blue-700">Delivery cost (optional)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">RM</span>
+                      <input
+                        type="number" min="0" step="0.50"
+                        value={deliveryCost}
+                        onChange={(e) => setDeliveryCost(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full rounded-lg border border-blue-200 bg-white pl-8 pr-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+                      />
+                    </div>
+                    <p className="mt-1 text-[11px] text-blue-500">Customer will see a print + delivery breakdown on their tracking page.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Model file (when customer only gave a link) ── */}
+              {(request.stl_urls?.length ?? 0) === 0 && !request.stl_url && (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Attach 3D model preview (optional)</label>
+                  <p className="mb-2 text-[11px] text-slate-400">
+                    Customer gave a link, not a file. Attach the prepared model so they can preview it in 3D on their tracking page.
+                  </p>
+                  {quoteStlUrls.length > 0 ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                      <FileText className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                      <span className="flex-1 truncate text-xs text-slate-600">Model attached ✓</span>
+                      <button type="button" onClick={() => setQuoteStlUrls([])} className="text-slate-300 hover:text-red-400 transition">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input ref={quoteStlInputRef} type="file" accept=".stl,.3mf" className="hidden" onChange={handleStlUpload} />
+                      <button type="button" disabled={stlUploading} onClick={() => quoteStlInputRef.current?.click()}
+                        className="flex items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-2 text-xs font-medium text-slate-500 hover:border-orange-400 hover:text-orange-600 disabled:opacity-50 transition">
+                        <Upload className="h-3.5 w-3.5" />
+                        {stlUploading ? 'Uploading…' : 'Attach .stl / .3mf file'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-2">
                 <button onClick={handleSendQuote}

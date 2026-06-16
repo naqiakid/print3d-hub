@@ -503,6 +503,8 @@ export async function sendQuote(
   material?: string,
   plateFilaments?: { material: string; color: string; color_hex: string }[],
   confirmedAddons?: string[],
+  deliveryCost?: number | null,
+  stlUrlsToMerge?: string[],
 ): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
   const {
@@ -517,12 +519,14 @@ export async function sendQuote(
       quoted_price: price,
       quoted_by_date: byDate,
       quote_message: message,
-      ...(gcodeUrls !== undefined  && { gcode_urls: gcodeUrls }),
-      ...(weightG != null          && { weight_g: weightG }),
-      ...(printHours != null       && { print_hours: printHours }),
-      ...(material                 && { material }),
-      ...(plateFilaments?.length   && { plate_filaments: plateFilaments }),
-      ...(confirmedAddons          && { confirmed_addons: confirmedAddons }),
+      ...(gcodeUrls !== undefined         && { gcode_urls: gcodeUrls }),
+      ...(weightG != null                 && { weight_g: weightG }),
+      ...(printHours != null              && { print_hours: printHours }),
+      ...(material                        && { material }),
+      ...(plateFilaments?.length          && { plate_filaments: plateFilaments }),
+      ...(confirmedAddons                 && { confirmed_addons: confirmedAddons }),
+      ...(deliveryCost != null            && { delivery_cost: deliveryCost }),
+      ...(stlUrlsToMerge?.length          && { stl_urls: stlUrlsToMerge }),
     })
     .eq('id', requestId)
 

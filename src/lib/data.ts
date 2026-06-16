@@ -246,6 +246,7 @@ export const mockRequests: PrintRequest[] = [
     quoted_price: null,
     quoted_by_date: null,
     quote_message: null,
+    delivery_cost: null,
     created_at: '2026-05-11T08:30:00Z',
   },
   {
@@ -286,6 +287,7 @@ export const mockRequests: PrintRequest[] = [
     quoted_price: 35,
     quoted_by_date: '2026-05-13',
     quote_message: 'I can print this in PETG for strength. Ready by Wednesday.',
+    delivery_cost: null,
     created_at: '2026-05-10T14:00:00Z',
   },
   {
@@ -326,6 +328,7 @@ export const mockRequests: PrintRequest[] = [
     quoted_price: 65,
     quoted_by_date: '2026-05-17',
     quote_message: 'Will print in Nylon for durability. 3 copies at RM65 total.',
+    delivery_cost: null,
     created_at: '2026-05-09T10:00:00Z',
   },
   {
@@ -366,6 +369,7 @@ export const mockRequests: PrintRequest[] = [
     quoted_price: 45,
     quoted_by_date: '2026-05-07',
     quote_message: 'Printed in white PLA, high detail. Looks great!',
+    delivery_cost: null,
     created_at: '2026-05-05T09:00:00Z',
   },
 ]

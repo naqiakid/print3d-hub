@@ -112,6 +112,7 @@ export type PrintRequest = {
   quoted_price: number | null
   quoted_by_date: string | null
   quote_message: string | null
+  delivery_cost: number | null
   created_at: string
 }
 

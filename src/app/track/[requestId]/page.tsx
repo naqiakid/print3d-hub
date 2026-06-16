@@ -159,7 +159,20 @@ export default async function TrackPage({
           {/* Price header */}
           <div>
             <p className="text-xs font-medium text-amber-700 mb-1">Quote from {printer?.name}</p>
-            <p className="text-2xl font-bold text-amber-900">{formatRM(request.quoted_price)}</p>
+            {request.delivery_cost ? (
+              <div>
+                <p className="text-2xl font-bold text-amber-900">
+                  {formatRM(request.quoted_price + request.delivery_cost)}
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-amber-700">
+                  <span>Print: {formatRM(request.quoted_price)}</span>
+                  <span className="text-amber-400">+</span>
+                  <span>🚚 Delivery: {formatRM(request.delivery_cost)}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-2xl font-bold text-amber-900">{formatRM(request.quoted_price)}</p>
+            )}
             {request.quoted_by_date && (
               <p className="text-sm text-amber-700 mt-1">
                 Ready by{' '}
