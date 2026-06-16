@@ -57,6 +57,7 @@ export type Printer = {
   delivery_rate_per_km: number | null
   machine_rate_per_hour: number | null
   waste_percent: number | null
+  advanced_available: boolean
 }
 
 export type PlateFilament = {
@@ -99,6 +100,8 @@ export type PrintRequest = {
   supports: boolean
   size: PrintSize
   quality: PrintQuality
+  custom_infill: number | null
+  custom_wall_count: number | null
   deadline: string
   notes: string
   profile_id: string | null
@@ -123,9 +126,6 @@ export type PrintProfile = {
   nozzle_mm: number
   infill_basic: number
   wall_count_basic: number
-  advanced_available: boolean
-  infill_advanced: number
-  wall_count_advanced: number
   supports_available: boolean
   ironing_available: boolean
   color_change_available: boolean

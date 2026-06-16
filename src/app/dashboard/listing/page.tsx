@@ -7,6 +7,7 @@ import { MATERIAL_LABELS, PRINT_TYPE_LABELS } from '@/lib/types'
 import { PRINTER_MODELS } from '@/lib/printer-models'
 import { bedLabel } from '@/lib/equipment'
 import AvailabilityToggle from '@/components/AvailabilityToggle'
+import AdvancedToggle from '@/components/AdvancedToggle'
 import ListingEditor from '@/components/ListingEditor'
 import CopyLinkButton from '@/components/CopyLinkButton'
 import {
@@ -85,6 +86,19 @@ export default async function ListingPage() {
         <AvailabilityToggle printerId={printer.id} initial={printer.available} />
       </div>
 
+      {/* Advanced tier toggle */}
+      <div className="mb-6 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+        <div>
+          <p className="font-semibold text-slate-900">Advanced tier</p>
+          <p className="text-sm text-slate-500">
+            {printer.advanced_available
+              ? 'Customers can customise infill % and wall count'
+              : 'Only Basic quality shown to customers'}
+          </p>
+        </div>
+        <AdvancedToggle printerId={printer.id} initial={printer.advanced_available} />
+      </div>
+
       {/* Share request link */}
       <div className="mb-4 rounded-2xl border border-orange-100 bg-orange-50 p-5">
         <p className="mb-1 text-sm font-semibold text-slate-800">Your request link</p>
@@ -118,7 +132,7 @@ export default async function ListingPage() {
 
         const tiers = [
           { key: 'basic'    as const, label: 'Basic',    infill: defaultProfile?.infill_basic    ?? 15, walls: defaultProfile?.wall_count_basic    ?? 3 },
-          { key: 'advanced' as const, label: 'Advanced', infill: defaultProfile?.infill_advanced ?? 40, walls: defaultProfile?.wall_count_advanced ?? 5 },
+          { key: 'advanced' as const, label: 'Advanced', infill: 40, walls: 4 },
         ]
 
         const rows = materials.map((mat) => {
@@ -145,14 +159,9 @@ export default async function ListingPage() {
                 <h3 className="font-semibold text-slate-900">Pricing preview</h3>
                 <p className="text-xs text-slate-400 mt-0.5">Typical medium-size print at each quality tier, with your current settings.</p>
               </div>
-              <div className="flex flex-col items-end gap-1.5 shrink-0">
-                <Link href="/dashboard/profiles" className="text-xs font-medium text-orange-500 hover:text-orange-600 transition">
-                  Enable Advanced tier →
-                </Link>
-                <Link href="/dashboard/equipment" className="text-xs font-medium text-slate-400 hover:text-slate-600 transition">
-                  Set filament costs →
-                </Link>
-              </div>
+              <Link href="/dashboard/equipment" className="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-600 transition">
+                Set filament costs →
+              </Link>
             </div>
 
             {/* Grid */}

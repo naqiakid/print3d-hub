@@ -34,6 +34,7 @@ export const printers: Printer[] = [
     delivery_rate_per_km: null,
     machine_rate_per_hour: null,
     waste_percent: null,
+    advanced_available: false,
   },
   {
     id: '2',
@@ -68,6 +69,7 @@ export const printers: Printer[] = [
     delivery_rate_per_km: null,
     machine_rate_per_hour: null,
     waste_percent: null,
+    advanced_available: false,
   },
   {
     id: '3',
@@ -102,6 +104,7 @@ export const printers: Printer[] = [
     delivery_rate_per_km: null,
     machine_rate_per_hour: null,
     waste_percent: null,
+    advanced_available: false,
   },
   {
     id: '4',
@@ -136,6 +139,7 @@ export const printers: Printer[] = [
     delivery_rate_per_km: null,
     machine_rate_per_hour: null,
     waste_percent: null,
+    advanced_available: false,
   },
   {
     id: '5',
@@ -170,6 +174,7 @@ export const printers: Printer[] = [
     delivery_rate_per_km: null,
     machine_rate_per_hour: null,
     waste_percent: null,
+    advanced_available: false,
   },
   {
     id: '6',
@@ -204,6 +209,7 @@ export const printers: Printer[] = [
     delivery_rate_per_km: null,
     machine_rate_per_hour: null,
     waste_percent: null,
+    advanced_available: false,
   },
 ]
 
@@ -233,6 +239,8 @@ export const mockRequests: PrintRequest[] = [
     supports: false,
     size: 'small',
     quality: 'basic',
+    custom_infill: null,
+    custom_wall_count: null,
     deadline: '2026-05-15',
     notes: 'Prefer black or dark grey color if possible.',
     profile_id: null,
@@ -274,6 +282,8 @@ export const mockRequests: PrintRequest[] = [
     supports: false,
     size: 'small',
     quality: 'basic',
+    custom_infill: null,
+    custom_wall_count: null,
     deadline: '2026-05-13',
     notes: 'Must be strong enough to hold a 500g camera.',
     profile_id: null,
@@ -315,6 +325,8 @@ export const mockRequests: PrintRequest[] = [
     supports: true,
     size: 'small',
     quality: 'advanced',
+    custom_infill: null,
+    custom_wall_count: null,
     deadline: '2026-05-18',
     notes: '3 identical copies. Tight tolerance needed.',
     profile_id: null,
@@ -356,6 +368,8 @@ export const mockRequests: PrintRequest[] = [
     supports: false,
     size: 'small',
     quality: 'advanced',
+    custom_infill: null,
+    custom_wall_count: null,
     deadline: '2026-05-08',
     notes: 'I will send a photo of my dog.',
     profile_id: null,

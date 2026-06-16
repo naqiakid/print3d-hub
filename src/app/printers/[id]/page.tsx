@@ -303,7 +303,7 @@ export default async function PrinterDetailPage({
                       <p className="text-sm font-semibold text-slate-800">{p.name}</p>
                       <span className="text-xs text-slate-400">· {p.nozzle_mm}mm nozzle</span>
                       <span className="text-xs text-slate-400">
-                        · Basic {p.infill_basic}% infill{p.advanced_available ? ` · Advanced ${p.infill_advanced}%` : ''}
+                        · {p.infill_basic}% infill
                       </span>
                     </div>
                   </div>

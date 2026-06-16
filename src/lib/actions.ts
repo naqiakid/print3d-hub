@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -42,90 +42,25 @@ async function sendOwnerNotification(data: {
   )
 }
 
-// ─── Print Profile CRUD ─────────────────────────────────────
+// ─── Printer-level Advanced tier ────────────────────────────
 
-export async function createProfile(data: {
-  printer_id: string
-  name: string
-  nozzle_mm: number
-  infill_basic: number
-  wall_count_basic: number
-  advanced_available: boolean
-  infill_advanced: number
-  wall_count_advanced: number
-  supports_available: boolean
-  ironing_available: boolean
-  color_change_available: boolean
-  pause_insert_available: boolean
-  fuzzy_skin_available: boolean
-  text_on_surface_available: boolean
-  is_default: boolean
-}): Promise<{ error: string } | undefined> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
-
-  if (data.is_default) {
-    await supabase
-      .from('print_profiles')
-      .update({ is_default: false })
-      .eq('printer_id', data.printer_id)
-  }
-
-  const { error } = await supabase.from('print_profiles').insert(data)
-  if (error) return { error: error.message }
-  revalidatePath('/dashboard/profiles')
-}
-
-export async function updateProfile(
-  id: string,
-  printer_id: string,
-  data: {
-    name: string
-    nozzle_mm: number
-    infill_basic: number
-    wall_count_basic: number
-    advanced_available: boolean
-    infill_advanced: number
-    wall_count_advanced: number
-    supports_available: boolean
-    ironing_available: boolean
-    color_change_available: boolean
-    pause_insert_available: boolean
-    fuzzy_skin_available: boolean
-    text_on_surface_available: boolean
-    is_default: boolean
-  }
+export async function setPrinterAdvanced(
+  printerId: string,
+  value: boolean,
 ): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' }
 
-  if (data.is_default) {
-    await supabase
-      .from('print_profiles')
-      .update({ is_default: false })
-      .eq('printer_id', printer_id)
-  }
-
   const { error } = await supabase
-    .from('print_profiles')
-    .update(data)
-    .eq('id', id)
+    .from('printers')
+    .update({ advanced_available: value })
+    .eq('id', printerId)
+    .eq('owner_id', user.id)
   if (error) return { error: error.message }
-  revalidatePath('/dashboard/profiles')
+  revalidatePath('/dashboard/listing')
+  revalidatePath('/request')
 }
-
-export async function deleteProfile(id: string): Promise<{ error: string } | undefined> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
-
-  const { error } = await supabase.from('print_profiles').delete().eq('id', id)
-  if (error) return { error: error.message }
-  revalidatePath('/dashboard/profiles')
-}
-
 export async function registerPrinter(data: {
   name: string
   description: string
@@ -186,9 +121,6 @@ export async function registerPrinter(data: {
     nozzle_mm: nozzle,
     infill_basic: 15,
     wall_count_basic: 3,
-    advanced_available: false,
-    infill_advanced: 40,
-    wall_count_advanced: 5,
     supports_available: true,
     ironing_available: false,
     color_change_available: data.print_types.includes('colorful'),
@@ -359,11 +291,13 @@ export async function submitRequest(data: {
   fulfillment?: 'pickup' | 'delivery'
   delivery_address?: string | null
   catalog_item_id?: string | null
+  custom_infill?: number | null
+  custom_wall_count?: number | null
 }): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
 
   // Strip optional columns that may not exist yet if migrations haven't run
-  const { color_preferences, fulfillment, delivery_address, declined_addons, catalog_item_id, ...baseData } = data
+  const { color_preferences, fulfillment, delivery_address, declined_addons, catalog_item_id, custom_infill, custom_wall_count, ...baseData } = data
   const insertPayload = {
     ...baseData,
     ...(color_preferences?.length ? { color_preferences } : {}),
@@ -371,6 +305,8 @@ export async function submitRequest(data: {
     ...(delivery_address ? { delivery_address } : {}),
     ...(declined_addons?.length ? { declined_addons } : {}),
     ...(catalog_item_id ? { catalog_item_id } : {}),
+    ...(custom_infill != null ? { custom_infill } : {}),
+    ...(custom_wall_count != null ? { custom_wall_count } : {}),
   }
 
   const { data: inserted, error } = await supabase
@@ -729,9 +665,6 @@ export async function addNozzleSize(
     nozzle_mm: nozzleMm,
     infill_basic: 15,
     wall_count_basic: 3,
-    advanced_available: false,
-    infill_advanced: 40,
-    wall_count_advanced: 5,
     supports_available: true,
     ironing_available: false,
     color_change_available: false,

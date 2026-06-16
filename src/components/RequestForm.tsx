@@ -598,6 +598,8 @@ export default function RequestForm({
   const [material, setMaterial]       = useState<FilamentMaterial | ''>('')
   const [requestColor, setRequestColor]     = useState('Any')
   const [requestColorHex, setRequestColorHex] = useState('#888888')
+  const [customInfill, setCustomInfill]         = useState(40)
+  const [customWallCount, setCustomWallCount]   = useState(4)
   const [linkSize, setLinkSize] = useState<'small' | 'medium' | 'large'>('medium')
   const [deadlineType, setDeadlineType] = useState<'asap' | 'anytime' | 'date'>('date')
   const [hoveredFileId, setHoveredFileId] = useState<string | null>(null)
@@ -845,6 +847,8 @@ export default function RequestForm({
       color_preferences: colorPrefs.length ? colorPrefs : undefined,
       fulfillment,
       delivery_address: fulfillment === 'delivery' ? deliveryAddress.trim() || null : null,
+      custom_infill:     quality === 'advanced' ? customInfill     : null,
+      custom_wall_count: quality === 'advanced' ? customWallCount  : null,
     })
 
     const submittedEmail = (form.elements.namedItem('email') as HTMLInputElement).value
@@ -909,8 +913,8 @@ export default function RequestForm({
     if (!material) return null
     const filamentCosts = printer.filament_costs as Record<string, number> | null
     const cost_per_kg = filamentCosts?.[material] ?? DEFAULT_FILAMENT_COST_PER_KG[material as FilamentMaterial]
-    const infill     = q === 'basic' ? (defaultProfile?.infill_basic ?? 15)    : (defaultProfile?.infill_advanced ?? 40)
-    const wallCount  = q === 'basic' ? (defaultProfile?.wall_count_basic ?? 3) : (defaultProfile?.wall_count_advanced ?? 5)
+    const infill    = q === 'basic' ? (defaultProfile?.infill_basic ?? 15) : customInfill
+    const wallCount = q === 'basic' ? (defaultProfile?.wall_count_basic ?? 3) : customWallCount
     return calculateEstimate({
       size: estimateSize,
       quality: q,
@@ -926,7 +930,7 @@ export default function RequestForm({
     })
   }
 
-  const hasAdvanced = profiles.some((p) => p.advanced_available)
+  const hasAdvanced = printer.advanced_available
 
   const availableCaps = {
     supports:        profiles.some((p) => p.supports_available),
@@ -1272,9 +1276,9 @@ export default function RequestForm({
             <p className="mb-3 text-xs text-slate-400">Choose your print quality. Advanced uses higher infill and more wall layers for a stronger, better-looking result.</p>
             <div className={`grid gap-2 ${hasAdvanced ? 'grid-cols-2' : 'grid-cols-1'}`}>
               {([
-                { q: 'basic'    as PrintQuality, label: 'Basic',    infill: defaultProfile?.infill_basic    ?? 15, walls: defaultProfile?.wall_count_basic    ?? 3  },
-                ...(hasAdvanced ? [{ q: 'advanced' as PrintQuality, label: 'Advanced', infill: defaultProfile?.infill_advanced ?? 40, walls: defaultProfile?.wall_count_advanced ?? 5  }] : []),
-              ]).map(({ q, label, infill, walls }) => {
+                { q: 'basic' as PrintQuality, label: 'Basic', sub: `${defaultProfile?.infill_basic ?? 15}% infill · ${defaultProfile?.wall_count_basic ?? 3} walls` },
+                ...(hasAdvanced ? [{ q: 'advanced' as PrintQuality, label: 'Advanced', sub: 'You choose infill & wall count' }] : []),
+              ]).map(({ q, label, sub }) => {
                 const est = getQualityEstimate(q)
                 return (
                   <button key={q} type="button" onClick={() => {
@@ -1286,7 +1290,7 @@ export default function RequestForm({
                   }}
                     className={`rounded-xl border px-4 py-3 text-left transition ${quality === q ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'}`}>
                     <p className={`text-sm font-semibold ${quality === q ? 'text-orange-700' : 'text-slate-800'}`}>{label}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{infill}% infill · {walls} walls</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{sub}</p>
                     {est ? (
                       <p className={`text-sm font-semibold mt-1 ${quality === q ? 'text-orange-600' : 'text-slate-600'}`}>
                         ~RM {Math.round(est.suggested_price)}
@@ -1298,6 +1302,41 @@ export default function RequestForm({
                 )
               })}
             </div>
+
+            {/* Advanced — customer-set infill & wall count */}
+            {quality === 'advanced' && (
+              <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50/50 p-4 space-y-3">
+                <p className="text-xs font-semibold text-orange-800">Customise print settings</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-slate-600">Infill %</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range" min={10} max={100} step={5}
+                        value={customInfill}
+                        onChange={(e) => setCustomInfill(Number(e.target.value))}
+                        className="flex-1 accent-orange-500"
+                      />
+                      <span className="w-10 text-right text-sm font-semibold text-slate-700">{customInfill}%</span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-slate-400">Higher = stronger, slower, more material</p>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-slate-600">Wall count</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range" min={2} max={8} step={1}
+                        value={customWallCount}
+                        onChange={(e) => setCustomWallCount(Number(e.target.value))}
+                        className="flex-1 accent-orange-500"
+                      />
+                      <span className="w-10 text-right text-sm font-semibold text-slate-700">{customWallCount}</span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-slate-400">More walls = stronger outer shell</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Advanced add-ons — ironing & fuzzy skin */}
             {quality === 'advanced' && (availableCaps.ironing || availableCaps.fuzzy_skin) && (
