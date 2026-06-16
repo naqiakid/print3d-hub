@@ -183,14 +183,17 @@ export default async function TrackPage({
             )}
           </div>
 
-          {/* ── Slicer preview image ── */}
-          {request.quote_preview_url && (
+          {/* ── 3D model preview (360° viewer) ── */}
+          {request.quote_model_url && (
             <div>
-              <p className="mb-2 text-xs font-medium text-amber-700">Model preview — review before confirming</p>
-              <img
-                src={request.quote_preview_url}
-                alt="Model preview from owner's slicer"
-                className="w-full rounded-xl border border-amber-200 object-contain max-h-72 bg-white"
+              <p className="mb-2 text-xs font-medium text-amber-700">Model preview — drag to rotate, scroll to zoom</p>
+              <STLViewer
+                urls={[request.quote_model_url]}
+                colors={[
+                  request.plate_filaments?.[0]?.color_hex ||
+                  (request.color_hex && request.color !== 'Any' ? request.color_hex : '#e0e0e0')
+                ]}
+                className="h-72 w-full rounded-xl border border-amber-200"
               />
             </div>
           )}

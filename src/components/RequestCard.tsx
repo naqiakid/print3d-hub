@@ -91,7 +91,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
   const [quoteStlUrls, setQuoteStlUrls] = useState<string[]>([])
   const [stlUploading, setStlUploading] = useState(false)
 
-  // Preview image upload (slicer screenshot for customer review)
+  // Quote model upload (3D file for customer 360° review)
   const previewInputRef = useRef<HTMLInputElement>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewUploading, setPreviewUploading] = useState(false)
@@ -292,7 +292,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
     setPreviewUploading(true)
     const supabase = createClient()
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    const path = `previews/${request.id}_${Date.now()}_${safeName}`
+    const path = `quote-models/${request.id}_${Date.now()}_${safeName}`
     const { data: uploadData } = await supabase.storage.from('stl-files').upload(path, file)
     if (uploadData) {
       const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
@@ -344,7 +344,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
         [...confirmedAddons],
         parsedDeliveryCost,
         mergedStlUrls,
-        previewUrl,
+        previewUrl ?? undefined,
       )
       if (result?.error) setActionError(result.error)
       else setShowQuoteForm(false)
@@ -1102,31 +1102,37 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                 </div>
               )}
 
-              {/* Preview image upload */}
+              {/* Quote model upload — 3D file for customer 360° review */}
               <div>
                 <p className="mb-1.5 text-xs font-medium text-slate-600">
-                  Model preview image <span className="text-red-500">*</span>
+                  3D model preview <span className="text-red-500">*</span>
                 </p>
                 <p className="mb-2 text-[11px] text-slate-400">
-                  Take a screenshot from your slicer showing the model in the correct color
-                  {request.selected_addons?.includes('text_on_surface') ? ' with the text placement visible' : ''}.
-                  The customer will review this before confirming.
+                  Upload the model file (.stl / .3mf) that will be printed.
+                  The customer can rotate it 360° to review the shape
+                  {request.selected_addons?.includes('text_on_surface') ? ' and text placement' : ''} before confirming.
                 </p>
                 {previewUrl ? (
                   <div className="space-y-2">
-                    <img src={previewUrl} alt="Model preview" className="w-full rounded-xl border border-slate-200 object-cover max-h-48" />
+                    <Suspense fallback={<div className="h-48 rounded-xl bg-slate-100 animate-pulse" />}>
+                      <STLViewer
+                        urls={[previewUrl]}
+                        colors={[gcodeItems[0]?.colorHex || defaultColorHex || '#e0e0e0']}
+                        className="h-48 w-full rounded-xl border border-slate-200"
+                      />
+                    </Suspense>
                     <button type="button" onClick={() => setPreviewUrl(null)}
                       className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-red-500 transition">
-                      <X className="h-3 w-3" /> Remove preview
+                      <X className="h-3 w-3" /> Remove model
                     </button>
                   </div>
                 ) : (
                   <>
-                    <input ref={previewInputRef} type="file" accept="image/*" className="hidden" onChange={handlePreviewUpload} />
+                    <input ref={previewInputRef} type="file" accept=".stl,.3mf,.obj" className="hidden" onChange={handlePreviewUpload} />
                     <button type="button" disabled={previewUploading} onClick={() => previewInputRef.current?.click()}
                       className="flex items-center gap-2 rounded-xl border border-dashed border-orange-300 px-4 py-2.5 text-xs font-medium text-orange-500 hover:bg-orange-50 disabled:opacity-50 transition">
                       <Upload className="h-3.5 w-3.5" />
-                      {previewUploading ? 'Uploading…' : 'Upload slicer screenshot (JPG / PNG)'}
+                      {previewUploading ? 'Uploading…' : 'Upload .stl / .3mf model file'}
                     </button>
                   </>
                 )}

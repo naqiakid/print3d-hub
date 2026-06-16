@@ -89,7 +89,7 @@ export type PrintRequest = {
   stl_url: string | null
   stl_urls: string[]
   gcode_urls: string[]
-  quote_preview_url: string | null
+  quote_model_url: string | null
   plate_filaments: PlateFilament[]
   color_preferences: ColorPreference[]
   weight_g: number | null

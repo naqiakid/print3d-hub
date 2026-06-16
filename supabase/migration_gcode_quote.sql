@@ -1,3 +1,3 @@
--- Preview image uploaded by owner when sending a quote
--- (slicer screenshot showing model with correct color + text placement)
-ALTER TABLE requests ADD COLUMN IF NOT EXISTS quote_preview_url text;
+-- 3D model file uploaded by owner when sending a quote
+-- Customer views it in 360° on the track page before confirming
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS quote_model_url text;

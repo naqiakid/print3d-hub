@@ -447,7 +447,7 @@ export async function sendQuote(
   confirmedAddons?: string[],
   deliveryCost?: number | null,
   stlUrlsToMerge?: string[],
-  quotePreviewUrl?: string | null,
+  quoteModelUrl?: string | null,
 ): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
   const {
@@ -470,7 +470,7 @@ export async function sendQuote(
       ...(confirmedAddons                 && { confirmed_addons: confirmedAddons }),
       ...(deliveryCost != null            && { delivery_cost: deliveryCost }),
       ...(stlUrlsToMerge?.length          && { stl_urls: stlUrlsToMerge }),
-      ...(quotePreviewUrl                 && { quote_preview_url: quotePreviewUrl }),
+      ...(quoteModelUrl                   && { quote_model_url: quoteModelUrl }),
     })
     .eq('id', requestId)
 
