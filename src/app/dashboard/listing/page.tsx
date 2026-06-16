@@ -191,10 +191,12 @@ export default async function ListingPage() {
             {/* Formula */}
             <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 space-y-1.5 text-xs text-slate-500">
               <p className="font-semibold text-slate-700 mb-1">Your formula</p>
-              <p>Filament cost = weight × (your cost per kg)</p>
+              <p>Filament = weight × (your cost per kg)</p>
               <p>Electricity = print time × ({powerWatts}W ÷ 1000) × RM {elecRate}/kWh</p>
-              <p>Machine = print time × RM {machineRate}/hr (depreciation)</p>
-              <p>Overhead = (filament + electricity + machine) × {wastePct}% (waste & maintenance)</p>
+              <p>Machine = print time × RM {machineRate}/hr (depreciation &amp; wear)</p>
+              <p className="border-t border-slate-200 pt-1.5">Subtotal = filament + electricity + machine</p>
+              <p>Overhead = subtotal × {wastePct}% (waste &amp; maintenance buffer)</p>
+              <p>Base cost = subtotal + overhead</p>
               <p className="border-t border-slate-200 pt-1.5 font-medium text-slate-600">
                 Final price = base cost + {markupPct}% profit margin
               </p>
