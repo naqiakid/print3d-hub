@@ -146,6 +146,8 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
   const [contactPhone, setContactPhone] = useState(printer.contact_phone)
   const [electricityRate, setElectricityRate] = useState(String(printer.electricity_rate ?? 0.516))
   const [markupPercent, setMarkupPercent]     = useState(String(printer.markup_percent ?? 30))
+  const [machineRate, setMachineRate]         = useState(String(printer.machine_rate_per_hour ?? 1.5))
+  const [wastePercent, setWastePercent]       = useState(String(printer.waste_percent ?? 8))
   const [unitNo, setUnitNo]           = useState('')
   const [streetAddress, setStreetAddress] = useState(printer.pickup_address ?? '')
   const [lat, setLat] = useState<number | null>(printer.lat ?? null)
@@ -166,6 +168,8 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
     setContactPhone(printer.contact_phone)
     setElectricityRate(String(printer.electricity_rate ?? 0.516))
     setMarkupPercent(String(printer.markup_percent ?? 30))
+    setMachineRate(String(printer.machine_rate_per_hour ?? 1.5))
+    setWastePercent(String(printer.waste_percent ?? 8))
     setUnitNo('')
     setStreetAddress(printer.pickup_address ?? '')
     setLat(printer.lat ?? null)
@@ -187,6 +191,8 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
         contact_phone: contactPhone.trim(),
         electricity_rate: parseFloat(electricityRate) || 0.516,
         markup_percent: parseFloat(markupPercent) || 30,
+        machine_rate_per_hour: parseFloat(machineRate) || 1.5,
+        waste_percent: parseFloat(wastePercent) || 8,
         pickup_address: fullAddress,
         lat: lat ?? null,
         lng: lng ?? null,
@@ -256,6 +262,14 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
           <div>
             <span className="block text-xs text-slate-400">Markup</span>
             <span className="font-medium text-slate-900">{markupPercent}%</span>
+          </div>
+          <div>
+            <span className="block text-xs text-slate-400">Machine rate</span>
+            <span className="font-medium text-slate-900">RM{machineRate}/hr</span>
+          </div>
+          <div>
+            <span className="block text-xs text-slate-400">Waste & maintenance</span>
+            <span className="font-medium text-slate-900">{wastePercent}%</span>
           </div>
         </div>
 
@@ -355,6 +369,31 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
             min="0"
             value={markupPercent}
             onChange={(e) => setMarkupPercent(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label className={labelClass}>Machine rate (RM/hr)</label>
+          <input
+            type="number"
+            step="0.10"
+            min="0"
+            value={machineRate}
+            onChange={(e) => setMachineRate(e.target.value)}
+            placeholder="1.50"
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label className={labelClass}>Waste & maintenance (%)</label>
+          <input
+            type="number"
+            step="1"
+            min="0"
+            max="50"
+            value={wastePercent}
+            onChange={(e) => setWastePercent(e.target.value)}
+            placeholder="8"
             className={inputClass}
           />
         </div>

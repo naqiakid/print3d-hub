@@ -39,6 +39,9 @@ export const PRINT_ESTIMATES: Record<PrintSize, Record<PrintQuality, { weight_g:
   large:  { functional: { weight_g: 150, hours: 10  }, presentable: { weight_g: 200, hours: 18  }, display: { weight_g: 250, hours: 30 } },
 }
 
+export const DEFAULT_MACHINE_RATE   = 1.5  // RM/hr — typical for mid-range FDM printer
+export const DEFAULT_WASTE_PERCENT  = 8    // % — consumables, failed prints, maintenance
+
 export type EstimateInput = {
   size: PrintSize
   quality: PrintQuality
@@ -47,9 +50,11 @@ export type EstimateInput = {
   cost_per_kg: number
   electricity_rate?: number
   markup_percent?: number
-  nozzle_mm?: number      // default 0.4 — affects print time
-  custom_infill?: number  // overrides quality default — affects weight
-  ironing?: boolean       // adds 15% print time, smoother top surface
+  machine_rate_per_hour?: number  // RM/hr depreciation + wear; default 1.5
+  waste_percent?: number          // consumables + maintenance overhead; default 8%
+  nozzle_mm?: number              // default 0.4 — affects print time
+  custom_infill?: number          // overrides quality default — affects weight
+  ironing?: boolean               // adds 15% print time, smoother top surface
 }
 
 export type EstimateResult = {
@@ -57,6 +62,8 @@ export type EstimateResult = {
   hours: number
   filament_cost: number
   electricity_cost: number
+  machine_cost: number
+  waste_cost: number
   base_cost: number
   suggested_price: number
 }
@@ -71,11 +78,13 @@ const QUALITY_COMPAT: Record<string, PrintQuality> = {
 export function calculateEstimate(input: EstimateInput): EstimateResult {
   const {
     size, power_watts, cost_per_kg,
-    electricity_rate = DEFAULT_ELECTRICITY_RATE,
-    markup_percent   = DEFAULT_MARKUP_PERCENT,
-    nozzle_mm        = 0.4,
+    electricity_rate      = DEFAULT_ELECTRICITY_RATE,
+    markup_percent        = DEFAULT_MARKUP_PERCENT,
+    machine_rate_per_hour = DEFAULT_MACHINE_RATE,
+    waste_percent         = DEFAULT_WASTE_PERCENT,
+    nozzle_mm             = 0.4,
     custom_infill,
-    ironing          = false,
+    ironing               = false,
   } = input
 
   const quality = QUALITY_COMPAT[input.quality] ?? input.quality
@@ -93,7 +102,10 @@ export function calculateEstimate(input: EstimateInput): EstimateResult {
 
   const filament_cost    = (weight_g / 1000) * cost_per_kg
   const electricity_cost = hours * (power_watts / 1000) * electricity_rate
-  const base_cost        = filament_cost + electricity_cost
+  const machine_cost     = hours * machine_rate_per_hour
+  const subtotal         = filament_cost + electricity_cost + machine_cost
+  const waste_cost       = subtotal * (waste_percent / 100)
+  const base_cost        = subtotal + waste_cost
   const suggested_price  = base_cost * (1 + markup_percent / 100)
 
   const r = (n: number) => Math.round(n * 100) / 100
@@ -101,6 +113,8 @@ export function calculateEstimate(input: EstimateInput): EstimateResult {
     weight_g: r(weight_g), hours: r(hours),
     filament_cost:    r(filament_cost),
     electricity_cost: r(electricity_cost),
+    machine_cost:     r(machine_cost),
+    waste_cost:       r(waste_cost),
     base_cost:        r(base_cost),
     suggested_price:  r(suggested_price),
   }
@@ -112,6 +126,8 @@ export type PriceRangeInput = {
   power_watts: number
   electricity_rate?: number
   markup_percent?: number
+  machine_rate_per_hour?: number
+  waste_percent?: number
 }
 
 export function calculatePriceRange(input: PriceRangeInput): { price_min: number; price_max: number } {

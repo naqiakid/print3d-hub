@@ -5,11 +5,19 @@ import {
   CheckCircle, Upload, X, Loader2, FileBox, Plus, Ruler,
   Link2, FileUp, ExternalLink, Download, HelpCircle,
 } from 'lucide-react'
-import type { Printer, PrintProfile, PrintQuality, Filament, FilamentMaterial } from '@/lib/types'
+import type { Printer, PrintProfile, PrintQuality, PrintSize, Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { submitRequest } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 import { SIZE_LABELS } from '@/lib/types'
+import {
+  calculateEstimate,
+  DEFAULT_FILAMENT_COST_PER_KG,
+  DEFAULT_ELECTRICITY_RATE,
+  DEFAULT_MARKUP_PERCENT,
+  DEFAULT_MACHINE_RATE,
+  DEFAULT_WASTE_PERCENT,
+} from '@/lib/pricing'
 
 const STLViewer = lazy(() => import('./STLViewer'))
 
@@ -882,6 +890,32 @@ export default function RequestForm({
   const formVisible = modelMode !== null
   const canSubmit   = !!(formVisible && modelReady && quality && material && !pending)
 
+  // Derive size for live estimate (mirrors submitRequest logic)
+  const primaryDims   = fileItems.find((i) => i.dimensions)?.dimensions ?? null
+  const autoSizeEst: PrintSize = primaryDims
+    ? (Math.max(primaryDims.x, primaryDims.y, primaryDims.z) <= 100 ? 'small'
+     : Math.max(primaryDims.x, primaryDims.y, primaryDims.z) <= 250 ? 'medium'
+     : 'large')
+    : 'medium'
+  const estimateSize: PrintSize = modelMode === 'link' ? linkSize : autoSizeEst
+
+  function getQualityEstimate(q: PrintQuality) {
+    if (!material) return null
+    const filamentCosts = printer.filament_costs as Record<string, number> | null
+    const cost_per_kg = filamentCosts?.[material] ?? DEFAULT_FILAMENT_COST_PER_KG[material as FilamentMaterial]
+    return calculateEstimate({
+      size: estimateSize,
+      quality: q,
+      material: material as FilamentMaterial,
+      power_watts: printer.power_watts ?? 200,
+      cost_per_kg,
+      electricity_rate:      printer.electricity_rate      ?? DEFAULT_ELECTRICITY_RATE,
+      markup_percent:        printer.markup_percent        ?? DEFAULT_MARKUP_PERCENT,
+      machine_rate_per_hour: printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE,
+      waste_percent:         printer.waste_percent         ?? DEFAULT_WASTE_PERCENT,
+    })
+  }
+
   const availableCaps = {
     supports:        profiles.some((p) => p.supports_available),
     ironing:         profiles.some((p) => p.ironing_available),
@@ -1194,15 +1228,32 @@ export default function RequestForm({
                 { q: 'functional'  as PrintQuality, label: 'Functional',      desc: 'Shape matters most, minor surface marks are fine',       infill: defaultProfile?.infill_draft    ?? 15 },
                 { q: 'presentable' as PrintQuality, label: 'Presentable',     desc: 'Looks good, layer lines acceptable',                     infill: defaultProfile?.infill_standard ?? 25 },
                 { q: 'display'     as PrintQuality, label: 'Display quality', desc: 'As smooth as possible, closest to the reference',        infill: defaultProfile?.infill_premium  ?? 40 },
-              ]).map(({ q, label, desc, infill }) => (
-                <button key={q} type="button" onClick={() => setQuality(q)}
-                  className={`rounded-xl border px-3 py-3 text-center transition ${quality === q ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
-                  <p className="text-sm font-medium">{label}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{infill}% infill</p>
-                  <p className="text-xs text-slate-400">{desc}</p>
-                </button>
-              ))}
+              ]).map(({ q, label, desc, infill }) => {
+                const est = getQualityEstimate(q)
+                return (
+                  <button key={q} type="button" onClick={() => setQuality(q)}
+                    className={`rounded-xl border px-3 py-3 text-center transition ${quality === q ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{infill}% infill</p>
+                    {est ? (
+                      <p className={`text-sm font-semibold mt-1 ${quality === q ? 'text-orange-600' : 'text-slate-600'}`}>
+                        ~RM {Math.round(est.suggested_price)}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-400 mt-1">{desc}</p>
+                    )}
+                  </button>
+                )
+              })}
             </div>
+            {material && (
+              <p className="mt-2 text-[11px] text-slate-400">
+                Estimates based on typical {estimateSize} print in {material.toUpperCase()}. Your final quote may differ.
+              </p>
+            )}
+            {!material && (
+              <p className="mt-2 text-[11px] text-slate-400">Select a material above to see estimated prices for each tier.</p>
+            )}
           </div>
 
           {/* ── Print options (capabilities) ── */}

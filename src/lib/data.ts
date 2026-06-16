@@ -32,6 +32,8 @@ export const printers: Printer[] = [
     pickup_address: null,
     delivery_available: false,
     delivery_rate_per_km: null,
+    machine_rate_per_hour: null,
+    waste_percent: null,
   },
   {
     id: '2',
@@ -64,6 +66,8 @@ export const printers: Printer[] = [
     pickup_address: null,
     delivery_available: false,
     delivery_rate_per_km: null,
+    machine_rate_per_hour: null,
+    waste_percent: null,
   },
   {
     id: '3',
@@ -96,6 +100,8 @@ export const printers: Printer[] = [
     pickup_address: null,
     delivery_available: false,
     delivery_rate_per_km: null,
+    machine_rate_per_hour: null,
+    waste_percent: null,
   },
   {
     id: '4',
@@ -128,6 +134,8 @@ export const printers: Printer[] = [
     pickup_address: null,
     delivery_available: false,
     delivery_rate_per_km: null,
+    machine_rate_per_hour: null,
+    waste_percent: null,
   },
   {
     id: '5',
@@ -160,6 +168,8 @@ export const printers: Printer[] = [
     pickup_address: null,
     delivery_available: false,
     delivery_rate_per_km: null,
+    machine_rate_per_hour: null,
+    waste_percent: null,
   },
   {
     id: '6',
@@ -192,6 +202,8 @@ export const printers: Printer[] = [
     pickup_address: null,
     delivery_available: false,
     delivery_rate_per_km: null,
+    machine_rate_per_hour: null,
+    waste_percent: null,
   },
 ]
 

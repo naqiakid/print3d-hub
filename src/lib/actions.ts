@@ -135,6 +135,8 @@ export async function registerPrinter(data: {
   power_watts: number
   electricity_rate: number
   markup_percent: number
+  machine_rate_per_hour: number
+  waste_percent: number
   nozzle_sizes: number[]
   bed_type: string[]
   pickup_address?: string
@@ -158,6 +160,8 @@ export async function registerPrinter(data: {
       power_watts: data.power_watts,
       electricity_rate: data.electricity_rate,
       markup_percent: data.markup_percent,
+      machine_rate_per_hour: data.machine_rate_per_hour,
+      waste_percent: data.waste_percent,
       bed_type: data.bed_type,
       pickup_address: data.pickup_address ?? null,
       price_min: 0,
@@ -445,6 +449,8 @@ export async function updateListing(data: {
   contact_phone: string
   electricity_rate: number
   markup_percent: number
+  machine_rate_per_hour: number
+  waste_percent: number
   pickup_address: string
   lat?: number | null
   lng?: number | null

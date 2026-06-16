@@ -55,6 +55,8 @@ export type Printer = {
   pickup_address: string | null
   delivery_available: boolean
   delivery_rate_per_km: number | null
+  machine_rate_per_hour: number | null
+  waste_percent: number | null
 }
 
 export type PlateFilament = {

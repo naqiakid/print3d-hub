@@ -8,6 +8,8 @@ import { PRINTER_MODELS, BRANDS, type PrinterModelPreset } from '@/lib/printer-m
 import {
   DEFAULT_ELECTRICITY_RATE,
   DEFAULT_MARKUP_PERCENT,
+  DEFAULT_MACHINE_RATE,
+  DEFAULT_WASTE_PERCENT,
 } from '@/lib/pricing'
 import { registerPrinter } from '@/lib/actions'
 import { NOZZLE_SIZES, NOZZLE_HINTS, BED_TYPES, bedLabel } from '@/lib/equipment'
@@ -31,7 +33,9 @@ export default function RegisterWizard() {
 
   // Step 1 — Costs
   const [electricityRate, setElectricityRate] = useState(String(DEFAULT_ELECTRICITY_RATE))
-  const [markupPercent, setMarkupPercent] = useState(String(DEFAULT_MARKUP_PERCENT))
+  const [markupPercent, setMarkupPercent]     = useState(String(DEFAULT_MARKUP_PERCENT))
+  const [machineRate, setMachineRate]         = useState(String(DEFAULT_MACHINE_RATE))
+  const [wastePercent, setWastePercent]       = useState(String(DEFAULT_WASTE_PERCENT))
 
   // Step 2 — Service
   const [serviceName, setServiceName] = useState('')
@@ -90,6 +94,8 @@ export default function RegisterWizard() {
       power_watts: selectedPreset.power_watts,
       electricity_rate: Number(electricityRate),
       markup_percent: Number(markupPercent),
+      machine_rate_per_hour: Number(machineRate) || DEFAULT_MACHINE_RATE,
+      waste_percent: Number(wastePercent) || DEFAULT_WASTE_PERCENT,
       nozzle_sizes: nozzleSizes,
       bed_type: bedTypes,
       pickup_address: pickupAddress.trim() || undefined,
@@ -309,6 +315,64 @@ export default function RegisterWizard() {
             <p className="mt-1.5 text-xs text-slate-400">
               You can change this at any time from your dashboard.
             </p>
+          </div>
+
+          {/* Machine rate */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Machine rate (RM / hr)</label>
+            <p className="mb-3 text-xs text-slate-500">
+              Covers printer depreciation, replacement parts, and wear. Spread your printer cost over its expected lifespan.
+              e.g. a RM 5,000 printer running 3,000 hrs = RM 1.67/hr.
+            </p>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">RM</span>
+              <input
+                type="number"
+                value={machineRate}
+                onChange={(e) => setMachineRate(e.target.value)}
+                step="0.10"
+                min="0"
+                placeholder="1.50"
+                className={`${inputClass} pl-10`}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">/hr</span>
+            </div>
+          </div>
+
+          {/* Waste & maintenance */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Waste & maintenance overhead (%)</label>
+            <p className="mb-3 text-xs text-slate-500">
+              Covers consumables (nozzles, grease, glue), failed prints, and cleaning. Added on top of material + electricity + machine costs.
+            </p>
+            <div className="grid grid-cols-4 gap-2 mb-3">
+              {[5, 8, 10, 15].map((pct) => (
+                <button
+                  key={pct}
+                  type="button"
+                  onClick={() => setWastePercent(String(pct))}
+                  className={`rounded-xl border py-2.5 text-center text-sm font-medium transition ${
+                    wastePercent === String(pct)
+                      ? 'border-orange-500 bg-orange-50 text-orange-700'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
+                  }`}
+                >
+                  {pct}%
+                </button>
+              ))}
+            </div>
+            <div className="relative">
+              <input
+                type="number"
+                value={wastePercent}
+                onChange={(e) => setWastePercent(e.target.value)}
+                placeholder="8"
+                min="0"
+                max="50"
+                className={`${inputClass} pr-8`}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">%</span>
+            </div>
           </div>
 
           <div className="flex gap-3 pt-2">
