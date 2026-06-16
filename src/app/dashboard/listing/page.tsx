@@ -196,7 +196,7 @@ export default async function ListingPage() {
               <p>Machine = print time × RM {machineRate}/hr (depreciation)</p>
               <p>Overhead = (filament + electricity + machine) × {wastePct}% (waste & maintenance)</p>
               <p className="border-t border-slate-200 pt-1.5 font-medium text-slate-600">
-                Final price = (filament + electricity + machine + overhead) × {100 + markupPct}% (markup)
+                Final price = base cost + {markupPct}% profit margin
               </p>
             </div>
           </div>
