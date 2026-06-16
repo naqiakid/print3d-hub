@@ -91,6 +91,11 @@ export default function RequestCard({ request, printer }: { request: PrintReques
   const [quoteStlUrls, setQuoteStlUrls] = useState<string[]>([])
   const [stlUploading, setStlUploading] = useState(false)
 
+  // Preview image upload (slicer screenshot for customer review)
+  const previewInputRef = useRef<HTMLInputElement>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewUploading, setPreviewUploading] = useState(false)
+
   const defaultMaterial = (request.material ?? 'pla') as FilamentMaterial
   const defaultColorHex = request.color && request.color !== 'Any' ? (request.color_hex || '#888888') : '#888888'
   const defaultColorName = request.color && request.color !== 'Any' ? request.color : ''
@@ -180,6 +185,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
     setQuoteMarkup(printer.markup_percent ?? DEFAULT_MARKUP_PERCENT)
     setBreakdown(null)
     setQuotePrice('')
+    setPreviewUrl(null)
     // Pre-check every requested addon — owner reviews and unchecks any they couldn't apply
     const addons = new Set<string>()
     if (request.supports) addons.add('supports')
@@ -280,6 +286,22 @@ export default function RequestCard({ request, printer }: { request: PrintReques
     if (quoteStlInputRef.current) quoteStlInputRef.current.value = ''
   }
 
+  async function handlePreviewUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPreviewUploading(true)
+    const supabase = createClient()
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const path = `previews/${request.id}_${Date.now()}_${safeName}`
+    const { data: uploadData } = await supabase.storage.from('stl-files').upload(path, file)
+    if (uploadData) {
+      const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
+      setPreviewUrl(urlData.publicUrl)
+    }
+    setPreviewUploading(false)
+    if (previewInputRef.current) previewInputRef.current.value = ''
+  }
+
   function handleStatusUpdate(newStatus: RequestStatus) {
     setActionError('')
     startTransition(async () => {
@@ -291,6 +313,9 @@ export default function RequestCard({ request, printer }: { request: PrintReques
   function handleSendQuote() {
     const finalPrice = parseFloat(quotePrice)
     if (!finalPrice || !quoteDate) return
+    if (gcodeItems.length === 0) { setActionError('Upload the G-code file before sending the quote.'); return }
+    if (!allDone) { setActionError('Wait for the G-code to finish uploading.'); return }
+    if (!previewUrl) { setActionError('Upload a model preview image before sending the quote.'); return }
     setActionError('')
     startTransition(async () => {
       const urls = gcodeItems.map((i) => i.url).filter(Boolean) as string[]
@@ -319,6 +344,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
         [...confirmedAddons],
         parsedDeliveryCost,
         mergedStlUrls,
+        previewUrl,
       )
       if (result?.error) setActionError(result.error)
       else setShowQuoteForm(false)
@@ -1075,6 +1101,36 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                   )}
                 </div>
               )}
+
+              {/* Preview image upload */}
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-slate-600">
+                  Model preview image <span className="text-red-500">*</span>
+                </p>
+                <p className="mb-2 text-[11px] text-slate-400">
+                  Take a screenshot from your slicer showing the model in the correct color
+                  {request.selected_addons?.includes('text_on_surface') ? ' with the text placement visible' : ''}.
+                  The customer will review this before confirming.
+                </p>
+                {previewUrl ? (
+                  <div className="space-y-2">
+                    <img src={previewUrl} alt="Model preview" className="w-full rounded-xl border border-slate-200 object-cover max-h-48" />
+                    <button type="button" onClick={() => setPreviewUrl(null)}
+                      className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-red-500 transition">
+                      <X className="h-3 w-3" /> Remove preview
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input ref={previewInputRef} type="file" accept="image/*" className="hidden" onChange={handlePreviewUpload} />
+                    <button type="button" disabled={previewUploading} onClick={() => previewInputRef.current?.click()}
+                      className="flex items-center gap-2 rounded-xl border border-dashed border-orange-300 px-4 py-2.5 text-xs font-medium text-orange-500 hover:bg-orange-50 disabled:opacity-50 transition">
+                      <Upload className="h-3.5 w-3.5" />
+                      {previewUploading ? 'Uploading…' : 'Upload slicer screenshot (JPG / PNG)'}
+                    </button>
+                  </>
+                )}
+              </div>
 
               <div className="flex gap-2">
                 <button onClick={handleSendQuote}

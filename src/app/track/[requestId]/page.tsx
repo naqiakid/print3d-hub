@@ -183,6 +183,18 @@ export default async function TrackPage({
             )}
           </div>
 
+          {/* ── Slicer preview image ── */}
+          {request.quote_preview_url && (
+            <div>
+              <p className="mb-2 text-xs font-medium text-amber-700">Model preview — review before confirming</p>
+              <img
+                src={request.quote_preview_url}
+                alt="Model preview from owner's slicer"
+                className="w-full rounded-xl border border-amber-200 object-contain max-h-72 bg-white"
+              />
+            </div>
+          )}
+
           {/* ── STL preview (no G-code yet) ── */}
           {(request.stl_urls?.length > 0 || request.stl_url) && !hasGcode && (
             <div>
