@@ -145,9 +145,14 @@ export default async function ListingPage() {
                 <h3 className="font-semibold text-slate-900">Pricing preview</h3>
                 <p className="text-xs text-slate-400 mt-0.5">Typical medium-size print at each quality tier, with your current settings.</p>
               </div>
-              <Link href="/dashboard/equipment" className="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-600 transition">
-                Set filament costs →
-              </Link>
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <Link href="/dashboard/profiles" className="text-xs font-medium text-orange-500 hover:text-orange-600 transition">
+                  Enable Advanced tier →
+                </Link>
+                <Link href="/dashboard/equipment" className="text-xs font-medium text-slate-400 hover:text-slate-600 transition">
+                  Set filament costs →
+                </Link>
+              </div>
             </div>
 
             {/* Grid */}
