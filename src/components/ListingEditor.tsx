@@ -240,36 +240,41 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
 
         <p className="text-sm text-slate-600">{description}</p>
 
-        <div className="grid grid-cols-2 gap-3 text-sm border-t border-slate-100 pt-4">
-          <div>
-            <span className="block text-xs text-slate-400">Turnaround</span>
-            <span className="font-medium text-slate-900">{turnaround}</span>
+        {/* Service info */}
+        <div className="border-t border-slate-100 pt-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Service</p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <span className="block text-xs text-slate-400">Turnaround</span>
+              <span className="font-medium text-slate-900">{turnaround}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-slate-400">WhatsApp</span>
+              <span className="font-medium text-slate-900">{contactPhone}</span>
+            </div>
           </div>
-          <div>
-            <span className="block text-xs text-slate-400">WhatsApp</span>
-            <span className="font-medium text-slate-900">{contactPhone}</span>
-          </div>
-          <div>
-            <span className="block text-xs text-slate-400">Printer peak power</span>
-            <span className="font-medium text-slate-900">
-              {getPresetById(printer.printer_model_id ?? '')?.power_watts ?? '—'} W
-            </span>
-          </div>
-          <div>
-            <span className="block text-xs text-slate-400">Electricity rate</span>
-            <span className="font-medium text-slate-900">RM{electricityRate}/kWh</span>
-          </div>
-          <div>
-            <span className="block text-xs text-slate-400">Markup</span>
-            <span className="font-medium text-slate-900">{markupPercent}%</span>
-          </div>
-          <div>
-            <span className="block text-xs text-slate-400">Machine rate</span>
-            <span className="font-medium text-slate-900">RM{machineRate}/hr</span>
-          </div>
-          <div>
-            <span className="block text-xs text-slate-400">Waste & maintenance</span>
-            <span className="font-medium text-slate-900">{wastePercent}%</span>
+        </div>
+
+        {/* Pricing settings */}
+        <div className="border-t border-slate-100 pt-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Pricing settings</p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <span className="block text-xs text-slate-400">Electricity rate</span>
+              <span className="font-medium text-slate-900">RM {electricityRate}/kWh</span>
+            </div>
+            <div>
+              <span className="block text-xs text-slate-400">Machine rate</span>
+              <span className="font-medium text-slate-900">RM {machineRate}/hr</span>
+            </div>
+            <div>
+              <span className="block text-xs text-slate-400">Waste & maintenance</span>
+              <span className="font-medium text-slate-900">{wastePercent}%</span>
+            </div>
+            <div>
+              <span className="block text-xs text-slate-400">Markup</span>
+              <span className="font-medium text-slate-900">{markupPercent}%</span>
+            </div>
           </div>
         </div>
 

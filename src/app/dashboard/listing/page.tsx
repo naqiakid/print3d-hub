@@ -2,13 +2,21 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import type { Printer, PrintProfile } from '@/lib/types'
+import type { Printer, PrintProfile, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, PRINT_TYPE_LABELS } from '@/lib/types'
 import { PRINTER_MODELS } from '@/lib/printer-models'
 import { bedLabel } from '@/lib/equipment'
 import AvailabilityToggle from '@/components/AvailabilityToggle'
 import ListingEditor from '@/components/ListingEditor'
 import CopyLinkButton from '@/components/CopyLinkButton'
+import {
+  calculateEstimate,
+  DEFAULT_FILAMENT_COST_PER_KG,
+  DEFAULT_ELECTRICITY_RATE,
+  DEFAULT_MARKUP_PERCENT,
+  DEFAULT_MACHINE_RATE,
+  DEFAULT_WASTE_PERCENT,
+} from '@/lib/pricing'
 
 export default async function ListingPage() {
   const supabase = await createClient()
@@ -96,6 +104,104 @@ export default async function ListingPage() {
 
       {/* Editable listing details + pickup/delivery */}
       <ListingEditor printer={printer} />
+
+      {/* ── Pricing preview ── */}
+      {(() => {
+        const powerWatts     = preset?.power_watts ?? 200
+        const elecRate       = printer.electricity_rate      ?? DEFAULT_ELECTRICITY_RATE
+        const markupPct      = printer.markup_percent        ?? DEFAULT_MARKUP_PERCENT
+        const machineRate    = printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE
+        const wastePct       = printer.waste_percent         ?? DEFAULT_WASTE_PERCENT
+        const filamentCosts  = (printer.filament_costs ?? {}) as Record<string, number>
+        const materials      = (printer.materials ?? []) as FilamentMaterial[]
+
+        const tiers = [
+          { key: 'functional'  as const, label: 'Functional' },
+          { key: 'presentable' as const, label: 'Presentable' },
+          { key: 'display'     as const, label: 'Display' },
+        ]
+
+        if (materials.length === 0) return null
+
+        const rows = materials.map((mat) => {
+          const configured = filamentCosts[mat] != null
+          const costPerKg  = filamentCosts[mat] ?? DEFAULT_FILAMENT_COST_PER_KG[mat]
+          const prices     = tiers.map(({ key }) =>
+            calculateEstimate({
+              size: 'medium', quality: key, material: mat,
+              power_watts: powerWatts, cost_per_kg: costPerKg,
+              electricity_rate: elecRate, markup_percent: markupPct,
+              machine_rate_per_hour: machineRate, waste_percent: wastePct,
+            }).suggested_price
+          )
+          return { mat, configured, prices }
+        })
+
+        const anyUnconfigured = rows.some((r) => !r.configured)
+
+        return (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-slate-900">Pricing preview</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Typical medium-size print at each finish tier, with your current settings.</p>
+              </div>
+              <Link href="/dashboard/equipment" className="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-600 transition">
+                Set filament costs →
+              </Link>
+            </div>
+
+            {/* Grid */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="pb-2 text-left text-xs font-medium text-slate-400">Material</th>
+                    {tiers.map((t) => (
+                      <th key={t.key} className="pb-2 text-right text-xs font-medium text-slate-400">{t.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {rows.map(({ mat, configured, prices }) => (
+                    <tr key={mat}>
+                      <td className="py-2.5 pr-4">
+                        <span className="font-medium text-slate-800">{MATERIAL_LABELS[mat]}</span>
+                        {!configured && (
+                          <span className="ml-1.5 text-[10px] text-slate-400">*</span>
+                        )}
+                      </td>
+                      {prices.map((p, i) => (
+                        <td key={i} className="py-2.5 text-right tabular-nums font-semibold text-slate-700">
+                          ~RM {Math.round(p)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {anyUnconfigured && (
+              <p className="text-[11px] text-slate-400">
+                * Using default market rates. Go to <Link href="/dashboard/equipment" className="text-orange-500 hover:underline">Equipment → Filament stock</Link> to enter your actual filament costs for more accurate estimates.
+              </p>
+            )}
+
+            {/* Formula */}
+            <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 space-y-1.5 text-xs text-slate-500">
+              <p className="font-semibold text-slate-700 mb-1">Your formula</p>
+              <p>Filament cost = weight × (your cost per kg)</p>
+              <p>Electricity = print time × ({powerWatts}W ÷ 1000) × RM {elecRate}/kWh</p>
+              <p>Machine = print time × RM {machineRate}/hr (depreciation)</p>
+              <p>Overhead = (filament + electricity + machine) × {wastePct}% (waste & maintenance)</p>
+              <p className="border-t border-slate-200 pt-1.5 font-medium text-slate-600">
+                Final price = (filament + electricity + machine + overhead) × {100 + markupPct}% (markup)
+              </p>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Printer specs (read-only) ── */}
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
