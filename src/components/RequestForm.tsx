@@ -1255,7 +1255,7 @@ export default function RequestForm({
                   <button key={s} type="button" onClick={() => setLinkSize(s)}
                     className={`rounded-xl border px-3 py-3 text-center transition ${linkSize === s ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
                     <p className="text-sm font-medium capitalize">{s}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{SIZE_LABELS[s].split(' ')[1]}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{SIZE_LABELS[s].replace(/^\S+\s+/, '')}</p>
                   </button>
                 ))}
               </div>
