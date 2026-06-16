@@ -48,9 +48,11 @@ export async function createProfile(data: {
   printer_id: string
   name: string
   nozzle_mm: number
-  infill_draft: number
-  infill_standard: number
-  infill_premium: number
+  infill_basic: number
+  wall_count_basic: number
+  advanced_available: boolean
+  infill_advanced: number
+  wall_count_advanced: number
   supports_available: boolean
   ironing_available: boolean
   color_change_available: boolean
@@ -81,9 +83,11 @@ export async function updateProfile(
   data: {
     name: string
     nozzle_mm: number
-    infill_draft: number
-    infill_standard: number
-    infill_premium: number
+    infill_basic: number
+    wall_count_basic: number
+    advanced_available: boolean
+    infill_advanced: number
+    wall_count_advanced: number
     supports_available: boolean
     ironing_available: boolean
     color_change_available: boolean
@@ -180,9 +184,11 @@ export async function registerPrinter(data: {
     printer_id: printer.id,
     name: `${nozzle}mm nozzle`,
     nozzle_mm: nozzle,
-    infill_draft: 15,
-    infill_standard: 25,
-    infill_premium: 40,
+    infill_basic: 15,
+    wall_count_basic: 3,
+    advanced_available: false,
+    infill_advanced: 40,
+    wall_count_advanced: 5,
     supports_available: true,
     ironing_available: false,
     color_change_available: data.print_types.includes('colorful'),
@@ -721,9 +727,11 @@ export async function addNozzleSize(
     printer_id: printerId,
     name: `${nozzleMm}mm nozzle`,
     nozzle_mm: nozzleMm,
-    infill_draft: 15,
-    infill_standard: 25,
-    infill_premium: 40,
+    infill_basic: 15,
+    wall_count_basic: 3,
+    advanced_available: false,
+    infill_advanced: 40,
+    wall_count_advanced: 5,
     supports_available: true,
     ironing_available: false,
     color_change_available: false,

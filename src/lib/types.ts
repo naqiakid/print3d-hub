@@ -13,7 +13,7 @@ export type PrintType = 'everyday' | 'strong' | 'colorful'
 /** @deprecated use FilamentMaterial */
 export type MaterialFeel = FilamentMaterial
 export type PrintSize = 'small' | 'medium' | 'large'
-export type PrintQuality = 'functional' | 'presentable' | 'display'
+export type PrintQuality = 'basic' | 'advanced'
 export type RequestStatus =
   | 'new'
   | 'quoted'
@@ -121,9 +121,11 @@ export type PrintProfile = {
   printer_id: string
   name: string
   nozzle_mm: number
-  infill_draft: number
-  infill_standard: number
-  infill_premium: number
+  infill_basic: number
+  wall_count_basic: number
+  advanced_available: boolean
+  infill_advanced: number
+  wall_count_advanced: number
   supports_available: boolean
   ironing_available: boolean
   color_change_available: boolean
@@ -217,9 +219,8 @@ export const SIZE_LABELS: Record<PrintSize, string> = {
 }
 
 export const QUALITY_LABELS: Record<PrintQuality, string> = {
-  functional:  'Functional — shape matters, surface marks are fine',
-  presentable: 'Presentable — looks good, layer lines acceptable',
-  display:     'Display quality — as close to the reference as possible',
+  basic:    'Basic — standard settings',
+  advanced: 'Advanced — higher infill & walls',
 }
 
 export const STATUS_LABELS: Record<RequestStatus, string> = {

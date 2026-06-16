@@ -903,6 +903,8 @@ export default function RequestForm({
     if (!material) return null
     const filamentCosts = printer.filament_costs as Record<string, number> | null
     const cost_per_kg = filamentCosts?.[material] ?? DEFAULT_FILAMENT_COST_PER_KG[material as FilamentMaterial]
+    const infill     = q === 'basic' ? (defaultProfile?.infill_basic ?? 15)    : (defaultProfile?.infill_advanced ?? 40)
+    const wallCount  = q === 'basic' ? (defaultProfile?.wall_count_basic ?? 3) : (defaultProfile?.wall_count_advanced ?? 5)
     return calculateEstimate({
       size: estimateSize,
       quality: q,
@@ -913,8 +915,12 @@ export default function RequestForm({
       markup_percent:        printer.markup_percent        ?? DEFAULT_MARKUP_PERCENT,
       machine_rate_per_hour: printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE,
       waste_percent:         printer.waste_percent         ?? DEFAULT_WASTE_PERCENT,
+      custom_infill: infill,
+      wall_count:    wallCount,
     })
   }
+
+  const hasAdvanced = profiles.some((p) => p.advanced_available)
 
   const availableCaps = {
     supports:        profiles.some((p) => p.supports_available),
@@ -928,9 +934,7 @@ export default function RequestForm({
 
   // Options where the customer may not know what's best — show 3-state control
   const OWNER_DECIDE_CAPS: Record<string, { label: string; desc: string }> = {
-    supports:   { label: 'Support structures',   desc: 'Temporary scaffold that holds up overhanging parts — removed after printing. Needed if your model has floating sections or steep overhangs.' },
-    ironing:    { label: 'Ironing (smooth top)', desc: 'The nozzle makes a slow second pass over flat top surfaces for an ultra-smooth finish. Adds ~15% to print time.' },
-    fuzzy_skin: { label: 'Fuzzy skin texture',   desc: 'Adds a rough, matte, grip-friendly texture to the outer walls. Great for aesthetic effect or ergonomic grip.' },
+    supports: { label: 'Support structures', desc: 'Temporary scaffold that holds up overhanging parts — removed after printing. Needed if your model has floating sections or steep overhangs.' },
   }
   // Options that always require a customer decision
   const CUSTOMER_CAPS: Record<string, { label: string; desc: string }> = {
@@ -1221,38 +1225,74 @@ export default function RequestForm({
       {formVisible && (
         <>
           <div>
-            <h3 className="mb-1 text-sm font-semibold text-slate-700">Finish expectation <span className="text-red-500">*</span></h3>
-            <p className="mb-3 text-xs text-slate-400">How important is the surface finish to you? The owner will decide the best settings to achieve it.</p>
-            <div className="grid grid-cols-3 gap-2">
+            <h3 className="mb-1 text-sm font-semibold text-slate-700">Quality tier <span className="text-red-500">*</span></h3>
+            <p className="mb-3 text-xs text-slate-400">Choose your print quality. Advanced uses higher infill and more wall layers for a stronger, better-looking result.</p>
+            <div className={`grid gap-2 ${hasAdvanced ? 'grid-cols-2' : 'grid-cols-1'}`}>
               {([
-                { q: 'functional'  as PrintQuality, label: 'Functional',      desc: 'Shape matters most, minor surface marks are fine',       infill: defaultProfile?.infill_draft    ?? 15 },
-                { q: 'presentable' as PrintQuality, label: 'Presentable',     desc: 'Looks good, layer lines acceptable',                     infill: defaultProfile?.infill_standard ?? 25 },
-                { q: 'display'     as PrintQuality, label: 'Display quality', desc: 'As smooth as possible, closest to the reference',        infill: defaultProfile?.infill_premium  ?? 40 },
-              ]).map(({ q, label, desc, infill }) => {
+                { q: 'basic'    as PrintQuality, label: 'Basic',    infill: defaultProfile?.infill_basic    ?? 15, walls: defaultProfile?.wall_count_basic    ?? 3  },
+                ...(hasAdvanced ? [{ q: 'advanced' as PrintQuality, label: 'Advanced', infill: defaultProfile?.infill_advanced ?? 40, walls: defaultProfile?.wall_count_advanced ?? 5  }] : []),
+              ]).map(({ q, label, infill, walls }) => {
                 const est = getQualityEstimate(q)
                 return (
-                  <button key={q} type="button" onClick={() => setQuality(q)}
-                    className={`rounded-xl border px-3 py-3 text-center transition ${quality === q ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{infill}% infill</p>
+                  <button key={q} type="button" onClick={() => {
+                    setQuality(q)
+                    if (q !== 'advanced') {
+                      setSelectedCaps((prev) => { const n = new Set(prev); n.delete('ironing'); n.delete('fuzzy_skin'); return n })
+                      setDeclinedCaps((prev)  => { const n = new Set(prev); n.delete('ironing'); n.delete('fuzzy_skin'); return n })
+                    }
+                  }}
+                    className={`rounded-xl border px-4 py-3 text-left transition ${quality === q ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'}`}>
+                    <p className={`text-sm font-semibold ${quality === q ? 'text-orange-700' : 'text-slate-800'}`}>{label}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{infill}% infill · {walls} walls</p>
                     {est ? (
                       <p className={`text-sm font-semibold mt-1 ${quality === q ? 'text-orange-600' : 'text-slate-600'}`}>
                         ~RM {Math.round(est.suggested_price)}
                       </p>
                     ) : (
-                      <p className="text-xs text-slate-400 mt-1">{desc}</p>
+                      <p className="text-xs text-slate-400 mt-1">Select material to see estimate</p>
                     )}
                   </button>
                 )
               })}
             </div>
+
+            {/* Advanced add-ons — ironing & fuzzy skin */}
+            {quality === 'advanced' && (availableCaps.ironing || availableCaps.fuzzy_skin) && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs font-medium text-slate-600">Advanced add-ons</p>
+                {(['ironing', 'fuzzy_skin'] as const)
+                  .filter((key) => availableCaps[key])
+                  .map((key) => {
+                    const info = { ironing: { label: 'Ironing (smooth top)', desc: 'Slow second pass over top surfaces — ultra-smooth finish. +15% time.' }, fuzzy_skin: { label: 'Fuzzy skin texture', desc: 'Rough matte texture on outer walls. Great for grip or aesthetic effect.' } }[key]
+                    const state = capState(key)
+                    const conflicted = (key === 'ironing' && capState('fuzzy_skin') === 'yes') || (key === 'fuzzy_skin' && capState('ironing') === 'yes')
+                    return (
+                      <div key={key} className={`rounded-xl border px-3 py-2.5 transition ${conflicted ? 'opacity-40 border-slate-100' : state === 'yes' ? 'border-orange-300 bg-orange-50' : 'border-slate-200 bg-white'}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className={`text-sm font-medium ${state === 'no' ? 'line-through text-slate-400' : 'text-slate-800'}`}>{info.label}</span>
+                          <div className="flex shrink-0 rounded-lg border border-slate-200 overflow-hidden text-xs">
+                            {(['owner', 'yes', 'no'] as const).map((s) => (
+                              <button key={s} type="button" disabled={conflicted} onClick={() => setCapState(key, s)}
+                                className={`px-2.5 py-1 transition font-medium ${state === s ? s === 'yes' ? 'bg-orange-500 text-white' : s === 'no' ? 'bg-slate-200 text-slate-600' : 'bg-slate-100 text-slate-600' : 'text-slate-400 hover:text-slate-600'} ${s !== 'no' ? 'border-r border-slate-200' : ''}`}>
+                                {s === 'owner' ? 'Owner decides' : s === 'yes' ? 'Yes' : 'No'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <p className="mt-1 text-[11px] text-slate-400">{info.desc}</p>
+                      </div>
+                    )
+                  })}
+              </div>
+            )}
+
             {material && (
               <p className="mt-2 text-[11px] text-slate-400">
                 Estimates based on typical {estimateSize} print in {material.toUpperCase()}. Your final quote may differ.
               </p>
             )}
             {!material && (
-              <p className="mt-2 text-[11px] text-slate-400">Select a material above to see estimated prices for each tier.</p>
+              <p className="mt-2 text-[11px] text-slate-400">Select a material above to see estimated prices.</p>
             )}
           </div>
 

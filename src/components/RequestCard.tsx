@@ -9,7 +9,6 @@ import {
   PRINT_TYPE_LABELS,
   MATERIAL_LABELS,
   SIZE_LABELS,
-  QUALITY_LABELS,
 } from '@/lib/types'
 import { updateRequestStatus, sendQuote } from '@/lib/actions'
 import {
@@ -360,10 +359,10 @@ export default function RequestCard({ request, printer }: { request: PrintReques
               {MATERIAL_LABELS[request.material] ?? request.material}
               {request.color && request.color !== 'Any' ? ` · ${request.color}` : ''}
             </span>
-            {/* Finish expectation */}
+            {/* Quality tier */}
             {request.quality && (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                {request.quality === 'functional' ? 'Functional' : request.quality === 'presentable' ? 'Presentable' : 'Display quality'}
+                {request.quality === 'advanced' ? 'Advanced' : 'Basic'}
               </span>
             )}
             {/* Supports */}
@@ -507,7 +506,9 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                   </div>
                   <div>
                     <span className="text-slate-400">Quality</span>
-                    <span className="ml-2 font-medium text-slate-900">{QUALITY_LABELS[request.quality]}</span>
+                    <span className="ml-2 font-medium text-slate-900">
+                      {request.quality === 'advanced' ? 'Advanced' : 'Basic'}
+                    </span>
                   </div>
                   {(hasSupports || declinedSupports || inlineTags.length > 0 || declinedInlineTags.length > 0) && (
                     <div className="col-span-2 flex flex-wrap gap-1.5">

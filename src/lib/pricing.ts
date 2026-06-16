@@ -4,10 +4,12 @@ export const DEFAULT_ELECTRICITY_RATE = 0.516
 export const DEFAULT_MARKUP_PERCENT   = 30
 
 export const DEFAULT_INFILL: Record<string, number> = {
-  functional:  15,
-  presentable: 25,
-  display:     40,
+  basic:    15,
+  advanced: 40,
 }
+
+export const DEFAULT_WALL_COUNT_BASIC    = 3
+export const DEFAULT_WALL_COUNT_ADVANCED = 5
 
 export const NOZZLE_OPTIONS = [
   { value: 0.2, label: '0.2 mm', sublabel: 'Ultra detail · very slow' },
@@ -34,9 +36,9 @@ export const DEFAULT_FILAMENT_COST_PER_KG: Record<FilamentMaterial, number> = {
 }
 
 export const PRINT_ESTIMATES: Record<PrintSize, Record<PrintQuality, { weight_g: number; hours: number }>> = {
-  small:  { functional: { weight_g: 15,  hours: 1.5 }, presentable: { weight_g: 20,  hours: 2.5 }, display: { weight_g: 25,  hours: 4  } },
-  medium: { functional: { weight_g: 60,  hours: 4   }, presentable: { weight_g: 80,  hours: 7   }, display: { weight_g: 100, hours: 12 } },
-  large:  { functional: { weight_g: 150, hours: 10  }, presentable: { weight_g: 200, hours: 18  }, display: { weight_g: 250, hours: 30 } },
+  small:  { basic: { weight_g: 15,  hours: 1.5 }, advanced: { weight_g: 25,  hours: 3   } },
+  medium: { basic: { weight_g: 60,  hours: 4   }, advanced: { weight_g: 100, hours: 10  } },
+  large:  { basic: { weight_g: 150, hours: 10  }, advanced: { weight_g: 260, hours: 28  } },
 }
 
 export const DEFAULT_MACHINE_RATE   = 1.5  // RM/hr — typical for mid-range FDM printer
@@ -54,6 +56,7 @@ export type EstimateInput = {
   waste_percent?: number          // consumables + maintenance overhead; default 8%
   nozzle_mm?: number              // default 0.4 — affects print time
   custom_infill?: number          // overrides quality default — affects weight
+  wall_count?: number             // affects weight via perimeter material (~20% of total)
   ironing?: boolean               // adds 15% print time, smoother top surface
 }
 
@@ -70,9 +73,12 @@ export type EstimateResult = {
 
 // Map legacy DB values to current quality keys
 const QUALITY_COMPAT: Record<string, PrintQuality> = {
-  draft:    'functional',
-  standard: 'presentable',
-  premium:  'display',
+  draft:       'basic',
+  functional:  'basic',
+  standard:    'basic',
+  presentable: 'basic',
+  premium:     'advanced',
+  display:     'advanced',
 }
 
 export function calculateEstimate(input: EstimateInput): EstimateResult {
@@ -84,6 +90,7 @@ export function calculateEstimate(input: EstimateInput): EstimateResult {
     waste_percent         = DEFAULT_WASTE_PERCENT,
     nozzle_mm             = 0.4,
     custom_infill,
+    wall_count,
     ironing               = false,
   } = input
 
@@ -94,7 +101,10 @@ export function calculateEstimate(input: EstimateInput): EstimateResult {
   // Scale weight by infill ratio if owner profile differs from default
   const base_infill = DEFAULT_INFILL[quality]
   const effective_infill = custom_infill ?? base_infill
-  const weight_g = base.weight_g * (effective_infill / base_infill)
+  // Perimeters are ~20% of total filament; wall count scales that portion
+  const default_walls = quality === 'advanced' ? DEFAULT_WALL_COUNT_ADVANCED : DEFAULT_WALL_COUNT_BASIC
+  const wall_factor = wall_count != null ? 0.8 + 0.2 * (wall_count / default_walls) : 1.0
+  const weight_g = base.weight_g * (effective_infill / base_infill) * wall_factor
 
   // Scale time by nozzle multiplier, then add ironing overhead
   const nozzle_mult = NOZZLE_TIME_MULTIPLIER[String(nozzle_mm)] ?? 1.0
@@ -139,8 +149,8 @@ export function calculatePriceRange(input: PriceRangeInput): { price_min: number
 
     const base = { material, cost_per_kg, ...input }
     prices.push(
-      calculateEstimate({ ...base, size: 'small', quality: 'functional' }).suggested_price,
-      calculateEstimate({ ...base, size: 'large', quality: 'display'   }).suggested_price,
+      calculateEstimate({ ...base, size: 'small', quality: 'basic'    }).suggested_price,
+      calculateEstimate({ ...base, size: 'large', quality: 'advanced' }).suggested_price,
     )
   }
 

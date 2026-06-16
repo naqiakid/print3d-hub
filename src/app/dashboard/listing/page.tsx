@@ -41,10 +41,7 @@ export default async function ListingPage() {
     .eq('printer_id', printer.id)
     .eq('is_active', true)
 
-  const profiles = (profileData ?? []) as unknown as Pick<
-    PrintProfile,
-    'nozzle_mm' | 'supports_available' | 'ironing_available' | 'color_change_available' | 'fuzzy_skin_available' | 'pause_insert_available'
-  >[]
+  const profiles = (profileData ?? []) as unknown as PrintProfile[]
 
   // Look up the printer preset to get build volume and power
   const preset = PRINTER_MODELS.find(
@@ -115,23 +112,25 @@ export default async function ListingPage() {
         const filamentCosts  = (printer.filament_costs ?? {}) as Record<string, number>
         const materials      = (printer.materials ?? []) as FilamentMaterial[]
 
-        const tiers = [
-          { key: 'functional'  as const, label: 'Functional' },
-          { key: 'presentable' as const, label: 'Presentable' },
-          { key: 'display'     as const, label: 'Display' },
-        ]
-
         if (materials.length === 0) return null
+
+        const defaultProfile = profiles.find((p) => p.is_default) ?? profiles[0] ?? null
+
+        const tiers = [
+          { key: 'basic'    as const, label: 'Basic',    infill: defaultProfile?.infill_basic    ?? 15, walls: defaultProfile?.wall_count_basic    ?? 3 },
+          { key: 'advanced' as const, label: 'Advanced', infill: defaultProfile?.infill_advanced ?? 40, walls: defaultProfile?.wall_count_advanced ?? 5 },
+        ]
 
         const rows = materials.map((mat) => {
           const configured = filamentCosts[mat] != null
           const costPerKg  = filamentCosts[mat] ?? DEFAULT_FILAMENT_COST_PER_KG[mat]
-          const prices     = tiers.map(({ key }) =>
+          const prices     = tiers.map(({ key, infill, walls }) =>
             calculateEstimate({
               size: 'medium', quality: key, material: mat,
               power_watts: powerWatts, cost_per_kg: costPerKg,
               electricity_rate: elecRate, markup_percent: markupPct,
               machine_rate_per_hour: machineRate, waste_percent: wastePct,
+              custom_infill: infill, wall_count: walls,
             }).suggested_price
           )
           return { mat, configured, prices }
@@ -144,7 +143,7 @@ export default async function ListingPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="font-semibold text-slate-900">Pricing preview</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Typical medium-size print at each finish tier, with your current settings.</p>
+                <p className="text-xs text-slate-400 mt-0.5">Typical medium-size print at each quality tier, with your current settings.</p>
               </div>
               <Link href="/dashboard/equipment" className="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-600 transition">
                 Set filament costs →
