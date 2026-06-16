@@ -609,6 +609,12 @@ export default function RequestForm({
     ['.stl', '.3mf', '.obj'].some((ext) => i.file.name.toLowerCase().endsWith(ext))
   )
 
+  function handleSetMaterial(mat: FilamentMaterial) {
+    setMaterial(mat)
+    setRequestColor('Any')
+    setRequestColorHex('#888888')
+  }
+
   function pickMode(mode: ModelMode) {
     setModelMode(mode)
     setModelUrl('')
@@ -1171,7 +1177,7 @@ export default function RequestForm({
             <p className="mb-3 text-xs text-slate-400">Which filament do you want your print in?</p>
             <div className="space-y-2">
               {printer.materials.map((mat) => (
-                <button key={mat} type="button" onClick={() => setMaterial(mat)}
+                <button key={mat} type="button" onClick={() => handleSetMaterial(mat)}
                   className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${material === mat ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'}`}>
                   <p className={`text-sm font-medium ${material === mat ? 'text-orange-700' : 'text-slate-800'}`}>{MATERIAL_LABELS[mat]}</p>
                   <p className="text-xs text-slate-400 mt-0.5">{MATERIAL_DESCRIPTIONS[mat]}</p>
@@ -1183,22 +1189,59 @@ export default function RequestForm({
           {/* Color */}
           <div>
             <h3 className="mb-1 text-sm font-semibold text-slate-700">Color</h3>
-            <p className="mb-3 text-xs text-slate-400">What color do you want? Leave as &quot;Any&quot; if you&apos;re flexible.</p>
-            <div className="flex flex-wrap gap-2 mb-3">
-              <button type="button" onClick={() => { setRequestColor('Any'); setRequestColorHex('#888888') }}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${requestColor === 'Any' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'}`}>
-                Any / Owner decides
-              </button>
-              {COLOR_PRESETS.map(({ name, hex }) => (
-                <button key={name} type="button" onClick={() => { setRequestColor(name); setRequestColorHex(hex) }}
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${requestColor === name ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'}`}>
-                  <span className="h-3 w-3 rounded-full border border-slate-200 shrink-0" style={{ background: hex }} />
-                  {name}
-                </button>
-              ))}
-            </div>
-            {requestColor !== 'Any' && (
-              <p className="text-xs text-slate-400">Selected: <span className="font-medium text-slate-700">{requestColor}</span></p>
+            {filaments.length > 0 ? (() => {
+              const inStock = filaments.filter((f) => f.in_stock)
+              const forMaterial = material ? inStock.filter((f) => f.material === material) : inStock
+              return (
+                <>
+                  <p className="mb-3 text-xs text-slate-400">
+                    {material
+                      ? `Colors available in ${MATERIAL_LABELS[material]}:`
+                      : 'Select a material above to see available colors.'}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => { setRequestColor('Any'); setRequestColorHex('#888888') }}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${requestColor === 'Any' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'}`}>
+                      Any / Owner decides
+                    </button>
+                    {forMaterial.map((f) => (
+                      <button key={f.id} type="button"
+                        onClick={() => { setRequestColor(f.color); setRequestColorHex(f.color_hex) }}
+                        title={f.color}
+                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${requestColor === f.color ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'}`}>
+                        <span className="h-3 w-3 rounded-full border border-slate-200 shrink-0" style={{ background: f.color_hex }} />
+                        {f.color}
+                      </button>
+                    ))}
+                    {material && forMaterial.length === 0 && (
+                      <p className="text-xs text-slate-400 self-center">No colors configured for this material — owner will choose.</p>
+                    )}
+                  </div>
+                  {requestColor !== 'Any' && (
+                    <p className="mt-2 text-xs text-slate-400">Selected: <span className="font-medium text-slate-700">{requestColor}</span></p>
+                  )}
+                </>
+              )
+            })() : (
+              <>
+                <p className="mb-3 text-xs text-slate-400">What color do you want? Leave as &quot;Any&quot; if you&apos;re flexible.</p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <button type="button" onClick={() => { setRequestColor('Any'); setRequestColorHex('#888888') }}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${requestColor === 'Any' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'}`}>
+                    Any / Owner decides
+                  </button>
+                  {COLOR_PRESETS.map(({ name, hex }) => (
+                    <button key={name} type="button" onClick={() => { setRequestColor(name); setRequestColorHex(hex) }}
+                      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${requestColor === name ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'}`}>
+                      <span className="h-3 w-3 rounded-full border border-slate-200 shrink-0" style={{ background: hex }} />
+                      {name}
+                    </button>
+                  ))}
+                </div>
+                {requestColor !== 'Any' && (
+                  <p className="text-xs text-slate-400">Selected: <span className="font-medium text-slate-700">{requestColor}</span></p>
+                )}
+              </>
             )}
           </div>
 
