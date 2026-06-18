@@ -166,6 +166,9 @@ export type CatalogItem = {
   resize_max_pct: number
   allow_material_choice: boolean
   available_materials: string[]
+  material: string | null
+  color: string | null
+  color_hex: string | null
   base_price: number | null
   sort_order: number
   is_active: boolean

@@ -53,6 +53,9 @@ type FormState = {
   resize_max_pct: number
   allow_material_choice: boolean
   available_materials: string[]
+  material: string
+  color: string
+  color_hex: string
   base_price: string
 }
 
@@ -70,6 +73,9 @@ const BLANK: FormState = {
   resize_max_pct: 150,
   allow_material_choice: false,
   available_materials: [],
+  material: '',
+  color: '',
+  color_hex: '#888888',
   base_price: '',
 }
 
@@ -88,6 +94,9 @@ function itemToForm(item: CatalogItem): FormState {
     resize_max_pct: item.resize_max_pct,
     allow_material_choice: item.allow_material_choice,
     available_materials: item.available_materials,
+    material: item.material ?? '',
+    color: item.color ?? '',
+    color_hex: item.color_hex ?? '#888888',
     base_price: item.base_price != null ? String(item.base_price) : '',
   }
 }
@@ -157,6 +166,9 @@ export default function CatalogManager({
       resize_max_pct: form.resize_max_pct,
       allow_material_choice: form.allow_material_choice,
       available_materials: form.allow_material_choice ? form.available_materials : [],
+      material: form.material || null,
+      color: !form.allow_color_choice && form.color.trim() ? form.color.trim() : null,
+      color_hex: !form.allow_color_choice && form.color.trim() ? form.color_hex : null,
       base_price: form.base_price ? parseFloat(form.base_price) : null,
     }
 
@@ -171,10 +183,13 @@ export default function CatalogManager({
           is_active: true,
           created_at: new Date().toISOString(),
           ...data,
-          photo_url: data.photo_url,
-          model_url: data.model_url,
-          stl_urls: data.stl_urls,
-          base_price: data.base_price,
+          photo_url: data.photo_url ?? null,
+          model_url: data.model_url ?? null,
+          stl_urls: data.stl_urls ?? [],
+          material: data.material ?? null,
+          color: data.color ?? null,
+          color_hex: data.color_hex ?? null,
+          base_price: data.base_price ?? null,
         }
         setItems((prev) => [newItem, ...prev])
       } else if (editing) {
@@ -227,9 +242,23 @@ export default function CatalogManager({
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-semibold text-slate-900">{item.name}</p>
-                  {item.base_price && (
-                    <p className="text-xs text-orange-600 font-medium">From RM {item.base_price.toFixed(2)}</p>
-                  )}
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    {item.material && (
+                      <span className="text-xs text-slate-500">{MATERIAL_LABELS[item.material as FilamentMaterial] ?? item.material}</span>
+                    )}
+                    {item.color && item.color_hex && (
+                      <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                        <span className="h-2.5 w-2.5 rounded-full border border-slate-300" style={{ background: item.color_hex }} />
+                        {item.color}
+                      </span>
+                    )}
+                    {item.allow_color_choice && (
+                      <span className="text-xs text-slate-400 italic">color by customer</span>
+                    )}
+                    {item.base_price && (
+                      <span className="text-xs text-orange-600 font-medium">· From RM {item.base_price.toFixed(2)}</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
                   <button type="button" onClick={() => openEdit(item)}
@@ -726,6 +755,53 @@ function CatalogForm({
           {uploading ? 'Uploading…' : 'Choose .stl / .3mf files'}
         </button>
         {uploadError && <p className="mt-1 text-[11px] text-red-500">{uploadError}</p>}
+      </div>
+
+      {/* Material + Color */}
+      <div className="space-y-3">
+        <div>
+          <p className="mb-1.5 text-xs font-medium text-slate-600">Material</p>
+          <div className="flex flex-wrap gap-2">
+            {printerMaterials.map((mat) => (
+              <button key={mat} type="button"
+                onClick={() => set('material', mat)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                  form.material === mat
+                    ? 'border-orange-500 bg-orange-50 text-orange-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
+                }`}>
+                {MATERIAL_LABELS[mat]}
+              </button>
+            ))}
+            {printerMaterials.length === 0 && (
+              <p className="text-xs text-slate-400">Add materials to your printer listing first.</p>
+            )}
+          </div>
+        </div>
+
+        {form.allow_color_choice ? (
+          <p className="text-xs text-slate-400 italic">Color will be chosen by the customer from your filament stock.</p>
+        ) : (
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-slate-600">Color</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Color name (e.g. Black, Galaxy Blue)"
+                value={form.color}
+                onChange={(e) => set('color', e.target.value)}
+                className={inputClass}
+              />
+              <input
+                type="color"
+                value={form.color_hex || '#888888'}
+                onChange={(e) => set('color_hex', e.target.value)}
+                className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-slate-200 p-1"
+                title="Pick color"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Customisation options */}
