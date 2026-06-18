@@ -52,6 +52,7 @@ export default async function CatalogPage() {
         initialItems={items}
         printerId={printer.id}
         printerMaterials={(printer.materials ?? []) as FilamentMaterial[]}
+        printer={printer}
       />
     </div>
   )

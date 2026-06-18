@@ -1,14 +1,43 @@
 'use client'
 
-import { useState, useTransition, useRef } from 'react'
-import { Plus, Pencil, Trash2, Package, Upload, FileBox, X } from 'lucide-react'
-import type { CatalogItem, FilamentMaterial } from '@/lib/types'
+import { useState, useTransition, useRef, useEffect } from 'react'
+import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+import type { CatalogItem, FilamentMaterial, Printer } from '@/lib/types'
 import { MATERIAL_LABELS } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
+import { getPresetById } from '@/lib/printer-models'
+import {
+  DEFAULT_ELECTRICITY_RATE,
+  DEFAULT_MARKUP_PERCENT,
+  DEFAULT_MACHINE_RATE,
+  DEFAULT_WASTE_PERCENT,
+  DEFAULT_FILAMENT_COST_PER_KG,
+} from '@/lib/pricing'
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
+
+const selectClass =
+  'rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 focus:border-orange-400 focus:outline-none'
+
+type GcodeItem = {
+  id: string
+  file: File
+  url: string | null
+  uploading: boolean
+  parsing: boolean
+  error: string
+  stats: { weight_g: number | null; print_hours: number | null } | null
+  material: FilamentMaterial
+}
+
+function fmtHours(h: number | null | undefined): string {
+  if (!h) return '—'
+  const hrs = Math.floor(h)
+  const mins = Math.round((h - hrs) * 60)
+  return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`
+}
 
 type FormState = {
   name: string
@@ -67,10 +96,12 @@ export default function CatalogManager({
   initialItems,
   printerId,
   printerMaterials,
+  printer,
 }: {
   initialItems: CatalogItem[]
   printerId: string
   printerMaterials: FilamentMaterial[]
+  printer: Printer
 }) {
   const [items, setItems] = useState<CatalogItem[]>(initialItems)
   const [editing, setEditing] = useState<string | null>(null)  // item id or 'new'
@@ -234,6 +265,7 @@ export default function CatalogManager({
                 set={set}
                 toggleMaterial={toggleMaterial}
                 printerMaterials={printerMaterials}
+                printer={printer}
                 onSave={handleSave}
                 onCancel={closeForm}
                 isPending={isPending}
@@ -258,6 +290,7 @@ export default function CatalogManager({
             set={set}
             toggleMaterial={toggleMaterial}
             printerMaterials={printerMaterials}
+            printer={printer}
             onSave={handleSave}
             onCancel={closeForm}
             isPending={isPending}
@@ -276,6 +309,277 @@ export default function CatalogManager({
   )
 }
 
+// ── G-code price calculator ───────────────────────────────────────────────────
+
+function GcodeCalculator({
+  printer,
+  defaultMaterial,
+  onUsePrice,
+}: {
+  printer: Printer
+  defaultMaterial: FilamentMaterial
+  onUsePrice: (price: string) => void
+}) {
+  const gcodeInputRef = useRef<HTMLInputElement>(null)
+  const [open, setOpen] = useState(false)
+  const [items, setItems] = useState<GcodeItem[]>([])
+  const [markup, setMarkup] = useState(printer.markup_percent ?? DEFAULT_MARKUP_PERCENT)
+
+  const modelPowerWatts = getPresetById(printer.printer_model_id ?? '')?.power_watts ?? 200
+  const totalWeight = items.reduce((s, i) => s + (i.stats?.weight_g ?? 0), 0)
+  const totalHours  = items.reduce((s, i) => s + (i.stats?.print_hours ?? 0), 0)
+  const allDone     = items.length > 0 && items.every((i) => !i.uploading && !i.parsing)
+  const anyStats    = items.some((i) => i.stats?.weight_g != null)
+
+  type Breakdown = {
+    perPlate: { label: string; cost: number }[]
+    electricityCost: number
+    machineCost: number
+    wasteCost: number
+    baseCost: number
+    markup: number
+    total: number
+  }
+  const [breakdown, setBreakdown] = useState<Breakdown | null>(null)
+
+  useEffect(() => {
+    if (!anyStats) { setBreakdown(null); return }
+    const elecRate  = printer.electricity_rate ?? DEFAULT_ELECTRICITY_RATE
+    const machRate  = printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE
+    const wastePct  = printer.waste_percent ?? DEFAULT_WASTE_PERCENT
+
+    const perPlate = items
+      .filter((i) => (i.stats?.weight_g ?? 0) > 0)
+      .map((i, idx) => {
+        const w = i.stats!.weight_g!
+        const costPerKg = printer.filament_costs?.[i.material] ?? DEFAULT_FILAMENT_COST_PER_KG[i.material] ?? 55
+        return {
+          label: `Plate ${idx + 1} — ${w}g ${MATERIAL_LABELS[i.material]} @ RM${costPerKg}/kg`,
+          cost: (w / 1000) * costPerKg,
+        }
+      })
+
+    const filamentCost    = perPlate.reduce((s, p) => s + p.cost, 0)
+    const electricityCost = totalHours > 0 ? totalHours * (modelPowerWatts / 1000) * elecRate : 0
+    const machineCost     = totalHours > 0 ? totalHours * machRate : 0
+    const subtotal        = filamentCost + electricityCost + machineCost
+    const wasteCost       = subtotal * (wastePct / 100)
+    const baseCost        = subtotal + wasteCost
+    const markupAmt       = baseCost * (markup / 100)
+    const total           = baseCost + markupAmt
+    setBreakdown({ perPlate, electricityCost, machineCost, wasteCost, baseCost, markup: markupAmt, total })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, markup, anyStats, totalHours])
+
+  async function uploadAndParse(item: GcodeItem) {
+    const supabase = createClient()
+    const path = `gcode/catalog/${Date.now()}-${item.file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const { data: uploadData, error } = await supabase.storage.from('stl-files').upload(path, item.file)
+    if (error || !uploadData) {
+      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, uploading: false, error: error?.message ?? 'Upload failed' } : i))
+      return
+    }
+    const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
+    const publicUrl = urlData.publicUrl
+    setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, uploading: false, url: publicUrl, parsing: true } : i))
+    try {
+      const res  = await fetch(`/api/parse-gcode?url=${encodeURIComponent(publicUrl)}`)
+      const data = await res.json()
+      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, parsing: false, stats: data.error ? null : data } : i))
+    } catch {
+      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, parsing: false } : i))
+    }
+  }
+
+  function addFiles(files: FileList | File[]) {
+    const newItems: GcodeItem[] = Array.from(files)
+      .filter((f) => /\.(gcode|bgcode)$/i.test(f.name))
+      .map((f) => ({
+        id: crypto.randomUUID(),
+        file: f,
+        url: null,
+        uploading: true,
+        parsing: false,
+        error: '',
+        stats: null,
+        material: defaultMaterial,
+      }))
+    if (!newItems.length) return
+    setItems((prev) => [...prev, ...newItems])
+    newItems.forEach((item) => uploadAndParse(item))
+  }
+
+  function reset() {
+    setItems([])
+    setBreakdown(null)
+  }
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-500 hover:text-orange-600 transition">
+        <FileCode2 className="h-3.5 w-3.5" /> Calculate from G-code
+      </button>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-orange-100 bg-orange-50 p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-slate-700">Price calculator</p>
+        <button type="button" onClick={() => { reset(); setOpen(false) }}
+          className="text-slate-400 hover:text-slate-600 transition">
+          <ChevronUp className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* G-code upload */}
+      {items.length === 0 ? (
+        <label
+          className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-orange-200 bg-white px-4 py-5 text-center hover:border-orange-400 hover:bg-orange-50/50 transition"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files) }}
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100">
+            <Upload className="h-4 w-4 text-orange-500" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-700">Drop .gcode files here</p>
+            <p className="text-xs text-slate-400 mt-0.5">or click to browse · multiple plates supported</p>
+          </div>
+          <input ref={gcodeInputRef} type="file" accept=".gcode,.bgcode" multiple className="hidden"
+            onChange={(e) => { if (e.target.files) addFiles(e.target.files) }} />
+        </label>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item, idx) => (
+            <div key={item.id} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2.5">
+                <FileCode2 className="h-4 w-4 shrink-0 text-slate-400" />
+                <span className="flex-1 truncate text-xs text-slate-700">{item.file.name}</span>
+                {item.uploading && (
+                  <span className="flex items-center gap-1 text-xs text-slate-400">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Uploading
+                  </span>
+                )}
+                {item.parsing && (
+                  <span className="flex items-center gap-1 text-xs text-slate-400">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Analysing
+                  </span>
+                )}
+                {!item.uploading && !item.parsing && item.stats && (
+                  <span className="shrink-0 text-xs font-medium text-teal-600">
+                    {item.stats.weight_g != null && `${item.stats.weight_g}g`}
+                    {item.stats.weight_g != null && item.stats.print_hours != null && ' · '}
+                    {item.stats.print_hours != null && fmtHours(item.stats.print_hours)}
+                  </span>
+                )}
+                {item.error && <span className="shrink-0 text-xs text-red-500">{item.error}</span>}
+                <button type="button" onClick={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
+                  className="shrink-0 text-slate-300 hover:text-slate-600 transition">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {/* Per-plate material selector */}
+              <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50 px-3 py-1.5">
+                <span className="text-xs text-slate-500 shrink-0">Plate {idx + 1}:</span>
+                <select value={item.material}
+                  onChange={(e) => setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, material: e.target.value as FilamentMaterial } : i))}
+                  className={selectClass}>
+                  {(Object.entries(MATERIAL_LABELS) as [FilamentMaterial, string][]).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ))}
+
+          {/* Totals */}
+          {allDone && anyStats && (
+            <div className="rounded-lg border border-teal-100 bg-teal-50 px-3 py-2 text-xs">
+              <span className="font-medium text-teal-800">
+                {items.length > 1 && `${items.length} plates · `}Total:
+              </span>
+              <span className="ml-1 text-teal-700">
+                {totalWeight > 0 && `~${Math.round(totalWeight * 10) / 10}g filament`}
+                {totalWeight > 0 && totalHours > 0 && ' · '}
+                {totalHours > 0 && `~${fmtHours(totalHours)} print time`}
+              </span>
+            </div>
+          )}
+
+          <button type="button" onClick={() => gcodeInputRef.current?.click()}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-500 hover:text-orange-600 transition">
+            <Plus className="h-3.5 w-3.5" /> Add another plate
+          </button>
+          <input ref={gcodeInputRef} type="file" accept=".gcode,.bgcode" multiple className="hidden"
+            onChange={(e) => { if (e.target.files) { addFiles(e.target.files); e.target.value = '' } }} />
+        </div>
+      )}
+
+      {/* Price breakdown */}
+      {breakdown && (
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-3 py-2 bg-slate-50 border-b border-slate-100">
+            <span className="text-xs font-semibold text-slate-700">Cost breakdown</span>
+          </div>
+          <div className="px-3 py-2.5 space-y-1 text-xs">
+            {breakdown.perPlate.map((p, i) => (
+              <div key={i} className="flex justify-between text-slate-600">
+                <span className="text-slate-500">{p.label}</span>
+                <span className="font-medium tabular-nums">RM {p.cost.toFixed(2)}</span>
+              </div>
+            ))}
+            {breakdown.electricityCost > 0 && (
+              <div className="flex justify-between text-slate-600">
+                <span className="text-slate-500">Electricity ({fmtHours(totalHours)} × {modelPowerWatts}W)</span>
+                <span className="font-medium tabular-nums">RM {breakdown.electricityCost.toFixed(2)}</span>
+              </div>
+            )}
+            {breakdown.machineCost > 0 && (
+              <div className="flex justify-between text-slate-600">
+                <span className="text-slate-500">Machine wear</span>
+                <span className="font-medium tabular-nums">RM {breakdown.machineCost.toFixed(2)}</span>
+              </div>
+            )}
+            {breakdown.wasteCost > 0 && (
+              <div className="flex justify-between text-slate-600">
+                <span className="text-slate-500">Waste & maintenance</span>
+                <span className="font-medium tabular-nums">RM {breakdown.wasteCost.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-slate-500 border-t border-slate-100 pt-1.5">
+              <span>Base cost</span>
+              <span className="tabular-nums">RM {breakdown.baseCost.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="flex items-center gap-1.5">
+                Markup
+                <input type="number" min="0" max="500" step="5" value={markup}
+                  onChange={(e) => setMarkup(Math.max(0, Number(e.target.value)))}
+                  className="w-16 rounded-lg border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-center text-xs font-medium text-slate-700 focus:border-orange-400 focus:outline-none" />
+                <span className="text-xs text-slate-400">%</span>
+              </span>
+              <span className="tabular-nums">RM {breakdown.markup.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-slate-100 pt-1.5">
+              <span className="font-bold text-slate-900">Suggested price</span>
+              <span className="text-base font-bold text-orange-600">RM {breakdown.total.toFixed(2)}</span>
+            </div>
+          </div>
+          <div className="px-3 pb-3">
+            <button type="button"
+              onClick={() => { onUsePrice(breakdown.total.toFixed(2)); reset(); setOpen(false) }}
+              className="w-full rounded-xl bg-orange-500 py-2 text-sm font-semibold text-white hover:bg-orange-600 transition">
+              Use this price
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Shared form fields ────────────────────────────────────────────────────────
 
 function CatalogForm({
@@ -283,6 +587,7 @@ function CatalogForm({
   set,
   toggleMaterial,
   printerMaterials,
+  printer,
   onSave,
   onCancel,
   isPending,
@@ -292,6 +597,7 @@ function CatalogForm({
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void
   toggleMaterial: (m: string) => void
   printerMaterials: FilamentMaterial[]
+  printer: Printer
   onSave: () => void
   onCancel: () => void
   isPending: boolean
@@ -300,6 +606,8 @@ function CatalogForm({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
+
+  const defaultMaterial = (printerMaterials[0] ?? 'pla') as FilamentMaterial
 
   async function handleStlFiles(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -347,6 +655,13 @@ function CatalogForm({
           <input type="number" min="0" step="0.50" value={form.base_price}
             onChange={(e) => set('base_price', e.target.value)}
             placeholder="e.g. 15.00" className={inputClass} />
+          <div className="mt-1">
+            <GcodeCalculator
+              printer={printer}
+              defaultMaterial={defaultMaterial}
+              onUsePrice={(price) => set('base_price', price)}
+            />
+          </div>
         </div>
       </div>
 
