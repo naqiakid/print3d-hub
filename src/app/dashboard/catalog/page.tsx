@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import type { Printer, CatalogItem, FilamentMaterial } from '@/lib/types'
+import type { Printer, CatalogItem, FilamentMaterial, Filament } from '@/lib/types'
 import CatalogManager from '@/components/CatalogManager'
 
 export default async function CatalogPage() {
@@ -31,6 +31,16 @@ export default async function CatalogPage() {
 
   const items = (itemData ?? []) as unknown as CatalogItem[]
 
+  const { data: filamentData } = await supabase
+    .from('filaments')
+    .select('*')
+    .eq('owner_id', user.id)
+    .eq('in_stock', true)
+    .order('material')
+    .order('color')
+
+  const filaments = (filamentData ?? []) as unknown as Filament[]
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-8">
@@ -51,8 +61,8 @@ export default async function CatalogPage() {
       <CatalogManager
         initialItems={items}
         printerId={printer.id}
-        printerMaterials={(printer.materials ?? []) as FilamentMaterial[]}
         printer={printer}
+        filaments={filaments}
       />
     </div>
   )

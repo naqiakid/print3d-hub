@@ -764,6 +764,7 @@ type CatalogItemData = {
   resize_max_pct: number
   allow_material_choice: boolean
   available_materials: string[]
+  material_prices?: Record<string, number>
   material?: string | null
   color?: string | null
   color_hex?: string | null

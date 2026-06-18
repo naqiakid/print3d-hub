@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
-import type { CatalogItem, FilamentMaterial, Printer } from '@/lib/types'
+import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, ChevronUp } from 'lucide-react'
+import type { CatalogItem, FilamentMaterial, Filament, Printer } from '@/lib/types'
 import { MATERIAL_LABELS } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
@@ -20,6 +20,8 @@ const inputClass =
 
 const selectClass =
   'rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 focus:border-orange-400 focus:outline-none'
+
+// ── G-code calculator types ───────────────────────────────────────────────────
 
 type GcodeItem = {
   id: string
@@ -39,6 +41,8 @@ function fmtHours(h: number | null | undefined): string {
   return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`
 }
 
+// ── Form state ────────────────────────────────────────────────────────────────
+
 type FormState = {
   name: string
   description: string
@@ -47,15 +51,18 @@ type FormState = {
   stl_urls: string[]
   allow_custom_text: boolean
   text_prompt: string
+  // Material & color
+  allow_material_choice: boolean
+  available_materials: string[]     // materials customer can pick (when allow_material_choice ON)
+  material_prices: Record<string, string>  // RM price per material (when allow_material_choice ON)
+  material: string                  // fixed material (when allow_material_choice OFF)
   allow_color_choice: boolean
+  color: string                     // fixed color name (when allow_color_choice OFF)
+  color_hex: string
+  // Other customisations
   allow_resize: boolean
   resize_min_pct: number
   resize_max_pct: number
-  allow_material_choice: boolean
-  available_materials: string[]
-  material: string
-  color: string
-  color_hex: string
   base_price: string
 }
 
@@ -67,19 +74,24 @@ const BLANK: FormState = {
   stl_urls: [],
   allow_custom_text: false,
   text_prompt: 'Text to add',
+  allow_material_choice: false,
+  available_materials: [],
+  material_prices: {},
+  material: '',
   allow_color_choice: true,
+  color: '',
+  color_hex: '#888888',
   allow_resize: false,
   resize_min_pct: 80,
   resize_max_pct: 150,
-  allow_material_choice: false,
-  available_materials: [],
-  material: '',
-  color: '',
-  color_hex: '#888888',
   base_price: '',
 }
 
 function itemToForm(item: CatalogItem): FormState {
+  const prices: Record<string, string> = {}
+  for (const [mat, price] of Object.entries(item.material_prices ?? {})) {
+    prices[mat] = String(price)
+  }
   return {
     name: item.name,
     description: item.description,
@@ -88,69 +100,77 @@ function itemToForm(item: CatalogItem): FormState {
     stl_urls: item.stl_urls ?? [],
     allow_custom_text: item.allow_custom_text,
     text_prompt: item.text_prompt,
+    allow_material_choice: item.allow_material_choice,
+    available_materials: item.available_materials ?? [],
+    material_prices: prices,
+    material: item.material ?? '',
     allow_color_choice: item.allow_color_choice,
+    color: item.color ?? '',
+    color_hex: item.color_hex ?? '#888888',
     allow_resize: item.allow_resize,
     resize_min_pct: item.resize_min_pct,
     resize_max_pct: item.resize_max_pct,
-    allow_material_choice: item.allow_material_choice,
-    available_materials: item.available_materials,
-    material: item.material ?? '',
-    color: item.color ?? '',
-    color_hex: item.color_hex ?? '#888888',
     base_price: item.base_price != null ? String(item.base_price) : '',
   }
 }
 
+// ── CatalogManager ────────────────────────────────────────────────────────────
+
 export default function CatalogManager({
   initialItems,
   printerId,
-  printerMaterials,
   printer,
+  filaments,
 }: {
   initialItems: CatalogItem[]
   printerId: string
-  printerMaterials: FilamentMaterial[]
   printer: Printer
+  filaments: Filament[]
 }) {
   const [items, setItems] = useState<CatalogItem[]>(initialItems)
-  const [editing, setEditing] = useState<string | null>(null)  // item id or 'new'
+  const [editing, setEditing] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(BLANK)
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
 
-  function openNew() {
-    setForm(BLANK)
-    setEditing('new')
-    setError('')
-  }
-
-  function openEdit(item: CatalogItem) {
-    setForm(itemToForm(item))
-    setEditing(item.id)
-    setError('')
-  }
-
-  function closeForm() {
-    setEditing(null)
-    setError('')
-  }
+  function openNew() { setForm(BLANK); setEditing('new'); setError('') }
+  function openEdit(item: CatalogItem) { setForm(itemToForm(item)); setEditing(item.id); setError('') }
+  function closeForm() { setEditing(null); setError('') }
 
   function set<K extends keyof FormState>(key: K, val: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: val }))
   }
 
-  function toggleMaterial(mat: string) {
-    setForm((prev) => ({
-      ...prev,
-      available_materials: prev.available_materials.includes(mat)
-        ? prev.available_materials.filter((m) => m !== mat)
-        : [...prev.available_materials, mat],
-    }))
+  function toggleAvailableMaterial(mat: string) {
+    setForm((prev) => {
+      const has = prev.available_materials.includes(mat)
+      const newMats = has ? prev.available_materials.filter((m) => m !== mat) : [...prev.available_materials, mat]
+      const newPrices = { ...prev.material_prices }
+      if (has) delete newPrices[mat]
+      return { ...prev, available_materials: newMats, material_prices: newPrices }
+    })
+  }
+
+  function setMaterialPrice(mat: string, price: string) {
+    setForm((prev) => ({ ...prev, material_prices: { ...prev.material_prices, [mat]: price } }))
   }
 
   function handleSave() {
     if (!form.name.trim()) { setError('Product name is required.'); return }
     setError('')
+
+    // Derive base_price from min material price when allow_material_choice is ON
+    let basePriceNum: number | null = form.base_price ? parseFloat(form.base_price) : null
+    if (form.allow_material_choice) {
+      const prices = Object.values(form.material_prices).map(Number).filter((n) => !isNaN(n) && n > 0)
+      basePriceNum = prices.length > 0 ? Math.min(...prices) : null
+    }
+
+    const materialPricesNum: Record<string, number> = {}
+    for (const [mat, price] of Object.entries(form.material_prices)) {
+      const n = parseFloat(price)
+      if (!isNaN(n) && n > 0) materialPricesNum[mat] = n
+    }
 
     const data = {
       name: form.name.trim(),
@@ -160,16 +180,17 @@ export default function CatalogManager({
       stl_urls: form.stl_urls,
       allow_custom_text: form.allow_custom_text,
       text_prompt: form.text_prompt.trim() || 'Text to add',
+      allow_material_choice: form.allow_material_choice,
+      available_materials: form.allow_material_choice ? form.available_materials : [],
+      material_prices: materialPricesNum,
+      material: !form.allow_material_choice && form.material ? form.material : null,
       allow_color_choice: form.allow_color_choice,
+      color: !form.allow_color_choice && form.color.trim() ? form.color.trim() : null,
+      color_hex: !form.allow_color_choice && form.color.trim() ? form.color_hex : null,
       allow_resize: form.allow_resize,
       resize_min_pct: form.resize_min_pct,
       resize_max_pct: form.resize_max_pct,
-      allow_material_choice: form.allow_material_choice,
-      available_materials: form.allow_material_choice ? form.available_materials : [],
-      material: form.material || null,
-      color: !form.allow_color_choice && form.color.trim() ? form.color.trim() : null,
-      color_hex: !form.allow_color_choice && form.color.trim() ? form.color_hex : null,
-      base_price: form.base_price ? parseFloat(form.base_price) : null,
+      base_price: basePriceNum,
     }
 
     startTransition(async () => {
@@ -177,10 +198,7 @@ export default function CatalogManager({
         const res = await createCatalogItem(printerId, data)
         if ('error' in res) { setError(res.error); return }
         const newItem: CatalogItem = {
-          id: res.id,
-          printer_id: printerId,
-          sort_order: 0,
-          is_active: true,
+          id: res.id, printer_id: printerId, sort_order: 0, is_active: true,
           created_at: new Date().toISOString(),
           ...data,
           photo_url: data.photo_url ?? null,
@@ -195,7 +213,7 @@ export default function CatalogManager({
       } else if (editing) {
         const res = await updateCatalogItem(editing, data)
         if ('error' in res) { setError(res.error); return }
-        setItems((prev) => prev.map((i) => i.id === editing ? { ...i, ...data } : i))
+        setItems((prev) => prev.map((i) => i.id === editing ? { ...i, ...data, material: data.material ?? null, color: data.color ?? null, color_hex: data.color_hex ?? null, base_price: data.base_price ?? null } : i))
       }
       closeForm()
     })
@@ -210,16 +228,8 @@ export default function CatalogManager({
     })
   }
 
-  const CUSTOMISATION_BADGES: Record<string, string> = {
-    allow_custom_text: 'Custom text',
-    allow_color_choice: 'Color choice',
-    allow_resize: 'Resize',
-    allow_material_choice: 'Material choice',
-  }
-
   return (
     <div className="space-y-4">
-      {/* Item list */}
       {items.length === 0 && editing !== 'new' && (
         <div className="rounded-2xl border-2 border-dashed border-slate-200 py-14 text-center">
           <Package className="mx-auto mb-3 h-10 w-10 text-slate-300" />
@@ -231,32 +241,34 @@ export default function CatalogManager({
       {items.map((item) => (
         <div key={item.id} className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
           <div className="flex gap-4 p-4">
-            {/* Photo */}
             <div className="h-20 w-20 shrink-0 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center">
               {item.photo_url
                 ? <img src={item.photo_url} alt={item.name} className="h-full w-full object-cover" />
                 : <Package className="h-8 w-8 text-slate-300" />}
             </div>
-            {/* Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
-                <div>
+                <div className="min-w-0">
                   <p className="font-semibold text-slate-900">{item.name}</p>
-                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                    {item.material && (
-                      <span className="text-xs text-slate-500">{MATERIAL_LABELS[item.material as FilamentMaterial] ?? item.material}</span>
-                    )}
-                    {item.color && item.color_hex && (
-                      <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                        <span className="h-2.5 w-2.5 rounded-full border border-slate-300" style={{ background: item.color_hex }} />
-                        {item.color}
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    {/* Material + color badges */}
+                    {item.allow_material_choice ? (
+                      <span className="text-xs text-slate-500">
+                        {item.available_materials.map((m) => MATERIAL_LABELS[m as FilamentMaterial] ?? m).join(' / ')}
+                        {item.base_price ? ` · from RM ${item.base_price.toFixed(2)}` : ''}
                       </span>
-                    )}
-                    {item.allow_color_choice && (
-                      <span className="text-xs text-slate-400 italic">color by customer</span>
-                    )}
-                    {item.base_price && (
-                      <span className="text-xs text-orange-600 font-medium">· From RM {item.base_price.toFixed(2)}</span>
+                    ) : (
+                      <>
+                        {item.material && <span className="text-xs text-slate-500">{MATERIAL_LABELS[item.material as FilamentMaterial] ?? item.material}</span>}
+                        {item.color && item.color_hex && (
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                            <span className="h-2.5 w-2.5 rounded-full border border-slate-300 shrink-0" style={{ background: item.color_hex }} />
+                            {item.color}
+                          </span>
+                        )}
+                        {item.allow_color_choice && <span className="text-xs text-slate-400 italic">color by customer</span>}
+                        {item.base_price && <span className="text-xs text-orange-600 font-medium">RM {item.base_price.toFixed(2)}</span>}
+                      </>
                     )}
                   </div>
                 </div>
@@ -271,59 +283,44 @@ export default function CatalogManager({
                   </button>
                 </div>
               </div>
-              {item.description && (
-                <p className="mt-1 text-xs text-slate-500 line-clamp-2">{item.description}</p>
-              )}
+              {item.description && <p className="mt-1 text-xs text-slate-500 line-clamp-2">{item.description}</p>}
               <div className="mt-2 flex flex-wrap gap-1">
-                {(Object.keys(CUSTOMISATION_BADGES) as (keyof CatalogItem)[]).map((key) =>
-                  item[key] ? (
-                    <span key={key} className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[11px] font-medium text-orange-600">
-                      {CUSTOMISATION_BADGES[key]}
-                    </span>
-                  ) : null,
-                )}
+                {item.allow_custom_text && <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[11px] font-medium text-orange-600">Custom text</span>}
+                {item.allow_resize && <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[11px] font-medium text-orange-600">Resize</span>}
               </div>
             </div>
           </div>
 
-          {/* Inline edit form */}
           {editing === item.id && (
             <div className="border-t border-slate-100 bg-slate-50 px-4 py-5 space-y-4">
               <CatalogForm
-                form={form}
-                set={set}
-                toggleMaterial={toggleMaterial}
-                printerMaterials={printerMaterials}
+                form={form} set={set}
+                toggleAvailableMaterial={toggleAvailableMaterial}
+                setMaterialPrice={setMaterialPrice}
+                filaments={filaments}
                 printer={printer}
-                onSave={handleSave}
-                onCancel={closeForm}
-                isPending={isPending}
-                error={error}
+                onSave={handleSave} onCancel={closeForm}
+                isPending={isPending} error={error}
               />
             </div>
           )}
         </div>
       ))}
 
-      {/* Add new form */}
       {editing === 'new' && (
         <div className="rounded-2xl border border-orange-200 bg-white p-4 space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-slate-800">New product</p>
-            <button type="button" onClick={closeForm} className="text-slate-400 hover:text-slate-700">
-              <X className="h-4 w-4" />
-            </button>
+            <button type="button" onClick={closeForm} className="text-slate-400 hover:text-slate-700"><X className="h-4 w-4" /></button>
           </div>
           <CatalogForm
-            form={form}
-            set={set}
-            toggleMaterial={toggleMaterial}
-            printerMaterials={printerMaterials}
+            form={form} set={set}
+            toggleAvailableMaterial={toggleAvailableMaterial}
+            setMaterialPrice={setMaterialPrice}
+            filaments={filaments}
             printer={printer}
-            onSave={handleSave}
-            onCancel={closeForm}
-            isPending={isPending}
-            error={error}
+            onSave={handleSave} onCancel={closeForm}
+            isPending={isPending} error={error}
           />
         </div>
       )}
@@ -360,34 +357,19 @@ function GcodeCalculator({
   const allDone     = items.length > 0 && items.every((i) => !i.uploading && !i.parsing)
   const anyStats    = items.some((i) => i.stats?.weight_g != null)
 
-  type Breakdown = {
-    perPlate: { label: string; cost: number }[]
-    electricityCost: number
-    machineCost: number
-    wasteCost: number
-    baseCost: number
-    markup: number
-    total: number
-  }
+  type Breakdown = { perPlate: { label: string; cost: number }[]; electricityCost: number; machineCost: number; wasteCost: number; baseCost: number; markup: number; total: number }
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null)
 
   useEffect(() => {
     if (!anyStats) { setBreakdown(null); return }
-    const elecRate  = printer.electricity_rate ?? DEFAULT_ELECTRICITY_RATE
-    const machRate  = printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE
-    const wastePct  = printer.waste_percent ?? DEFAULT_WASTE_PERCENT
-
-    const perPlate = items
-      .filter((i) => (i.stats?.weight_g ?? 0) > 0)
-      .map((i, idx) => {
-        const w = i.stats!.weight_g!
-        const costPerKg = printer.filament_costs?.[i.material] ?? DEFAULT_FILAMENT_COST_PER_KG[i.material] ?? 55
-        return {
-          label: `Plate ${idx + 1} — ${w}g ${MATERIAL_LABELS[i.material]} @ RM${costPerKg}/kg`,
-          cost: (w / 1000) * costPerKg,
-        }
-      })
-
+    const elecRate = printer.electricity_rate ?? DEFAULT_ELECTRICITY_RATE
+    const machRate = printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE
+    const wastePct = printer.waste_percent ?? DEFAULT_WASTE_PERCENT
+    const perPlate = items.filter((i) => (i.stats?.weight_g ?? 0) > 0).map((i, idx) => {
+      const w = i.stats!.weight_g!
+      const costPerKg = printer.filament_costs?.[i.material] ?? DEFAULT_FILAMENT_COST_PER_KG[i.material] ?? 55
+      return { label: `Plate ${idx + 1} — ${w}g ${MATERIAL_LABELS[i.material]} @ RM${costPerKg}/kg`, cost: (w / 1000) * costPerKg }
+    })
     const filamentCost    = perPlate.reduce((s, p) => s + p.cost, 0)
     const electricityCost = totalHours > 0 ? totalHours * (modelPowerWatts / 1000) * elecRate : 0
     const machineCost     = totalHours > 0 ? totalHours * machRate : 0
@@ -395,8 +377,7 @@ function GcodeCalculator({
     const wasteCost       = subtotal * (wastePct / 100)
     const baseCost        = subtotal + wasteCost
     const markupAmt       = baseCost * (markup / 100)
-    const total           = baseCost + markupAmt
-    setBreakdown({ perPlate, electricityCost, machineCost, wasteCost, baseCost, markup: markupAmt, total })
+    setBreakdown({ perPlate, electricityCost, machineCost, wasteCost, baseCost, markup: markupAmt, total: baseCost + markupAmt })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, markup, anyStats, totalHours])
 
@@ -409,10 +390,9 @@ function GcodeCalculator({
       return
     }
     const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
-    const publicUrl = urlData.publicUrl
-    setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, uploading: false, url: publicUrl, parsing: true } : i))
+    setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, uploading: false, url: urlData.publicUrl, parsing: true } : i))
     try {
-      const res  = await fetch(`/api/parse-gcode?url=${encodeURIComponent(publicUrl)}`)
+      const res  = await fetch(`/api/parse-gcode?url=${encodeURIComponent(urlData.publicUrl)}`)
       const data = await res.json()
       setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, parsing: false, stats: data.error ? null : data } : i))
     } catch {
@@ -423,25 +403,13 @@ function GcodeCalculator({
   function addFiles(files: FileList | File[]) {
     const newItems: GcodeItem[] = Array.from(files)
       .filter((f) => /\.(gcode|bgcode)$/i.test(f.name))
-      .map((f) => ({
-        id: crypto.randomUUID(),
-        file: f,
-        url: null,
-        uploading: true,
-        parsing: false,
-        error: '',
-        stats: null,
-        material: defaultMaterial,
-      }))
+      .map((f) => ({ id: crypto.randomUUID(), file: f, url: null, uploading: true, parsing: false, error: '', stats: null, material: defaultMaterial }))
     if (!newItems.length) return
     setItems((prev) => [...prev, ...newItems])
     newItems.forEach((item) => uploadAndParse(item))
   }
 
-  function reset() {
-    setItems([])
-    setBreakdown(null)
-  }
+  function reset() { setItems([]); setBreakdown(null) }
 
   if (!open) {
     return (
@@ -456,13 +424,11 @@ function GcodeCalculator({
     <div className="rounded-xl border border-orange-100 bg-orange-50 p-3 space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold text-slate-700">Price calculator</p>
-        <button type="button" onClick={() => { reset(); setOpen(false) }}
-          className="text-slate-400 hover:text-slate-600 transition">
+        <button type="button" onClick={() => { reset(); setOpen(false) }} className="text-slate-400 hover:text-slate-600 transition">
           <ChevronUp className="h-4 w-4" />
         </button>
       </div>
 
-      {/* G-code upload */}
       {items.length === 0 ? (
         <label
           className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-orange-200 bg-white px-4 py-5 text-center hover:border-orange-400 hover:bg-orange-50/50 transition"
@@ -486,16 +452,8 @@ function GcodeCalculator({
               <div className="flex items-center gap-2 px-3 py-2.5">
                 <FileCode2 className="h-4 w-4 shrink-0 text-slate-400" />
                 <span className="flex-1 truncate text-xs text-slate-700">{item.file.name}</span>
-                {item.uploading && (
-                  <span className="flex items-center gap-1 text-xs text-slate-400">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Uploading
-                  </span>
-                )}
-                {item.parsing && (
-                  <span className="flex items-center gap-1 text-xs text-slate-400">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Analysing
-                  </span>
-                )}
+                {item.uploading && <span className="flex items-center gap-1 text-xs text-slate-400"><Loader2 className="h-3 w-3 animate-spin" /> Uploading</span>}
+                {item.parsing && <span className="flex items-center gap-1 text-xs text-slate-400"><Loader2 className="h-3 w-3 animate-spin" /> Analysing</span>}
                 {!item.uploading && !item.parsing && item.stats && (
                   <span className="shrink-0 text-xs font-medium text-teal-600">
                     {item.stats.weight_g != null && `${item.stats.weight_g}g`}
@@ -504,12 +462,10 @@ function GcodeCalculator({
                   </span>
                 )}
                 {item.error && <span className="shrink-0 text-xs text-red-500">{item.error}</span>}
-                <button type="button" onClick={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
-                  className="shrink-0 text-slate-300 hover:text-slate-600 transition">
+                <button type="button" onClick={() => setItems((prev) => prev.filter((i) => i.id !== item.id))} className="shrink-0 text-slate-300 hover:text-slate-600 transition">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
-              {/* Per-plate material selector */}
               <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50 px-3 py-1.5">
                 <span className="text-xs text-slate-500 shrink-0">Plate {idx + 1}:</span>
                 <select value={item.material}
@@ -523,13 +479,10 @@ function GcodeCalculator({
             </div>
           ))}
 
-          {/* Totals */}
           {allDone && anyStats && (
             <div className="rounded-lg border border-teal-100 bg-teal-50 px-3 py-2 text-xs">
-              <span className="font-medium text-teal-800">
-                {items.length > 1 && `${items.length} plates · `}Total:
-              </span>
-              <span className="ml-1 text-teal-700">
+              <span className="font-medium text-teal-800">{items.length > 1 && `${items.length} plates · `}Total: </span>
+              <span className="text-teal-700">
                 {totalWeight > 0 && `~${Math.round(totalWeight * 10) / 10}g filament`}
                 {totalWeight > 0 && totalHours > 0 && ' · '}
                 {totalHours > 0 && `~${fmtHours(totalHours)} print time`}
@@ -546,7 +499,6 @@ function GcodeCalculator({
         </div>
       )}
 
-      {/* Price breakdown */}
       {breakdown && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
           <div className="px-3 py-2 bg-slate-50 border-b border-slate-100">
@@ -578,8 +530,7 @@ function GcodeCalculator({
               </div>
             )}
             <div className="flex justify-between text-slate-500 border-t border-slate-100 pt-1.5">
-              <span>Base cost</span>
-              <span className="tabular-nums">RM {breakdown.baseCost.toFixed(2)}</span>
+              <span>Base cost</span><span className="tabular-nums">RM {breakdown.baseCost.toFixed(2)}</span>
             </div>
             <div className="flex items-center justify-between text-slate-500">
               <span className="flex items-center gap-1.5">
@@ -609,23 +560,17 @@ function GcodeCalculator({
   )
 }
 
-// ── Shared form fields ────────────────────────────────────────────────────────
+// ── CatalogForm ───────────────────────────────────────────────────────────────
 
 function CatalogForm({
-  form,
-  set,
-  toggleMaterial,
-  printerMaterials,
-  printer,
-  onSave,
-  onCancel,
-  isPending,
-  error,
+  form, set, toggleAvailableMaterial, setMaterialPrice,
+  filaments, printer, onSave, onCancel, isPending, error,
 }: {
   form: FormState
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void
-  toggleMaterial: (m: string) => void
-  printerMaterials: FilamentMaterial[]
+  toggleAvailableMaterial: (mat: string) => void
+  setMaterialPrice: (mat: string, price: string) => void
+  filaments: Filament[]
   printer: Printer
   onSave: () => void
   onCancel: () => void
@@ -636,32 +581,27 @@ function CatalogForm({
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
 
-  const defaultMaterial = (printerMaterials[0] ?? 'pla') as FilamentMaterial
+  // Unique materials the owner has in stock
+  const uniqueMaterials = [...new Set(filaments.map((f) => f.material))] as FilamentMaterial[]
+
+  // Colors for the currently selected (fixed) material
+  const colorsForMaterial = filaments.filter((f) => f.material === form.material)
+
+  // Default material for G-code calculator
+  const defaultMaterial = (form.material || uniqueMaterials[0] || 'pla') as FilamentMaterial
 
   async function handleStlFiles(files: FileList | null) {
     if (!files || files.length === 0) return
-    const allowed = Array.from(files).filter((f) =>
-      ['.stl', '.3mf'].some((ext) => f.name.toLowerCase().endsWith(ext))
-    )
-    if (allowed.length === 0) {
-      setUploadError('Only .stl and .3mf files are accepted.')
-      return
-    }
-    setUploading(true)
-    setUploadError('')
+    const allowed = Array.from(files).filter((f) => ['.stl', '.3mf'].some((ext) => f.name.toLowerCase().endsWith(ext)))
+    if (allowed.length === 0) { setUploadError('Only .stl and .3mf files are accepted.'); return }
+    setUploading(true); setUploadError('')
     const supabase = createClient()
     const newUrls: string[] = []
     for (const file of allowed) {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
       const path = `catalog/${Date.now()}-${safeName}`
-      const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from('stl-files')
-        .upload(path, file)
-      if (uploadErr || !uploadData) {
-        setUploadError(uploadErr?.message ?? 'Upload failed')
-        setUploading(false)
-        return
-      }
+      const { data: uploadData, error: uploadErr } = await supabase.storage.from('stl-files').upload(path, file)
+      if (uploadErr || !uploadData) { setUploadError(uploadErr?.message ?? 'Upload failed'); setUploading(false); return }
       const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
       newUrls.push(urlData.publicUrl)
     }
@@ -680,25 +620,10 @@ function CatalogForm({
             placeholder="e.g. Custom Name Keychain" className={inputClass} />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Starting price (RM, optional)</label>
-          <input type="number" min="0" step="0.50" value={form.base_price}
-            onChange={(e) => set('base_price', e.target.value)}
-            placeholder="e.g. 15.00" className={inputClass} />
-          <div className="mt-1">
-            <GcodeCalculator
-              printer={printer}
-              defaultMaterial={defaultMaterial}
-              onUsePrice={(price) => set('base_price', price)}
-            />
-          </div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">Description</label>
+          <input value={form.description} onChange={(e) => set('description', e.target.value)}
+            placeholder="What is this print?" className={inputClass} />
         </div>
-      </div>
-
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Description</label>
-        <textarea value={form.description} onChange={(e) => set('description', e.target.value)}
-          placeholder="What is this print? What makes it special? Any size info?"
-          rows={2} className={`${inputClass} resize-none`} />
       </div>
 
       {/* Photo + design link */}
@@ -720,7 +645,6 @@ function CatalogForm({
       <div>
         <label className="mb-1 block text-xs font-medium text-slate-600">3D model files for preview (optional)</label>
         <p className="mb-2 text-[11px] text-slate-400">Upload .stl or .3mf files — customers can spin and view the model before ordering.</p>
-
         {form.stl_urls.length > 0 && (
           <div className="mb-2 space-y-1.5">
             {form.stl_urls.map((url, i) => {
@@ -729,27 +653,15 @@ function CatalogForm({
                 <div key={url} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
                   <FileBox className="h-3.5 w-3.5 shrink-0 text-orange-500" />
                   <span className="flex-1 truncate text-xs text-slate-600">{filename}</span>
-                  <button type="button"
-                    onClick={() => set('stl_urls', form.stl_urls.filter((_, idx) => idx !== i))}
-                    className="text-slate-300 hover:text-red-400 transition">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  <button type="button" onClick={() => set('stl_urls', form.stl_urls.filter((_, idx) => idx !== i))}
+                    className="text-slate-300 hover:text-red-400 transition"><X className="h-3.5 w-3.5" /></button>
                 </div>
               )
             })}
           </div>
         )}
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".stl,.3mf"
-          multiple
-          className="hidden"
-          onChange={(e) => handleStlFiles(e.target.files)}
-        />
-        <button type="button" disabled={uploading}
-          onClick={() => fileInputRef.current?.click()}
+        <input ref={fileInputRef} type="file" accept=".stl,.3mf" multiple className="hidden" onChange={(e) => handleStlFiles(e.target.files)} />
+        <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}
           className="flex items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-2.5 text-xs font-medium text-slate-500 hover:border-orange-400 hover:text-orange-600 disabled:opacity-50 transition">
           <Upload className="h-3.5 w-3.5" />
           {uploading ? 'Uploading…' : 'Choose .stl / .3mf files'}
@@ -757,59 +669,139 @@ function CatalogForm({
         {uploadError && <p className="mt-1 text-[11px] text-red-500">{uploadError}</p>}
       </div>
 
-      {/* Material + Color */}
-      <div className="space-y-3">
-        <div>
-          <p className="mb-1.5 text-xs font-medium text-slate-600">Material</p>
-          <div className="flex flex-wrap gap-2">
-            {printerMaterials.map((mat) => (
-              <button key={mat} type="button"
-                onClick={() => set('material', mat)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  form.material === mat
-                    ? 'border-orange-500 bg-orange-50 text-orange-700'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
-                }`}>
-                {MATERIAL_LABELS[mat]}
-              </button>
-            ))}
-            {printerMaterials.length === 0 && (
-              <p className="text-xs text-slate-400">Add materials to your printer listing first.</p>
-            )}
-          </div>
-        </div>
+      {/* ── Material & Color ── */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+        <p className="text-xs font-semibold text-slate-700">Material &amp; Color</p>
 
-        {form.allow_color_choice ? (
-          <p className="text-xs text-slate-400 italic">Color will be chosen by the customer from your filament stock.</p>
-        ) : (
+        {uniqueMaterials.length === 0 && (
+          <p className="text-xs text-slate-400">No filaments in stock yet — add filaments in Equipment settings to select materials here.</p>
+        )}
+
+        {uniqueMaterials.length > 0 && (
+          <>
+            {/* allow_material_choice toggle */}
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" checked={form.allow_material_choice}
+                onChange={(e) => set('allow_material_choice', e.target.checked)}
+                className="h-4 w-4 cursor-pointer accent-orange-500" />
+              <div>
+                <span className="text-sm font-medium text-slate-800">Let customer choose material</span>
+                <p className="text-xs text-slate-400">Customer picks from the materials you make available. Set a price per material.</p>
+              </div>
+            </label>
+
+            {form.allow_material_choice ? (
+              /* Multi-material: checkboxes + per-material prices */
+              <div className="space-y-2">
+                {uniqueMaterials.map((mat) => {
+                  const checked = form.available_materials.includes(mat)
+                  return (
+                    <div key={mat} className="flex items-center gap-3">
+                      <input type="checkbox" checked={checked} onChange={() => toggleAvailableMaterial(mat)}
+                        className="h-4 w-4 cursor-pointer accent-orange-500 shrink-0" />
+                      <span className={`text-sm min-w-[60px] ${checked ? 'text-slate-800 font-medium' : 'text-slate-400'}`}>
+                        {MATERIAL_LABELS[mat]}
+                      </span>
+                      {checked && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-slate-400">RM</span>
+                          <input
+                            type="number" min="0" step="0.50"
+                            value={form.material_prices[mat] ?? ''}
+                            onChange={(e) => setMaterialPrice(mat, e.target.value)}
+                            placeholder="Price"
+                            className="w-24 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-sm text-slate-800 focus:border-orange-400 focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                <p className="text-[11px] text-slate-400">Lowest price will show as "From RM X" on your listing.</p>
+              </div>
+            ) : (
+              /* Single material: pill buttons */
+              <div className="space-y-3">
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-slate-600">Material</p>
+                  <div className="flex flex-wrap gap-2">
+                    {uniqueMaterials.map((mat) => (
+                      <button key={mat} type="button"
+                        onClick={() => { set('material', mat); set('color', ''); set('color_hex', '#888888') }}
+                        className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                          form.material === mat
+                            ? 'border-orange-500 bg-orange-50 text-orange-700'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
+                        }`}>
+                        {MATERIAL_LABELS[mat]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* allow_color_choice toggle */}
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={form.allow_color_choice}
+                    onChange={(e) => { set('allow_color_choice', e.target.checked); if (e.target.checked) { set('color', ''); set('color_hex', '#888888') } }}
+                    className="h-4 w-4 cursor-pointer accent-orange-500" />
+                  <div>
+                    <span className="text-sm font-medium text-slate-800">Let customer choose color</span>
+                    <p className="text-xs text-slate-400">Customer picks from your in-stock filaments for the selected material.</p>
+                  </div>
+                </label>
+
+                {/* Fixed color swatches (when color choice is OFF and material is selected) */}
+                {!form.allow_color_choice && form.material && (
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-slate-600">Color</p>
+                    {colorsForMaterial.length === 0 ? (
+                      <p className="text-xs text-slate-400">No {MATERIAL_LABELS[form.material as FilamentMaterial]} filaments in stock.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {colorsForMaterial.map((f) => {
+                          const selected = form.color === f.color && form.color_hex === f.color_hex
+                          return (
+                            <button key={f.id} type="button"
+                              onClick={() => { set('color', f.color); set('color_hex', f.color_hex) }}
+                              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                                selected
+                                  ? 'border-orange-500 bg-orange-50 text-orange-700'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
+                              }`}>
+                              <span className="h-3 w-3 rounded-full border border-slate-300 shrink-0" style={{ background: f.color_hex }} />
+                              {f.color}
+                              {f.brand && <span className="text-slate-400">· {f.brand}</span>}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Price (hidden when allow_material_choice ON — derived from per-material prices) */}
+        {!form.allow_material_choice && (
           <div>
-            <p className="mb-1.5 text-xs font-medium text-slate-600">Color</p>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Color name (e.g. Black, Galaxy Blue)"
-                value={form.color}
-                onChange={(e) => set('color', e.target.value)}
-                className={inputClass}
-              />
-              <input
-                type="color"
-                value={form.color_hex || '#888888'}
-                onChange={(e) => set('color_hex', e.target.value)}
-                className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-slate-200 p-1"
-                title="Pick color"
-              />
+            <label className="mb-1 block text-xs font-medium text-slate-600">Starting price (RM, optional)</label>
+            <input type="number" min="0" step="0.50" value={form.base_price}
+              onChange={(e) => set('base_price', e.target.value)}
+              placeholder="e.g. 15.00" className={inputClass} />
+            <div className="mt-1">
+              <GcodeCalculator printer={printer} defaultMaterial={defaultMaterial}
+                onUsePrice={(price) => set('base_price', price)} />
             </div>
           </div>
         )}
       </div>
 
-      {/* Customisation options */}
+      {/* ── Other customisations ── */}
       <div>
-        <p className="mb-2 text-xs font-semibold text-slate-700">What can customers customise?</p>
+        <p className="mb-2 text-xs font-semibold text-slate-700">Other customisations</p>
         <div className="space-y-3">
-
-          {/* Custom text */}
           <label className="flex items-start gap-3 cursor-pointer">
             <input type="checkbox" checked={form.allow_custom_text}
               onChange={(e) => set('allow_custom_text', e.target.checked)}
@@ -821,25 +813,12 @@ function CatalogForm({
                 <div className="mt-2">
                   <label className="mb-1 block text-xs font-medium text-slate-600">Label shown to customer</label>
                   <input value={form.text_prompt} onChange={(e) => set('text_prompt', e.target.value)}
-                    placeholder="e.g. Name to engrave, Company name, Custom message…"
-                    className={inputClass} />
+                    placeholder="e.g. Name to engrave, Custom message…" className={inputClass} />
                 </div>
               )}
             </div>
           </label>
 
-          {/* Color choice */}
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input type="checkbox" checked={form.allow_color_choice}
-              onChange={(e) => set('allow_color_choice', e.target.checked)}
-              className="mt-0.5 h-4 w-4 cursor-pointer accent-orange-500" />
-            <div>
-              <span className="text-sm font-medium text-slate-800">Color selection</span>
-              <p className="text-xs text-slate-400">Customer picks a filament color from your stock.</p>
-            </div>
-          </label>
-
-          {/* Resize */}
           <label className="flex items-start gap-3 cursor-pointer">
             <input type="checkbox" checked={form.allow_resize}
               onChange={(e) => set('allow_resize', e.target.checked)}
@@ -852,44 +831,13 @@ function CatalogForm({
                   <div className="flex-1">
                     <label className="mb-1 block text-xs font-medium text-slate-600">Min %</label>
                     <input type="number" min="10" max="100" value={form.resize_min_pct}
-                      onChange={(e) => set('resize_min_pct', Number(e.target.value))}
-                      className={inputClass} />
+                      onChange={(e) => set('resize_min_pct', Number(e.target.value))} className={inputClass} />
                   </div>
                   <div className="flex-1">
                     <label className="mb-1 block text-xs font-medium text-slate-600">Max %</label>
                     <input type="number" min="100" max="500" value={form.resize_max_pct}
-                      onChange={(e) => set('resize_max_pct', Number(e.target.value))}
-                      className={inputClass} />
+                      onChange={(e) => set('resize_max_pct', Number(e.target.value))} className={inputClass} />
                   </div>
-                </div>
-              )}
-            </div>
-          </label>
-
-          {/* Material choice */}
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input type="checkbox" checked={form.allow_material_choice}
-              onChange={(e) => set('allow_material_choice', e.target.checked)}
-              className="mt-0.5 h-4 w-4 cursor-pointer accent-orange-500" />
-            <div className="flex-1">
-              <span className="text-sm font-medium text-slate-800">Material selection</span>
-              <p className="text-xs text-slate-400">Customer chooses which filament material to use.</p>
-              {form.allow_material_choice && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {printerMaterials.map((mat) => (
-                    <button key={mat} type="button"
-                      onClick={() => toggleMaterial(mat)}
-                      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                        form.available_materials.includes(mat)
-                          ? 'border-orange-500 bg-orange-50 text-orange-700'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
-                      }`}>
-                      {MATERIAL_LABELS[mat]}
-                    </button>
-                  ))}
-                  {printerMaterials.length === 0 && (
-                    <p className="text-xs text-slate-400">Add materials to your printer listing first.</p>
-                  )}
                 </div>
               )}
             </div>
