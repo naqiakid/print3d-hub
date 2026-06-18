@@ -22,6 +22,7 @@ import {
 } from '@/lib/pricing'
 import { createClient } from '@/lib/supabase/client'
 import { getPresetById } from '@/lib/printer-models'
+import { parseGcodeFile } from '@/lib/parse-gcode'
 
 const STLViewer = lazy(() => import('./STLViewer'))
 
@@ -34,8 +35,6 @@ const selectClass =
 type GcodeItem = {
   id: string
   file: File
-  url: string | null
-  uploading: boolean
   parsing: boolean
   error: string
   stats: {
@@ -120,7 +119,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
   const totalWeight = gcodeItems.reduce((s, i) => s + (i.stats?.weight_g ?? 0), 0)
   const totalHours  = gcodeItems.reduce((s, i) => s + (i.stats?.print_hours ?? 0), 0)
   const totalLayers = gcodeItems.reduce((s, i) => s + (i.stats?.layer_count ?? 0), 0)
-  const allDone     = gcodeItems.length > 0 && gcodeItems.every((i) => !i.uploading && !i.parsing)
+  const allDone     = gcodeItems.length > 0 && gcodeItems.every((i) => !i.parsing)
   const anyStats    = gcodeItems.some((i) => i.stats?.weight_g != null)
 
   // Recalculate price whenever per-plate materials/stats or markup changes
@@ -232,41 +231,12 @@ export default function RequestCard({ request, printer }: { request: PrintReques
     setShowQuoteForm(true)
   }
 
-  async function uploadAndParseGcode(item: GcodeItem) {
-    const supabase = createClient()
-    const path = `gcode/${request.id}/${Date.now()}-${item.file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-
-    const { data: uploadData, error } = await supabase.storage
-      .from('stl-files')
-      .upload(path, item.file)
-
-    if (error || !uploadData) {
-      setGcodeItems((prev) =>
-        prev.map((i) =>
-          i.id === item.id ? { ...i, uploading: false, error: error?.message ?? 'Upload failed' } : i,
-        ),
-      )
-      return
-    }
-
-    const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
-    const publicUrl = urlData.publicUrl
-
-    setGcodeItems((prev) =>
-      prev.map((i) =>
-        i.id === item.id ? { ...i, uploading: false, url: publicUrl, parsing: true } : i,
-      ),
-    )
+  async function parseGcodeLocally(item: GcodeItem) {
 
     try {
-      const res  = await fetch(`/api/parse-gcode?url=${encodeURIComponent(publicUrl)}`)
-      const data = await res.json()
+      const stats = await parseGcodeFile(item.file)
       setGcodeItems((prev) =>
-        prev.map((i) =>
-          i.id === item.id
-            ? { ...i, parsing: false, stats: data.error ? null : data }
-            : i,
-        ),
+        prev.map((i) => i.id === item.id ? { ...i, parsing: false, stats } : i),
       )
     } catch {
       setGcodeItems((prev) =>
@@ -285,9 +255,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
         return {
           id: crypto.randomUUID(),
           file: f,
-          url: null,
-          uploading: true,
-          parsing: false,
+          parsing: true,
           error: '',
           stats: null,
           material: defaultMaterial,
@@ -297,7 +265,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
       })
     if (!newItems.length) return
     setGcodeItems((prev) => [...prev, ...newItems])
-    newItems.forEach((item) => uploadAndParseGcode(item))
+    newItems.forEach((item) => parseGcodeLocally(item))
   }
 
   function updatePlate(id: string, patch: Partial<Pick<GcodeItem, 'material' | 'color' | 'colorHex'>>) {
@@ -334,11 +302,10 @@ export default function RequestCard({ request, printer }: { request: PrintReques
     const finalPrice = parseFloat(quotePrice)
     if (!finalPrice || !quoteDate) return
     if (gcodeItems.length === 0) { setActionError('Upload the G-code file before sending the quote.'); return }
-    if (!allDone) { setActionError('Wait for the G-code to finish uploading.'); return }
+    if (!allDone) { setActionError('Wait for the G-code to finish reading.'); return }
     if (!previewUrl) { setActionError('Upload a model preview image before sending the quote.'); return }
     setActionError('')
     startTransition(async () => {
-      const urls = gcodeItems.map((i) => i.url).filter(Boolean) as string[]
       const plateFilaments = gcodeItems.map((i) => ({
         material: i.material,
         color: i.color,
@@ -353,7 +320,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
         Math.round(finalPrice * 100) / 100,
         quoteDate,
         quoteMessage,
-        urls.length ? urls : undefined,
+        undefined,
         totalWeight > 0 ? Math.round(totalWeight * 10) / 10 : null,
         totalHours  > 0 ? Math.round(totalHours  * 10) / 10 : null,
         primaryMaterial,
@@ -756,17 +723,12 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                           <FileCode2 className="h-4 w-4 shrink-0 text-slate-400" />
                           <span className="flex-1 truncate text-sm text-slate-700">{item.file.name}</span>
 
-                          {item.uploading && (
-                            <span className="flex items-center gap-1 text-xs text-slate-400">
-                              <Loader2 className="h-3 w-3 animate-spin" /> Uploading
-                            </span>
-                          )}
                           {item.parsing && (
                             <span className="flex items-center gap-1 text-xs text-slate-400">
-                              <Loader2 className="h-3 w-3 animate-spin" /> Analysing
+                              <Loader2 className="h-3 w-3 animate-spin" /> Reading
                             </span>
                           )}
-                          {!item.uploading && !item.parsing && item.stats && (
+                          {!item.parsing && item.stats && (
                             <span className="shrink-0 text-xs font-medium text-teal-600">
                               {item.stats.weight_g != null && `${item.stats.weight_g}g`}
                               {item.stats.weight_g != null && item.stats.print_hours != null && ' · '}
@@ -774,7 +736,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                               {item.stats.layer_count ? ` · ${item.stats.layer_count} layers` : ''}
                             </span>
                           )}
-                          {!item.uploading && !item.parsing && !item.stats && !item.error && (
+                          {!item.parsing && !item.stats && !item.error && (
                             <span className="shrink-0 text-xs text-slate-400">No stats found</span>
                           )}
                           {item.error && <span className="shrink-0 text-xs text-red-500">{item.error}</span>}

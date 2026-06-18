@@ -7,6 +7,7 @@ import { MATERIAL_LABELS } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 import { getPresetById } from '@/lib/printer-models'
+import { parseGcodeFile } from '@/lib/parse-gcode'
 import {
   DEFAULT_ELECTRICITY_RATE,
   DEFAULT_MARKUP_PERCENT,
@@ -26,8 +27,6 @@ const selectClass =
 type GcodeItem = {
   id: string
   file: File
-  url: string | null
-  uploading: boolean
   parsing: boolean
   error: string
   stats: { weight_g: number | null; print_hours: number | null } | null
@@ -354,7 +353,7 @@ function GcodeCalculator({
   const modelPowerWatts = getPresetById(printer.printer_model_id ?? '')?.power_watts ?? 200
   const totalWeight = items.reduce((s, i) => s + (i.stats?.weight_g ?? 0), 0)
   const totalHours  = items.reduce((s, i) => s + (i.stats?.print_hours ?? 0), 0)
-  const allDone     = items.length > 0 && items.every((i) => !i.uploading && !i.parsing)
+  const allDone     = items.length > 0 && items.every((i) => !i.parsing)
   const anyStats    = items.some((i) => i.stats?.weight_g != null)
 
   type Breakdown = { perPlate: { label: string; cost: number }[]; electricityCost: number; machineCost: number; wasteCost: number; baseCost: number; markup: number; total: number }
@@ -381,20 +380,10 @@ function GcodeCalculator({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, markup, anyStats, totalHours])
 
-  async function uploadAndParse(item: GcodeItem) {
-    const supabase = createClient()
-    const path = `gcode/catalog/${Date.now()}-${item.file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-    const { data: uploadData, error } = await supabase.storage.from('stl-files').upload(path, item.file)
-    if (error || !uploadData) {
-      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, uploading: false, error: error?.message ?? 'Upload failed' } : i))
-      return
-    }
-    const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
-    setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, uploading: false, url: urlData.publicUrl, parsing: true } : i))
+  async function parseLocally(item: GcodeItem) {
     try {
-      const res  = await fetch(`/api/parse-gcode?url=${encodeURIComponent(urlData.publicUrl)}`)
-      const data = await res.json()
-      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, parsing: false, stats: data.error ? null : data } : i))
+      const stats = await parseGcodeFile(item.file)
+      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, parsing: false, stats } : i))
     } catch {
       setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, parsing: false } : i))
     }
@@ -403,10 +392,10 @@ function GcodeCalculator({
   function addFiles(files: FileList | File[]) {
     const newItems: GcodeItem[] = Array.from(files)
       .filter((f) => /\.(gcode|bgcode)$/i.test(f.name))
-      .map((f) => ({ id: crypto.randomUUID(), file: f, url: null, uploading: true, parsing: false, error: '', stats: null, material: defaultMaterial }))
+      .map((f) => ({ id: crypto.randomUUID(), file: f, parsing: true, error: '', stats: null, material: defaultMaterial }))
     if (!newItems.length) return
     setItems((prev) => [...prev, ...newItems])
-    newItems.forEach((item) => uploadAndParse(item))
+    newItems.forEach((item) => parseLocally(item))
   }
 
   function reset() { setItems([]); setBreakdown(null) }
@@ -452,9 +441,8 @@ function GcodeCalculator({
               <div className="flex items-center gap-2 px-3 py-2.5">
                 <FileCode2 className="h-4 w-4 shrink-0 text-slate-400" />
                 <span className="flex-1 truncate text-xs text-slate-700">{item.file.name}</span>
-                {item.uploading && <span className="flex items-center gap-1 text-xs text-slate-400"><Loader2 className="h-3 w-3 animate-spin" /> Uploading</span>}
-                {item.parsing && <span className="flex items-center gap-1 text-xs text-slate-400"><Loader2 className="h-3 w-3 animate-spin" /> Analysing</span>}
-                {!item.uploading && !item.parsing && item.stats && (
+                {item.parsing && <span className="flex items-center gap-1 text-xs text-slate-400"><Loader2 className="h-3 w-3 animate-spin" /> Reading</span>}
+                {!item.parsing && item.stats && (
                   <span className="shrink-0 text-xs font-medium text-teal-600">
                     {item.stats.weight_g != null && `${item.stats.weight_g}g`}
                     {item.stats.weight_g != null && item.stats.print_hours != null && ' · '}
