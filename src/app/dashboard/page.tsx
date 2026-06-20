@@ -83,6 +83,12 @@ export default async function DashboardPage() {
             {printer.available ? 'Available' : 'Busy'}
           </span>
           <Link
+            href="/dashboard/price-calculator"
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+          >
+            Price Calculator
+          </Link>
+          <Link
             href="/dashboard/equipment"
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
           >
