@@ -17,7 +17,8 @@ export default function AdvancedToggle({
     const next = !enabled
     setEnabled(next)
     startTransition(async () => {
-      await setPrinterAdvanced(printerId, next)
+      const result = await setPrinterAdvanced(printerId, next)
+      if (result?.error) setEnabled(!next)
     })
   }
 

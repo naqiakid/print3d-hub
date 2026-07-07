@@ -9,6 +9,7 @@ import { bedLabel } from '@/lib/equipment'
 import AvailabilityToggle from '@/components/AvailabilityToggle'
 import AdvancedToggle from '@/components/AdvancedToggle'
 import ListingEditor from '@/components/ListingEditor'
+import PhotoGalleryEditor from '@/components/PhotoGalleryEditor'
 import CopyLinkButton from '@/components/CopyLinkButton'
 import {
   calculateEstimate,
@@ -19,7 +20,12 @@ import {
   DEFAULT_WASTE_PERCENT,
 } from '@/lib/pricing'
 
-export default async function ListingPage() {
+export default async function ListingPage({
+  params,
+}: {
+  params: Promise<{ printerId: string }>
+}) {
+  const { printerId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -27,12 +33,11 @@ export default async function ListingPage() {
   const { data: printerData } = await supabase
     .from('printers')
     .select('*')
+    .eq('id', printerId)
     .eq('owner_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
     .maybeSingle()
 
-  if (!printerData) redirect('/register')
+  if (!printerData) redirect('/dashboard')
   const printer = printerData as unknown as Printer
 
   // Fetch profiles for nozzle sizes and capabilities
@@ -65,7 +70,7 @@ export default async function ListingPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
       <Link
-        href="/dashboard"
+        href={`/dashboard/${printer.id}`}
         className="mb-8 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
@@ -116,6 +121,11 @@ export default async function ListingPage() {
       {/* Editable listing details + pickup/delivery */}
       <ListingEditor printer={printer} />
 
+      {/* Sample print photos */}
+      <div className="mt-4">
+        <PhotoGalleryEditor printerId={printer.id} initialPhotos={printer.sample_photos} />
+      </div>
+
       {/* ── Pricing preview ── */}
       {(() => {
         const powerWatts     = preset?.power_watts ?? 200
@@ -159,7 +169,7 @@ export default async function ListingPage() {
                 <h3 className="font-semibold text-slate-900">Pricing preview</h3>
                 <p className="text-xs text-slate-400 mt-0.5">Typical medium-size print at each quality tier, with your current settings.</p>
               </div>
-              <Link href="/dashboard/equipment" className="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-600 transition">
+              <Link href={`/dashboard/${printer.id}/equipment`} className="shrink-0 text-xs font-medium text-orange-500 hover:text-orange-600 transition">
                 Set filament costs →
               </Link>
             </div>
@@ -197,7 +207,7 @@ export default async function ListingPage() {
 
             {anyUnconfigured && (
               <p className="text-[11px] text-slate-400">
-                * Using default market rates. Go to <Link href="/dashboard/equipment" className="text-orange-500 hover:underline">Equipment → Filament stock</Link> to enter your actual filament costs for more accurate estimates.
+                * Using default market rates. Go to <Link href={`/dashboard/${printer.id}/equipment`} className="text-orange-500 hover:underline">Equipment → Filament stock</Link> to enter your actual filament costs for more accurate estimates.
               </p>
             )}
 
@@ -314,7 +324,7 @@ export default async function ListingPage() {
         {/* Cross-reference to Equipment */}
         <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
           <p className="text-xs text-slate-400">Nozzles and capabilities are set in print profiles</p>
-          <Link href="/dashboard/equipment" className="text-xs font-medium text-orange-500 hover:text-orange-600 transition">
+          <Link href={`/dashboard/${printer.id}/equipment`} className="text-xs font-medium text-orange-500 hover:text-orange-600 transition">
             Manage Equipment →
           </Link>
         </div>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { CatalogItem, Printer, PrintProfile, Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { submitRequest } from '@/lib/actions'
+import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
@@ -38,12 +39,15 @@ export default function CatalogOrderForm({
 
   // Customisation state
   const [customText, setCustomText] = useState('')
-  const [color, setColor] = useState('Any')
-  const [colorHex, setColorHex] = useState('#888888')
+  // For fixed-color items (allow_color_choice=false), use the owner's configured color instead of defaulting to "Any"
+  const [color, setColor] = useState(item.allow_color_choice ? 'Any' : (item.color ?? 'Any'))
+  const [colorHex, setColorHex] = useState(item.allow_color_choice ? '#888888' : (item.color_hex ?? '#888888'))
   const [scalePct, setScalePct] = useState(100)
   const availableMaterials = (
     item.allow_material_choice && item.available_materials.length > 0
       ? item.available_materials
+      : item.material
+      ? [item.material]
       : printer.materials ?? []
   ) as FilamentMaterial[]
   const [material, setMaterial] = useState<FilamentMaterial>(
@@ -68,13 +72,15 @@ export default function CatalogOrderForm({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
 
-  // Color options — prefer actual filament stock, fall back to presets
-  const filamentColors: { name: string; hex: string }[] = filaments.length > 0
+  // Color options — prefer actual filament stock for the selected material, fall back to presets.
+  // Keyed by filament id (not color name) since two different materials can share a color name.
+  const filamentsForMaterial = filaments.filter((f) => f.material === material)
+  const filamentColors: { id: string; name: string; hex: string }[] = filamentsForMaterial.length > 0
     ? [
-        { name: 'Any / Owner decides', hex: '#888888' },
-        ...filaments.map((f) => ({ name: f.color, hex: f.color_hex })),
+        { id: '__any__', name: 'Any / Owner decides', hex: '#888888' },
+        ...filamentsForMaterial.map((f) => ({ id: f.id, name: f.color, hex: f.color_hex })),
       ]
-    : COLOR_PRESETS
+    : COLOR_PRESETS.map((c, i) => ({ id: `preset-${i}`, name: c.name, hex: c.hex }))
 
   const canSubmit = !!(name.trim() && email.trim() && phone.trim() && (!item.allow_custom_text || customText.trim()))
 
@@ -170,8 +176,8 @@ export default function CatalogOrderForm({
           <h3 className="mb-1 text-sm font-semibold text-slate-700">Color</h3>
           <p className="mb-2 text-xs text-slate-400">Choose from what&apos;s in stock, or leave it to the owner.</p>
           <div className="flex flex-wrap gap-2">
-            {filamentColors.map(({ name: n, hex }) => (
-              <button key={n} type="button"
+            {filamentColors.map(({ id, name: n, hex }) => (
+              <button key={id} type="button"
                 onClick={() => { setColor(n === 'Any / Owner decides' ? 'Any' : n); setColorHex(hex) }}
                 className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                   (n === 'Any / Owner decides' ? color === 'Any' : color === n)
@@ -215,7 +221,7 @@ export default function CatalogOrderForm({
           <h3 className="mb-1 text-sm font-semibold text-slate-700">Material</h3>
           <div className="space-y-2">
             {availableMaterials.map((mat) => (
-              <button key={mat} type="button" onClick={() => setMaterial(mat)}
+              <button key={mat} type="button" onClick={() => { setMaterial(mat); setColor('Any'); setColorHex('#888888') }}
                 className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${material === mat ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'}`}>
                 <p className={`text-sm font-medium ${material === mat ? 'text-orange-700' : 'text-slate-800'}`}>
                   {MATERIAL_LABELS[mat]}

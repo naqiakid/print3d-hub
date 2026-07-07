@@ -64,6 +64,7 @@ export type PlateFilament = {
   material: FilamentMaterial
   color: string
   color_hex: string
+  weight_g?: number | null
 }
 
 export type ColorPreference = {
@@ -147,6 +148,9 @@ export type Filament = {
   color_hex: string
   cost_per_kg: number
   in_stock: boolean
+  grams_total: number | null
+  grams_remaining: number | null
+  low_stock_threshold_g: number
   created_at: string
 }
 
@@ -171,6 +175,7 @@ export type CatalogItem = {
   color: string | null
   color_hex: string | null
   base_price: number | null
+  category: string | null
   sort_order: number
   is_active: boolean
   created_at: string

@@ -113,6 +113,10 @@ export default function RequestCard({ request, printer }: { request: PrintReques
           markup_percent:        printer.markup_percent        ?? DEFAULT_MARKUP_PERCENT,
           machine_rate_per_hour: printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE,
           waste_percent:         printer.waste_percent         ?? DEFAULT_WASTE_PERCENT,
+          // Customer's STL was auto-sliced at request time — use the real measurement
+          // instead of the generic size-bucket guess, when available.
+          known_weight_g: request.weight_g,
+          known_hours:    request.print_hours,
         })
       : null
 
@@ -310,6 +314,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
         material: i.material,
         color: i.color,
         color_hex: i.colorHex,
+        weight_g: i.stats?.weight_g ?? null,
       }))
       // Primary material = first plate's material, or customer's requested material
       const primaryMaterial = gcodeItems[0]?.material ?? defaultMaterial

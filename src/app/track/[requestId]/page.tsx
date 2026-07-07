@@ -1,13 +1,15 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import type { PrintRequest, Printer, FilamentMaterial } from '@/lib/types'
+import type { PrintRequest, Printer, FilamentMaterial, Review } from '@/lib/types'
 import { STATUS_LABELS, MATERIAL_LABELS, SIZE_LABELS, QUALITY_LABELS } from '@/lib/types'
 import { formatRM } from '@/lib/pricing'
 import QuoteActions from '@/components/QuoteActions'
 import STLViewer from '@/components/STLViewerWrapper'
 import GcodeViewer from '@/components/GcodeViewerWrapper'
 import ReviseRequest from '@/components/ReviseRequest'
+import ReviewForm from '@/components/ReviewForm'
 
 const TIMELINE: { status: string; label: string }[] = [
   { status: 'new',       label: 'Request received' },
@@ -57,6 +59,13 @@ export default async function TrackPage({
     .maybeSingle()
 
   const printer = printerData as Pick<Printer, 'name' | 'contact_phone' | 'turnaround' | 'pickup_address' | 'materials'> | null
+
+  const { data: reviewData } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('request_id', requestId)
+    .maybeSingle()
+  const review = reviewData as unknown as Review | null
 
   // Parse special lines out of notes once — used in both the quote card and order summary
   const rawNotes = (request.notes ?? '')
@@ -428,6 +437,27 @@ export default async function TrackPage({
           </div>
         )}
       </div>
+
+      {/* Review */}
+      {request.status === 'collected' && !review && (
+        <div className="mt-6">
+          <ReviewForm requestId={requestId} printerId={request.printer_id} />
+        </div>
+      )}
+      {review && (
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="mb-2 text-sm font-semibold text-slate-900">Your review</p>
+          <div className="flex gap-0.5 mb-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Star
+                key={i}
+                className={`h-4 w-4 ${i <= review.rating ? 'fill-amber-400 text-amber-400' : 'fill-slate-200 text-slate-200'}`}
+              />
+            ))}
+          </div>
+          {review.comment && <p className="text-sm text-slate-600">&ldquo;{review.comment}&rdquo;</p>}
+        </div>
+      )}
 
       {/* Revise request */}
       {['new', 'quoted'].includes(request.status) && printer?.materials && (

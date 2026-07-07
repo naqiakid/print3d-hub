@@ -1,0 +1,143 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { Package } from 'lucide-react'
+import type { CatalogItem, Filament } from '@/lib/types'
+
+function isInStock(item: CatalogItem, filaments: Filament[]): boolean {
+  if (item.allow_material_choice) {
+    if (item.available_materials.length === 0) return true
+    return item.available_materials.some((m) => filaments.some((f) => f.material === m))
+  }
+  if (!item.material) return true
+  return filaments.some(
+    (f) => f.material === item.material && (!item.color_hex || f.color_hex === item.color_hex),
+  )
+}
+
+export default function CatalogGrid({
+  catalog,
+  filaments,
+  printerId,
+}: {
+  catalog: CatalogItem[]
+  filaments: Filament[]
+  printerId: string
+}) {
+  const categories = [...new Set(catalog.map((i) => i.category).filter((c): c is string => !!c))].sort()
+  const [active, setActive] = useState('All')
+
+  const visible = active === 'All' ? catalog : catalog.filter((i) => (i.category ?? 'Uncategorized') === active)
+
+  return (
+    <div>
+      {categories.length > 0 && (
+        <div className="mb-5 flex flex-wrap gap-2">
+          {['All', ...categories].map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setActive(c)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                active === c
+                  ? 'border-orange-500 bg-orange-500 text-white'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {visible.map((item) => {
+          const badges: string[] = []
+          if (item.allow_custom_text)     badges.push('Custom text')
+          if (item.allow_color_choice)    badges.push('Color choice')
+          if (item.allow_resize)          badges.push('Resize')
+          if (item.allow_material_choice) badges.push('Material choice')
+          const inStock = isInStock(item, filaments)
+
+          return (
+            <div
+              key={item.id}
+              className={`group rounded-2xl border overflow-hidden transition ${
+                inStock
+                  ? 'border-slate-200 bg-white hover:border-orange-200 hover:shadow-md'
+                  : 'border-slate-100 bg-slate-50 opacity-70'
+              }`}
+            >
+              {/* Photo */}
+              <div className="relative h-44 w-full overflow-hidden bg-slate-100 flex items-center justify-center">
+                {item.photo_url ? (
+                  <img
+                    src={item.photo_url}
+                    alt={item.name}
+                    className={`h-full w-full object-cover transition duration-300 ${
+                      inStock ? 'group-hover:scale-105' : 'grayscale'
+                    }`}
+                  />
+                ) : (
+                  <Package className="h-12 w-12 text-slate-300" />
+                )}
+                {item.category && (
+                  <span className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-medium text-slate-700 shadow-sm">
+                    {item.category}
+                  </span>
+                )}
+                {!inStock && (
+                  <span className="absolute right-2 top-2 rounded-full bg-slate-800/90 px-2 py-0.5 text-[11px] font-semibold text-white">
+                    Out of stock
+                  </span>
+                )}
+              </div>
+
+              {/* Info */}
+              <div className="p-4">
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <p className="font-semibold text-slate-900 leading-snug">{item.name}</p>
+                  {item.base_price && (
+                    <p className="shrink-0 text-base font-bold text-orange-600">From RM{item.base_price.toFixed(2)}</p>
+                  )}
+                </div>
+                {item.description && (
+                  <p className="mb-3 text-xs text-slate-500 line-clamp-2">{item.description}</p>
+                )}
+                {badges.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-1">
+                    {badges.map((b) => (
+                      <span
+                        key={b}
+                        className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-600"
+                      >
+                        {b}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {inStock ? (
+                  <Link
+                    href={`/order/${printerId}/${item.id}`}
+                    className="block w-full rounded-xl bg-orange-500 py-2 text-center text-sm font-semibold text-white transition hover:bg-orange-600"
+                  >
+                    Order this
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="block w-full cursor-not-allowed rounded-xl bg-slate-200 py-2 text-center text-sm font-semibold text-slate-400"
+                  >
+                    Currently unavailable
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}

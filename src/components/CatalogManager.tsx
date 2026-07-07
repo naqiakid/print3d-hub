@@ -42,9 +42,12 @@ function fmtHours(h: number | null | undefined): string {
 
 // ── Form state ────────────────────────────────────────────────────────────────
 
+const CATEGORY_PRESETS = ['Home Decor', 'Keychains', 'Figurines', 'Organizers', 'Gifts & Toys', 'Tools & Parts']
+
 type FormState = {
   name: string
   description: string
+  category: string
   photo_url: string
   model_url: string
   stl_urls: string[]
@@ -68,6 +71,7 @@ type FormState = {
 const BLANK: FormState = {
   name: '',
   description: '',
+  category: '',
   photo_url: '',
   model_url: '',
   stl_urls: [],
@@ -94,6 +98,7 @@ function itemToForm(item: CatalogItem): FormState {
   return {
     name: item.name,
     description: item.description,
+    category: item.category ?? '',
     photo_url: item.photo_url ?? '',
     model_url: item.model_url ?? '',
     stl_urls: item.stl_urls ?? [],
@@ -174,6 +179,7 @@ export default function CatalogManager({
     const data = {
       name: form.name.trim(),
       description: form.description.trim(),
+      category: form.category.trim() || null,
       photo_url: form.photo_url.trim() || null,
       model_url: form.model_url.trim() || null,
       stl_urls: form.stl_urls,
@@ -227,17 +233,18 @@ export default function CatalogManager({
     })
   }
 
-  return (
-    <div className="space-y-4">
-      {items.length === 0 && editing !== 'new' && (
-        <div className="rounded-2xl border-2 border-dashed border-slate-200 py-14 text-center">
-          <Package className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-          <p className="text-sm font-medium text-slate-600">No products yet</p>
-          <p className="mt-1 text-xs text-slate-400">Add your best prints so customers can order them directly.</p>
-        </div>
-      )}
+  // Group items by category — falls back to a flat list (no headers) when no item has a category set
+  const categories = [...new Set(items.map((i) => i.category).filter((c): c is string => !!c))].sort()
+  const showGroupHeaders = categories.length > 0
+  const groups: [string | null, CatalogItem[]][] = showGroupHeaders
+    ? [
+        ...categories.map((c): [string, CatalogItem[]] => [c, items.filter((i) => i.category === c)]),
+        ...(items.some((i) => !i.category) ? [['Uncategorized', items.filter((i) => !i.category)] as [string, CatalogItem[]]] : []),
+      ]
+    : [[null, items]]
 
-      {items.map((item) => (
+  function renderItem(item: CatalogItem) {
+    return (
         <div key={item.id} className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
           <div className="flex gap-4 p-4">
             <div className="h-20 w-20 shrink-0 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center">
@@ -303,6 +310,28 @@ export default function CatalogManager({
               />
             </div>
           )}
+        </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {items.length === 0 && editing !== 'new' && (
+        <div className="rounded-2xl border-2 border-dashed border-slate-200 py-14 text-center">
+          <Package className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+          <p className="text-sm font-medium text-slate-600">No products yet</p>
+          <p className="mt-1 text-xs text-slate-400">Add your best prints so customers can order them directly.</p>
+        </div>
+      )}
+
+      {groups.map(([category, groupItems]) => (
+        <div key={category ?? '__flat__'} className="space-y-4">
+          {showGroupHeaders && (
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              {category}
+            </p>
+          )}
+          {groupItems.map((item) => renderItem(item))}
         </div>
       ))}
 
@@ -612,6 +641,29 @@ function CatalogForm({
           <input value={form.description} onChange={(e) => set('description', e.target.value)}
             placeholder="What is this print?" className={inputClass} />
         </div>
+      </div>
+
+      {/* Category */}
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-600">Category (optional)</label>
+        <p className="mb-2 text-[11px] text-slate-400">
+          Categories help customers filter your catalog — pick a preset or type your own.
+        </p>
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {CATEGORY_PRESETS.map((c) => (
+            <button key={c} type="button"
+              onClick={() => set('category', form.category === c ? '' : c)}
+              className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                form.category === c
+                  ? 'border-orange-500 bg-orange-50 text-orange-700'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
+              }`}>
+              {c}
+            </button>
+          ))}
+        </div>
+        <input value={form.category} onChange={(e) => set('category', e.target.value)}
+          placeholder="Or type your own category" className={inputClass} />
       </div>
 
       {/* Photo + design link */}

@@ -58,6 +58,8 @@ export type EstimateInput = {
   custom_infill?: number          // overrides quality default — affects weight
   wall_count?: number             // affects weight via perimeter material (~20% of total)
   ironing?: boolean               // adds 15% print time, smoother top surface
+  known_weight_g?: number | null  // from real STL slicing — bypasses the size-bucket weight guess
+  known_hours?: number | null     // from real STL slicing — bypasses the size-bucket time guess
 }
 
 export type EstimateResult = {
@@ -104,11 +106,11 @@ export function calculateEstimate(input: EstimateInput): EstimateResult {
   // Perimeters are ~20% of total filament; wall count scales that portion
   const default_walls = quality === 'advanced' ? DEFAULT_WALL_COUNT_ADVANCED : DEFAULT_WALL_COUNT_BASIC
   const wall_factor = wall_count != null ? 0.8 + 0.2 * (wall_count / default_walls) : 1.0
-  const weight_g = base.weight_g * (effective_infill / base_infill) * wall_factor
+  const weight_g = input.known_weight_g ?? (base.weight_g * (effective_infill / base_infill) * wall_factor)
 
   // Scale time by nozzle multiplier, then add ironing overhead
   const nozzle_mult = NOZZLE_TIME_MULTIPLIER[String(nozzle_mm)] ?? 1.0
-  const hours = base.hours * nozzle_mult * (ironing ? 1.15 : 1)
+  const hours = input.known_hours ?? (base.hours * nozzle_mult * (ironing ? 1.15 : 1))
 
   const filament_cost    = (weight_g / 1000) * cost_per_kg
   const electricity_cost = hours * (power_watts / 1000) * electricity_rate

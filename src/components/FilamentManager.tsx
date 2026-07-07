@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Pencil, Trash2, Plus, X, Check, Package, ChevronDown, ClipboardPaste } from 'lucide-react'
+import { Pencil, Trash2, Plus, X, Check, Package, ChevronDown, ClipboardPaste, PackagePlus } from 'lucide-react'
 import type { Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
-import { createFilament, updateFilament, deleteFilament } from '@/lib/actions'
+import { createFilament, updateFilament, deleteFilament, restockFilament } from '@/lib/actions'
 
 const ALL_MATERIALS: FilamentMaterial[] = ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc']
 
@@ -116,6 +116,10 @@ const BLANK_FORM = {
   color_hex: '#888888',
   cost_per_kg: '',
   in_stock: true,
+  track_quantity: false,
+  grams_total: '1000',
+  grams_remaining: '1000',
+  low_stock_threshold_g: '100',
 }
 
 type FormState = typeof BLANK_FORM
@@ -131,6 +135,8 @@ export default function FilamentManager({
   const [editing, setEditing] = useState<string | null>(null) // filament id or 'new'
   const [form, setFormState] = useState<FormState>(BLANK_FORM)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [restocking, setRestocking] = useState<string | null>(null)
+  const [restockAmount, setRestockAmount] = useState('')
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
 
@@ -153,6 +159,10 @@ export default function FilamentManager({
       color_hex: f.color_hex,
       cost_per_kg: String(f.cost_per_kg),
       in_stock: f.in_stock,
+      track_quantity: f.grams_remaining != null,
+      grams_total: String(f.grams_total ?? 1000),
+      grams_remaining: f.grams_remaining != null ? String(f.grams_remaining) : '1000',
+      low_stock_threshold_g: String(f.low_stock_threshold_g ?? 100),
     })
     setError('')
   }
@@ -174,6 +184,9 @@ export default function FilamentManager({
       color_hex: form.color_hex,
       cost_per_kg: Number(form.cost_per_kg),
       in_stock: form.in_stock,
+      grams_total: form.track_quantity ? Number(form.grams_total) || 1000 : null,
+      grams_remaining: form.track_quantity ? Number(form.grams_remaining) || 0 : null,
+      low_stock_threshold_g: Number(form.low_stock_threshold_g) || 100,
     }
 
     startTransition(async () => {
@@ -182,12 +195,14 @@ export default function FilamentManager({
           ? await createFilament(payload)
           : await updateFilament(editing!, payload)
 
-      if (result?.error) { setError(result.error); return }
+      if (result && 'error' in result) { setError(result.error); return }
 
-      if (editing === 'new') {
+      if (editing === 'new' && result) {
+        // Use the real server-assigned id — a client-guessed id would break any
+        // follow-up action (edit/delete) on this row before the next full page load.
         const newFilament: Filament = {
           ...payload,
-          id: crypto.randomUUID(),
+          id: result.id,
           owner_id: _ownerId,
           created_at: new Date().toISOString(),
         }
@@ -207,6 +222,28 @@ export default function FilamentManager({
       if (result?.error) { setError(result.error); return }
       setFilaments((prev) => prev.filter((f) => f.id !== id))
       setConfirmDelete(null)
+    })
+  }
+
+  function handleRestock(f: Filament, grams: number) {
+    if (!grams || grams <= 0) return
+    startTransition(async () => {
+      const result = await restockFilament(f.id, grams)
+      if (result?.error) { setError(result.error); return }
+      setFilaments((prev) =>
+        prev.map((item) =>
+          item.id === f.id
+            ? {
+                ...item,
+                grams_remaining: (item.grams_remaining ?? 0) + grams,
+                grams_total: item.grams_total ?? grams,
+                in_stock: true,
+              }
+            : item,
+        ),
+      )
+      setRestocking(null)
+      setRestockAmount('')
     })
   }
 
@@ -262,10 +299,24 @@ export default function FilamentManager({
                                 Out of stock
                               </span>
                             )}
+                            {f.in_stock && f.grams_remaining != null && f.grams_remaining <= f.low_stock_threshold_g && (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                Low stock
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-slate-400">RM {f.cost_per_kg}/kg</p>
                         </div>
                         <div className="flex shrink-0 gap-1">
+                          {f.grams_remaining != null && (
+                            <button
+                              onClick={() => { setRestocking(restocking === f.id ? null : f.id); setRestockAmount('') }}
+                              className="rounded-lg p-1.5 text-slate-400 hover:bg-orange-50 hover:text-orange-600 transition"
+                              title="Restock"
+                            >
+                              <PackagePlus className="h-4 w-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => openEdit(f)}
                             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
@@ -280,6 +331,68 @@ export default function FilamentManager({
                           </button>
                         </div>
                       </div>
+
+                      {/* Quantity progress bar */}
+                      {f.grams_remaining != null && (
+                        <div className="mt-3 pl-11">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-slate-500">
+                              {Math.round(f.grams_remaining)}g / {Math.round(f.grams_total ?? f.grams_remaining)}g left
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                f.grams_remaining <= f.low_stock_threshold_g
+                                  ? 'bg-red-400'
+                                  : f.grams_remaining <= (f.grams_total ?? f.grams_remaining) * 0.5
+                                  ? 'bg-amber-400'
+                                  : 'bg-green-500'
+                              }`}
+                              style={{
+                                width: `${Math.max(2, Math.min(100, (f.grams_remaining / ((f.grams_total ?? f.grams_remaining) || 1)) * 100))}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Restock quick action */}
+                      {restocking === f.id && (
+                        <div className="mt-3 flex items-center gap-2 rounded-lg bg-orange-50 px-3 py-2">
+                          {[250, 500, 1000].map((g) => (
+                            <button
+                              key={g}
+                              onClick={() => handleRestock(f, g)}
+                              disabled={isPending}
+                              className="rounded-lg border border-orange-200 bg-white px-2.5 py-1 text-xs font-medium text-orange-600 hover:bg-orange-100 transition disabled:opacity-50"
+                            >
+                              +{g}g
+                            </button>
+                          ))}
+                          <input
+                            type="number"
+                            min="1"
+                            value={restockAmount}
+                            onChange={(e) => setRestockAmount(e.target.value)}
+                            placeholder="Custom g"
+                            className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:border-orange-400 focus:outline-none"
+                          />
+                          <button
+                            onClick={() => handleRestock(f, Number(restockAmount))}
+                            disabled={isPending || !restockAmount}
+                            className="rounded-lg bg-orange-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-orange-600 transition disabled:opacity-50"
+                          >
+                            Add
+                          </button>
+                          <button
+                            onClick={() => setRestocking(null)}
+                            className="ml-auto text-slate-400 hover:text-slate-600 transition"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
 
                       {confirmDelete === f.id && (
                         <div className="mt-3 flex items-center gap-3 rounded-lg bg-red-50 px-3 py-2 text-sm">
@@ -563,6 +676,53 @@ function FilamentForm({
           Currently in stock
         </span>
       </button>
+
+      {/* Quantity tracking */}
+      <div className="rounded-lg border border-slate-200 bg-white p-3">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.track_quantity}
+            onChange={(e) => set('track_quantity', e.target.checked)}
+            className="h-4 w-4 cursor-pointer accent-orange-500"
+          />
+          <div>
+            <span className="text-sm font-medium text-slate-800">Track remaining quantity</span>
+            <p className="text-xs text-slate-400">
+              Grams left are auto-deducted when a job using this filament is marked done, and this roll is flagged low/out of stock automatically.
+            </p>
+          </div>
+        </label>
+
+        {form.track_quantity && (
+          <div className="mt-3 grid grid-cols-3 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Roll size (g)</label>
+              <input
+                type="number" min="1" value={form.grams_total}
+                onChange={(e) => set('grams_total', e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-900 focus:border-orange-400 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Remaining (g)</label>
+              <input
+                type="number" min="0" value={form.grams_remaining}
+                onChange={(e) => set('grams_remaining', e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-900 focus:border-orange-400 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Low stock below (g)</label>
+              <input
+                type="number" min="0" value={form.low_stock_threshold_g}
+                onChange={(e) => set('low_stock_threshold_g', e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-900 focus:border-orange-400 focus:outline-none"
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>

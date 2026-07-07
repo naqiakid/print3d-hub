@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { ChevronDown, LayoutDashboard, Wrench, Settings, LogOut, Store, ShoppingBag } from 'lucide-react'
+import { ChevronDown, LayoutDashboard, Wrench, Settings, LogOut, Store, ShoppingBag, HelpCircle } from 'lucide-react'
 import Link from 'next/link'
 import { logout } from '@/lib/actions'
 
@@ -45,21 +45,21 @@ export default function UserMenu({ email }: { email: string }) {
               <LayoutDashboard className="h-4 w-4 text-slate-400" /> Dashboard
             </Link>
             <Link
-              href="/dashboard/listing"
+              href="/dashboard"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
             >
               <Store className="h-4 w-4 text-slate-400" /> My Listing
             </Link>
             <Link
-              href="/dashboard/catalog"
+              href="/dashboard"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
             >
               <ShoppingBag className="h-4 w-4 text-slate-400" /> My Products
             </Link>
             <Link
-              href="/dashboard/equipment"
+              href="/dashboard"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
             >
@@ -71,6 +71,13 @@ export default function UserMenu({ email }: { email: string }) {
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
             >
               <Settings className="h-4 w-4 text-slate-400" /> Account settings
+            </Link>
+            <Link
+              href="/dashboard/help"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
+            >
+              <HelpCircle className="h-4 w-4 text-slate-400" /> Help & Guide
             </Link>
 
             <div className="my-1 border-t border-slate-100" />

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import type { Printer, PrintProfile, PrintQuality, PrintSize, Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
-import { submitRequest } from '@/lib/actions'
+import { submitRequest, sliceSTL } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 import { SIZE_LABELS } from '@/lib/types'
 import {
@@ -57,6 +57,9 @@ export type FileItem = {
   filamentId?: string
   parts?: ThreeMfPart[]                          // set after parsing a multi-object 3MF
   dimensions?: { x: number; y: number; z: number } // computed from model geometry
+  weight_g?: number | null    // from background auto-slicing (STL only)
+  print_hours?: number | null // from background auto-slicing (STL only)
+  slicing?: boolean
 }
 
 const ACCEPTED_FORMATS = '.stl,.3mf,.obj'
@@ -596,6 +599,8 @@ export default function RequestForm({
   const [quality, setQuality]         = useState<PrintQuality | ''>('')
   const [quantity, setQuantity]       = useState(1)
   const [material, setMaterial]       = useState<FilamentMaterial | ''>('')
+  const materialRef = useRef(material)
+  useEffect(() => { materialRef.current = material }, [material])
   const [requestColor, setRequestColor]     = useState('Any')
   const [requestColorHex, setRequestColorHex] = useState('#888888')
   const [customInfill, setCustomInfill]         = useState(40)
@@ -702,6 +707,23 @@ export default function RequestForm({
     }
     const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
     setFileItems((prev) => prev.map((i) => i.id === item.id ? { ...i, uploading: false, url: urlData.publicUrl } : i))
+
+    // Background auto-slice for a real weight/time estimate instead of a size-tier guess.
+    // Best-effort: the slicer service only understands STL geometry, and any failure
+    // (cold start, unreachable service) is silently ignored — the rest of the flow is
+    // unaffected either way, it just falls back to the existing size-based estimate.
+    if (/\.stl$/i.test(item.file.name)) {
+      setFileItems((prev) => prev.map((i) => i.id === item.id ? { ...i, slicing: true } : i))
+      sliceSTL(urlData.publicUrl, materialRef.current || 'pla', 0.4, 20)
+        .then((result) => {
+          setFileItems((prev) => prev.map((i) => i.id === item.id
+            ? { ...i, slicing: false, ...(('error' in result) ? {} : { weight_g: result.weight_g, print_hours: result.print_hours }) }
+            : i))
+        })
+        .catch(() => {
+          setFileItems((prev) => prev.map((i) => i.id === item.id ? { ...i, slicing: false } : i))
+        })
+    }
   }, [])
 
   const addFiles = useCallback((files: FileList | File[]) => {
@@ -780,6 +802,13 @@ export default function RequestForm({
 
     const stlUrls = fileItems.map((i) => i.url).filter(Boolean) as string[]
 
+    // Sum real slicer results when every uploaded STL was successfully auto-sliced;
+    // otherwise fall back to null (the size-tier estimate is used instead).
+    const slicedStlItems = fileItems.filter((i) => /\.stl$/i.test(i.file.name))
+    const allSliced = slicedStlItems.length > 0 && slicedStlItems.every((i) => i.weight_g != null)
+    const totalWeightG    = allSliced ? slicedStlItems.reduce((s, i) => s + (i.weight_g ?? 0), 0)    : null
+    const totalPrintHours = allSliced ? slicedStlItems.reduce((s, i) => s + (i.print_hours ?? 0), 0) : null
+
     // Build colour preferences — one entry per part for 3MF files, one per file otherwise
     const colorPrefs = fileItems.filter((i) => i.url).flatMap((item, fileIdx) => {
       if (item.parts && item.parts.length > 0) {
@@ -839,8 +868,8 @@ export default function RequestForm({
       model_image:    ogPreview?.image ?? null,
       stl_url:        stlUrls[0] ?? null,
       stl_urls:       stlUrls,
-      weight_g:       null,
-      print_hours:    null,
+      weight_g:       totalWeightG,
+      print_hours:    totalPrintHours,
       profile_id:     defaultProfile?.id ?? null,
       selected_addons: [...new Set(Array.from(selectedCaps))],
       declined_addons: [...declinedCaps],

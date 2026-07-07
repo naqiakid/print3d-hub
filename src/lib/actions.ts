@@ -3,7 +3,8 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from './supabase/server'
-import type { RequestStatus, PrintType, FilamentMaterial, PrintSize } from './types'
+import type { RequestStatus, PrintType, FilamentMaterial, PrintSize, FilamentCosts } from './types'
+import { calculatePriceRange } from './pricing'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://print3d-hub.vercel.app'
 
@@ -58,7 +59,7 @@ export async function setPrinterAdvanced(
     .eq('id', printerId)
     .eq('owner_id', user.id)
   if (error) return { error: error.message }
-  revalidatePath('/dashboard/listing')
+  revalidatePath('/dashboard/[printerId]', 'layout')
   revalidatePath('/request')
 }
 export async function registerPrinter(data: {
@@ -133,10 +134,15 @@ export async function registerPrinter(data: {
     .from('print_profiles')
     .insert(profilesPayload)
 
-  if (profileError) return { error: profileError.message }
+  if (profileError) {
+    // Roll back the printer row so a mid-registration failure doesn't leave an orphan
+    // (Supabase JS doesn't support cross-table transactions, so this is best-effort.)
+    await supabase.from('printers').delete().eq('id', printer.id)
+    return { error: profileError.message }
+  }
 
   revalidatePath('/dashboard')
-  redirect('/dashboard')
+  redirect(`/dashboard/${printer.id}`)
 }
 
 // ─── Filament CRUD ──────────────────────────────────────────
@@ -158,50 +164,67 @@ async function syncFilamentCosts(supabase: Awaited<ReturnType<typeof createClien
     }
   }
 
-  const { data: printerRow } = await supabase
+  // Filament stock is shared inventory across all of an owner's printers —
+  // sync the cached cost (and the derived price range) onto every one of them,
+  // not just the most recent.
+  const { data: printerRows } = await supabase
     .from('printers')
-    .select('id')
+    .select('id, materials, power_watts, electricity_rate, markup_percent, machine_rate_per_hour, waste_percent')
     .eq('owner_id', ownerId)
-    .limit(1)
-    .maybeSingle()
 
-  if (printerRow) {
-    await supabase
-      .from('printers')
-      .update({ filament_costs: Object.keys(costs).length ? costs : null })
-      .eq('id', printerRow.id)
+  if (printerRows?.length) {
+    const filamentCosts = Object.keys(costs).length ? (costs as FilamentCosts) : null
+    await Promise.all(
+      printerRows.map((p) => {
+        const { price_min, price_max } = calculatePriceRange({
+          materials: (p.materials ?? []) as FilamentMaterial[],
+          filament_costs: filamentCosts ?? {},
+          power_watts: p.power_watts ?? 200,
+          electricity_rate: p.electricity_rate ?? undefined,
+          markup_percent: p.markup_percent ?? undefined,
+          machine_rate_per_hour: p.machine_rate_per_hour ?? undefined,
+          waste_percent: p.waste_percent ?? undefined,
+        })
+        return supabase
+          .from('printers')
+          .update({ filament_costs: filamentCosts, price_min, price_max })
+          .eq('id', p.id)
+      }),
+    )
   }
 }
 
-export async function createFilament(data: {
+type FilamentInput = {
   material: FilamentMaterial
   brand: string
   color: string
   color_hex: string
   cost_per_kg: number
   in_stock: boolean
-}): Promise<{ error: string } | undefined> {
+  grams_total?: number | null
+  grams_remaining?: number | null
+  low_stock_threshold_g?: number
+}
+
+export async function createFilament(data: FilamentInput): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' }
 
-  const { error } = await supabase.from('filaments').insert({ ...data, owner_id: user.id })
+  const { data: inserted, error } = await supabase
+    .from('filaments')
+    .insert({ ...data, owner_id: user.id })
+    .select('id')
+    .single()
   if (error) return { error: error.message }
   await syncFilamentCosts(supabase, user.id)
-  revalidatePath('/dashboard/equipment')
-  revalidatePath('/dashboard/listing')
+  revalidatePath('/dashboard/[printerId]', 'layout')
+  return { id: inserted.id }
 }
 
 export async function updateFilament(
   id: string,
-  data: {
-    material: FilamentMaterial
-    brand: string
-    color: string
-    color_hex: string
-    cost_per_kg: number
-    in_stock: boolean
-  },
+  data: FilamentInput,
 ): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -214,8 +237,104 @@ export async function updateFilament(
     .eq('owner_id', user.id)
   if (error) return { error: error.message }
   await syncFilamentCosts(supabase, user.id)
-  revalidatePath('/dashboard/equipment')
-  revalidatePath('/dashboard/listing')
+  revalidatePath('/dashboard/[printerId]', 'layout')
+}
+
+export async function restockFilament(
+  id: string,
+  addGrams: number,
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+  if (!addGrams || addGrams <= 0) return { error: 'Enter a positive amount to add.' }
+
+  const { data: filament } = await supabase
+    .from('filaments')
+    .select('grams_remaining, grams_total, in_stock')
+    .eq('id', id)
+    .eq('owner_id', user.id)
+    .maybeSingle()
+  if (!filament) return { error: 'Filament not found' }
+
+  const newRemaining = (filament.grams_remaining ?? 0) + addGrams
+  const updates: Record<string, unknown> = {
+    grams_remaining: newRemaining,
+    grams_total: filament.grams_total ?? addGrams,
+  }
+  if (!filament.in_stock) updates.in_stock = true
+
+  const { error } = await supabase
+    .from('filaments')
+    .update(updates)
+    .eq('id', id)
+    .eq('owner_id', user.id)
+  if (error) return { error: error.message }
+  await syncFilamentCosts(supabase, user.id)
+  revalidatePath('/dashboard/[printerId]', 'layout')
+}
+
+// Auto-deducts filament stock when a job finishes printing. Groups the
+// request's per-plate weights by material + color, matches them to the
+// owner's tracked filament rolls (grams_remaining set), and decrements.
+// Fails soft — a missing match never blocks the status update itself.
+async function deductFilamentForRequest(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ownerId: string,
+  requestId: string,
+) {
+  try {
+    const { data: request } = await supabase
+      .from('requests')
+      .select('material, weight_g, plate_filaments')
+      .eq('id', requestId)
+      .maybeSingle()
+    if (!request?.weight_g) return
+
+    type Group = { material: string; color_hex: string | null; weight_g: number }
+    const plates = (request.plate_filaments ?? []) as {
+      material: string
+      color_hex?: string
+      weight_g?: number | null
+    }[]
+    const platesWithWeight = plates.filter((p) => (p.weight_g ?? 0) > 0)
+
+    let groups: Group[] = []
+    if (platesWithWeight.length > 0) {
+      const byKey = new Map<string, Group>()
+      for (const p of platesWithWeight) {
+        const key = `${p.material}|${p.color_hex ?? ''}`
+        const existing = byKey.get(key)
+        if (existing) existing.weight_g += p.weight_g!
+        else byKey.set(key, { material: p.material, color_hex: p.color_hex ?? null, weight_g: p.weight_g! })
+      }
+      groups = [...byKey.values()]
+    } else if (request.material) {
+      groups = [{ material: request.material, color_hex: null, weight_g: request.weight_g }]
+    }
+    if (groups.length === 0) return
+
+    const { data: filaments } = await supabase
+      .from('filaments')
+      .select('id, material, color_hex, grams_remaining')
+      .eq('owner_id', ownerId)
+      .not('grams_remaining', 'is', null)
+    if (!filaments?.length) return
+
+    let needsResync = false
+    for (const g of groups) {
+      const candidates = filaments.filter((f) => f.material === g.material)
+      if (candidates.length === 0) continue
+      const match = candidates.find((f) => f.color_hex === g.color_hex) ?? candidates[0]
+      const newRemaining = Math.max(0, Number(match.grams_remaining) - g.weight_g)
+      const updates: Record<string, unknown> = { grams_remaining: newRemaining }
+      if (newRemaining === 0) { updates.in_stock = false; needsResync = true }
+      await supabase.from('filaments').update(updates).eq('id', match.id)
+    }
+    if (needsResync) await syncFilamentCosts(supabase, ownerId)
+  } catch {
+    // Fail soft — stock deduction is best-effort, never blocks the job status update
+  }
 }
 
 export async function deleteFilament(id: string): Promise<{ error: string } | undefined> {
@@ -230,8 +349,7 @@ export async function deleteFilament(id: string): Promise<{ error: string } | un
     .eq('owner_id', user.id)
   if (error) return { error: error.message }
   await syncFilamentCosts(supabase, user.id)
-  revalidatePath('/dashboard/equipment')
-  revalidatePath('/dashboard/listing')
+  revalidatePath('/dashboard/[printerId]', 'layout')
 }
 
 export async function sliceSTL(
@@ -404,14 +522,35 @@ export async function updateListing(data: {
   if (!user) return { error: 'Not authenticated' }
 
   const { printer_id, ...fields } = data
+
+  // Cost settings changed — recompute the price range shown to browsing customers
+  const { data: current } = await supabase
+    .from('printers')
+    .select('materials, filament_costs, power_watts')
+    .eq('id', printer_id)
+    .eq('owner_id', user.id)
+    .maybeSingle()
+
+  const priceRange = current
+    ? calculatePriceRange({
+        materials: (current.materials ?? []) as FilamentMaterial[],
+        filament_costs: (current.filament_costs ?? {}) as FilamentCosts,
+        power_watts: current.power_watts ?? 200,
+        electricity_rate: data.electricity_rate,
+        markup_percent: data.markup_percent,
+        machine_rate_per_hour: data.machine_rate_per_hour,
+        waste_percent: data.waste_percent,
+      })
+    : null
+
   const { error } = await supabase
     .from('printers')
-    .update(fields)
+    .update({ ...fields, ...priceRange })
     .eq('id', printer_id)
     .eq('owner_id', user.id)
 
   if (error) return { error: error.message }
-  revalidatePath('/dashboard/listing')
+  revalidatePath('/dashboard/[printerId]', 'layout')
   revalidatePath('/dashboard')
 }
 
@@ -431,7 +570,74 @@ export async function updateRequestStatus(
     .eq('id', requestId)
 
   if (error) return { error: error.message }
+
+  if (status === 'done') {
+    await deductFilamentForRequest(supabase, user.id, requestId)
+  }
+
+  if (status === 'collected') {
+    supabase
+      .from('requests')
+      .select('customer_name, customer_email, printer_id')
+      .eq('id', requestId)
+      .single()
+      .then(({ data: req }) => {
+        if (!req) return
+        supabase
+          .from('printers')
+          .select('name')
+          .eq('id', req.printer_id)
+          .single()
+          .then(({ data: printer }) => {
+            const printerName = printer?.name ?? 'your printer'
+            const trackingUrl = `${APP_URL}/track/${requestId}`
+            sendEmail(
+              req.customer_email,
+              `How was your print from ${printerName}?`,
+              `<h2>Hope you love it!</h2>
+               <p>Hi ${req.customer_name},</p>
+               <p><strong>${printerName}</strong> marked your print as collected. Got a minute to leave a quick review?</p>
+               <p><a href="${trackingUrl}" style="font-size:16px;font-weight:bold">${trackingUrl}</a></p>`,
+            )
+          })
+      })
+  }
+
   revalidatePath('/dashboard')
+}
+
+export async function submitReview(
+  requestId: string,
+  printerId: string,
+  rating: number,
+  comment: string,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient()
+
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return { error: 'Rating must be between 1 and 5.' }
+  }
+
+  const { error: insertError } = await supabase.from('reviews').insert({
+    request_id: requestId,
+    printer_id: printerId,
+    rating,
+    comment: comment.trim(),
+  })
+  if (insertError) {
+    if (insertError.code === '23505') return { error: 'This request has already been reviewed.' }
+    return { error: insertError.message }
+  }
+
+  const { error: statusError } = await supabase
+    .from('requests')
+    .update({ status: 'reviewed' as RequestStatus })
+    .eq('id', requestId)
+  if (statusError) return { error: statusError.message }
+
+  revalidatePath(`/track/${requestId}`)
+  revalidatePath(`/printers/${printerId}`)
+  return { success: true }
 }
 
 export async function sendQuote(
@@ -443,7 +649,7 @@ export async function sendQuote(
   weightG?: number | null,
   printHours?: number | null,
   material?: string,
-  plateFilaments?: { material: string; color: string; color_hex: string }[],
+  plateFilaments?: { material: string; color: string; color_hex: string; weight_g?: number | null }[],
   confirmedAddons?: string[],
   deliveryCost?: number | null,
   stlUrlsToMerge?: string[],
@@ -531,7 +737,26 @@ export async function updateAvailability(
 
   if (error) return { error: error.message }
   revalidatePath('/dashboard')
-  revalidatePath('/dashboard/listing')
+  revalidatePath('/dashboard/[printerId]', 'layout')
+}
+
+export async function updatePrinterPhotos(
+  printerId: string,
+  samplePhotos: string[],
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('printers')
+    .update({ sample_photos: samplePhotos })
+    .eq('id', printerId)
+    .eq('owner_id', user.id)
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/[printerId]', 'layout')
+  revalidatePath(`/printers/${printerId}`)
 }
 
 export async function acceptQuote(
@@ -650,18 +875,18 @@ export async function toggleNozzle(
     .eq('id', profileId)
 
   if (error) return { error: error.message }
-  revalidatePath('/dashboard/equipment')
+  revalidatePath('/dashboard/[printerId]', 'layout')
 }
 
 export async function addNozzleSize(
   printerId: string,
   nozzleMm: number,
-): Promise<{ error: string } | undefined> {
+): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' }
 
-  const { error } = await supabase.from('print_profiles').insert({
+  const { data, error } = await supabase.from('print_profiles').insert({
     printer_id: printerId,
     name: `${nozzleMm}mm nozzle`,
     nozzle_mm: nozzleMm,
@@ -674,10 +899,11 @@ export async function addNozzleSize(
     fuzzy_skin_available: false,
     is_default: false,
     is_active: true,
-  })
+  }).select('id').single()
 
   if (error) return { error: error.message }
-  revalidatePath('/dashboard/equipment')
+  revalidatePath('/dashboard/[printerId]', 'layout')
+  return { id: data.id }
 }
 
 export async function removeNozzleSize(
@@ -693,7 +919,7 @@ export async function removeNozzleSize(
     .eq('id', profileId)
 
   if (error) return { error: error.message }
-  revalidatePath('/dashboard/equipment')
+  revalidatePath('/dashboard/[printerId]', 'layout')
 }
 
 export async function updateBedTypes(
@@ -711,7 +937,7 @@ export async function updateBedTypes(
     .eq('owner_id', user.id)
 
   if (error) return { error: error.message }
-  revalidatePath('/dashboard/equipment')
+  revalidatePath('/dashboard/[printerId]', 'layout')
 }
 
 export async function updatePrinterCapabilities(
@@ -744,8 +970,7 @@ export async function updatePrinterCapabilities(
     .eq('printer_id', printerId)
 
   if (error) return { error: error.message }
-  revalidatePath('/dashboard/equipment')
-  revalidatePath('/dashboard/listing')
+  revalidatePath('/dashboard/[printerId]', 'layout')
 }
 
 // ── Catalog item CRUD ──────────────────────────────────────────
@@ -769,6 +994,7 @@ type CatalogItemData = {
   color?: string | null
   color_hex?: string | null
   base_price?: number | null
+  category?: string | null
 }
 
 export async function createCatalogItem(
@@ -786,7 +1012,7 @@ export async function createCatalogItem(
     .single()
 
   if (error) return { error: error.message }
-  revalidatePath('/dashboard/catalog')
+  revalidatePath('/dashboard/[printerId]', 'layout')
   revalidatePath(`/printers/${printerId}`)
   return { id: inserted.id }
 }
@@ -805,7 +1031,7 @@ export async function updateCatalogItem(
     .eq('id', itemId)
 
   if (error) return { error: error.message }
-  revalidatePath('/dashboard/catalog')
+  revalidatePath('/dashboard/[printerId]', 'layout')
   return { success: true }
 }
 
@@ -823,7 +1049,7 @@ export async function deleteCatalogItem(
     .eq('id', itemId)
 
   if (error) return { error: error.message }
-  revalidatePath('/dashboard/catalog')
+  revalidatePath('/dashboard/[printerId]', 'layout')
   revalidatePath(`/printers/${printerId}`)
   return { success: true }
 }

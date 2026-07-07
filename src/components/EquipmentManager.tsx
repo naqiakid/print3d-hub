@@ -37,19 +37,23 @@ export default function EquipmentManager({
     setProfiles((prev) => prev.map((p) => p.id === profileId ? { ...p, is_active: next } : p))
     startTransition(async () => {
       const res = await toggleNozzle(profileId, next)
-      if (res?.error) setError(res.error)
+      if (res?.error) {
+        setError(res.error)
+        setProfiles((prev) => prev.map((p) => p.id === profileId ? { ...p, is_active: current } : p))
+      }
     })
   }
 
   function handleAddNozzle(nozzleMm: number) {
     startTransition(async () => {
       const res = await addNozzleSize(printerId, nozzleMm)
-      if (res?.error) { setError(res.error); return }
-      // Optimistically add a placeholder — server revalidates the page data
+      if ('error' in res) { setError(res.error); return }
+      // Use the real server-assigned id — a client-guessed id would break any
+      // follow-up action (toggle/remove) on this row before the next full page load.
       setProfiles((prev) => [
         ...prev,
         {
-          id: `temp-${nozzleMm}`,
+          id: res.id,
           printer_id: printerId,
           name: `${nozzleMm}mm nozzle`,
           nozzle_mm: nozzleMm,
@@ -70,34 +74,46 @@ export default function EquipmentManager({
   }
 
   function handleRemoveNozzle(profileId: string) {
+    const removed = profiles.find((p) => p.id === profileId)
     setProfiles((prev) => prev.filter((p) => p.id !== profileId))
     startTransition(async () => {
       const res = await removeNozzleSize(profileId)
-      if (res?.error) setError(res.error)
+      if (res?.error) {
+        setError(res.error)
+        if (removed) setProfiles((prev) => [...prev, removed])
+      }
     })
   }
 
   // ── Bed type helpers ─────────────────────────────────────────
 
   function handleToggleBed(value: string) {
+    const previous = bedTypes
     const next = bedTypes.includes(value)
       ? bedTypes.filter((b) => b !== value)
       : [...bedTypes, value]
     setBedTypes(next)
     startTransition(async () => {
       const res = await updateBedTypes(printerId, next)
-      if (res?.error) setError(res.error)
+      if (res?.error) {
+        setError(res.error)
+        setBedTypes(previous)
+      }
     })
   }
 
   // ── Capability helpers ───────────────────────────────────────
 
   function handleToggleCap(key: keyof typeof caps) {
+    const previous = caps
     const next = { ...caps, [key]: !caps[key] }
     setCaps(next)
     startTransition(async () => {
       const res = await updatePrinterCapabilities(printerId, next)
-      if (res?.error) setError(res.error)
+      if (res?.error) {
+        setError(res.error)
+        setCaps(previous)
+      }
     })
   }
 
