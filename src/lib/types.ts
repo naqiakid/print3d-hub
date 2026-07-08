@@ -25,39 +25,56 @@ export type RequestStatus =
   | 'cancelled'
   | 'reviewed'
 
-export type Printer = {
-  id: string
-  owner_id: string
+// A shop is the public-facing business — one per owner. Customers pick a
+// shop, not a specific machine; printers (below) are internal equipment.
+export type Shop = {
+  id: string // == owner_id == profiles.id == auth.users.id
   name: string
   description: string
-  printer_model: string
-  printer_model_id: string | null
+  whatsapp: string
   print_types: PrintType[]
   materials: FilamentMaterial[]
   max_size: PrintSize
   price_min: number
   price_max: number
   turnaround: string
-  contact_phone: string
   sample_photos: string[]
-  lat: number
-  lng: number
+  lat: number | null
+  lng: number | null
   available: boolean
   rating: number
   review_count: number
-  created_at: string
-  electricity_rate: number | null
-  filament_costs: FilamentCosts | null
-  markup_percent: number | null
-  power_watts: number | null
-  grams_per_roll: number | null
-  bed_type: string[] | null
   pickup_address: string | null
   delivery_available: boolean
   delivery_rate_per_km: number | null
-  machine_rate_per_hour: number | null
+  electricity_rate: number | null
+  markup_percent: number | null
   waste_percent: number | null
   advanced_available: boolean
+  created_at: string
+}
+
+// Combined shop + one representative machine's specs — used when a customer
+// is requesting a print. The customer never picks a specific machine, but a
+// live cost estimate needs one representative printer's cost drivers.
+export type RequestPrinterView = Shop & Pick<Printer,
+  'printer_model' | 'printer_model_id' | 'filament_costs' | 'power_watts' | 'machine_rate_per_hour' | 'bed_type' | 'grams_per_roll'
+>
+
+// A printer is equipment owned by a shop — not independently public.
+export type Printer = {
+  id: string
+  owner_id: string
+  printer_model: string
+  printer_model_id: string | null
+  materials: FilamentMaterial[]
+  power_watts: number | null
+  machine_rate_per_hour: number | null
+  filament_costs: FilamentCosts | null
+  grams_per_roll: number | null
+  bed_type: string[] | null
+  available: boolean
+  created_at: string
 }
 
 export type PlateFilament = {
@@ -78,7 +95,8 @@ export type ColorPreference = {
 
 export type PrintRequest = {
   id: string
-  printer_id: string
+  owner_id: string
+  printer_id: string | null
   customer_name: string
   customer_email: string
   customer_phone: string
@@ -156,7 +174,7 @@ export type Filament = {
 
 export type CatalogItem = {
   id: string
-  printer_id: string
+  owner_id: string
   name: string
   description: string
   photo_url: string | null
@@ -184,7 +202,7 @@ export type CatalogItem = {
 export type Review = {
   id: string
   request_id: string
-  printer_id: string
+  owner_id: string
   rating: number
   comment: string
   created_at: string

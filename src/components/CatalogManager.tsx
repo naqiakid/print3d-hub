@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, ChevronUp } from 'lucide-react'
-import type { CatalogItem, FilamentMaterial, Filament, Printer } from '@/lib/types'
+import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView } from '@/lib/types'
 import { MATERIAL_LABELS } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
@@ -122,13 +122,11 @@ function itemToForm(item: CatalogItem): FormState {
 
 export default function CatalogManager({
   initialItems,
-  printerId,
   printer,
   filaments,
 }: {
   initialItems: CatalogItem[]
-  printerId: string
-  printer: Printer
+  printer: RequestPrinterView
   filaments: Filament[]
 }) {
   const [items, setItems] = useState<CatalogItem[]>(initialItems)
@@ -200,10 +198,10 @@ export default function CatalogManager({
 
     startTransition(async () => {
       if (editing === 'new') {
-        const res = await createCatalogItem(printerId, data)
+        const res = await createCatalogItem(data)
         if ('error' in res) { setError(res.error); return }
         const newItem: CatalogItem = {
-          id: res.id, printer_id: printerId, sort_order: 0, is_active: true,
+          id: res.id, owner_id: printer.id, sort_order: 0, is_active: true,
           created_at: new Date().toISOString(),
           ...data,
           photo_url: data.photo_url ?? null,
@@ -227,7 +225,7 @@ export default function CatalogManager({
   function handleDelete(item: CatalogItem) {
     if (!confirm(`Remove "${item.name}" from your catalog?`)) return
     startTransition(async () => {
-      const res = await deleteCatalogItem(item.id, printerId)
+      const res = await deleteCatalogItem(item.id)
       if ('error' in res) { setError(res.error); return }
       setItems((prev) => prev.filter((i) => i.id !== item.id))
     })
@@ -370,7 +368,7 @@ function GcodeCalculator({
   defaultMaterial,
   onUsePrice,
 }: {
-  printer: Printer
+  printer: RequestPrinterView
   defaultMaterial: FilamentMaterial
   onUsePrice: (price: string) => void
 }) {
@@ -588,7 +586,7 @@ function CatalogForm({
   toggleAvailableMaterial: (mat: string) => void
   setMaterialPrice: (mat: string, price: string) => void
   filaments: Filament[]
-  printer: Printer
+  printer: RequestPrinterView
   onSave: () => void
   onCancel: () => void
   isPending: boolean

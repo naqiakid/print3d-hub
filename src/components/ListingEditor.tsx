@@ -2,9 +2,8 @@
 
 import { useState, useTransition, useRef, useEffect, useCallback, lazy, Suspense } from 'react'
 import { Pencil, Check, X, MapPin, Truck, Search, Loader2, Map } from 'lucide-react'
-import type { Printer } from '@/lib/types'
+import type { Shop } from '@/lib/types'
 import { updateListing } from '@/lib/actions'
-import { getPresetById } from '@/lib/printer-models'
 
 const MapPicker = lazy(() => import('./MapPicker'))
 
@@ -138,23 +137,29 @@ async function reverseGeocode(lat: number, lng: number): Promise<string | null> 
   }
 }
 
-export default function ListingEditor({ printer }: { printer: Printer }) {
+export default function ListingEditor({
+  shop,
+  machineRatePerHour,
+}: {
+  shop: Shop
+  machineRatePerHour: number | null
+}) {
   const [editing, setEditing] = useState(false)
-  const [name, setName]               = useState(printer.name)
-  const [description, setDescription] = useState(printer.description)
-  const [turnaround, setTurnaround]   = useState(printer.turnaround)
-  const [contactPhone, setContactPhone] = useState(printer.contact_phone)
-  const [electricityRate, setElectricityRate] = useState(String(printer.electricity_rate ?? 0.516))
-  const [markupPercent, setMarkupPercent]     = useState(String(printer.markup_percent ?? 30))
-  const [machineRate, setMachineRate]         = useState(String(printer.machine_rate_per_hour ?? 1.5))
-  const [wastePercent, setWastePercent]       = useState(String(printer.waste_percent ?? 8))
+  const [name, setName]               = useState(shop.name)
+  const [description, setDescription] = useState(shop.description)
+  const [turnaround, setTurnaround]   = useState(shop.turnaround)
+  const [contactPhone, setContactPhone] = useState(shop.whatsapp)
+  const [electricityRate, setElectricityRate] = useState(String(shop.electricity_rate ?? 0.516))
+  const [markupPercent, setMarkupPercent]     = useState(String(shop.markup_percent ?? 30))
+  const [machineRate, setMachineRate]         = useState(String(machineRatePerHour ?? 1.5))
+  const [wastePercent, setWastePercent]       = useState(String(shop.waste_percent ?? 8))
   const [unitNo, setUnitNo]           = useState('')
-  const [streetAddress, setStreetAddress] = useState(printer.pickup_address ?? '')
-  const [lat, setLat] = useState<number | null>(printer.lat ?? null)
-  const [lng, setLng] = useState<number | null>(printer.lng ?? null)
+  const [streetAddress, setStreetAddress] = useState(shop.pickup_address ?? '')
+  const [lat, setLat] = useState<number | null>(shop.lat ?? null)
+  const [lng, setLng] = useState<number | null>(shop.lng ?? null)
   const [reverseLoading, setReverseLoading] = useState(false)
-  const [deliveryAvailable, setDeliveryAvailable] = useState(printer.delivery_available ?? false)
-  const [deliveryRatePerKm, setDeliveryRatePerKm] = useState(String(printer.delivery_rate_per_km ?? '1.00'))
+  const [deliveryAvailable, setDeliveryAvailable] = useState(shop.delivery_available ?? false)
+  const [deliveryRatePerKm, setDeliveryRatePerKm] = useState(String(shop.delivery_rate_per_km ?? '1.00'))
   const [saveError, setSaveError] = useState('')
   const [isPending, startTransition] = useTransition()
 
@@ -162,20 +167,20 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
   const fullAddress = [unitNo.trim(), streetAddress.trim()].filter(Boolean).join(', ')
 
   function handleCancel() {
-    setName(printer.name)
-    setDescription(printer.description)
-    setTurnaround(printer.turnaround)
-    setContactPhone(printer.contact_phone)
-    setElectricityRate(String(printer.electricity_rate ?? 0.516))
-    setMarkupPercent(String(printer.markup_percent ?? 30))
-    setMachineRate(String(printer.machine_rate_per_hour ?? 1.5))
-    setWastePercent(String(printer.waste_percent ?? 8))
+    setName(shop.name)
+    setDescription(shop.description)
+    setTurnaround(shop.turnaround)
+    setContactPhone(shop.whatsapp)
+    setElectricityRate(String(shop.electricity_rate ?? 0.516))
+    setMarkupPercent(String(shop.markup_percent ?? 30))
+    setMachineRate(String(machineRatePerHour ?? 1.5))
+    setWastePercent(String(shop.waste_percent ?? 8))
     setUnitNo('')
-    setStreetAddress(printer.pickup_address ?? '')
-    setLat(printer.lat ?? null)
-    setLng(printer.lng ?? null)
-    setDeliveryAvailable(printer.delivery_available ?? false)
-    setDeliveryRatePerKm(String(printer.delivery_rate_per_km ?? '1.00'))
+    setStreetAddress(shop.pickup_address ?? '')
+    setLat(shop.lat ?? null)
+    setLng(shop.lng ?? null)
+    setDeliveryAvailable(shop.delivery_available ?? false)
+    setDeliveryRatePerKm(String(shop.delivery_rate_per_km ?? '1.00'))
     setSaveError('')
     setEditing(false)
   }
@@ -184,7 +189,6 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
     setSaveError('')
     startTransition(async () => {
       const result = await updateListing({
-        printer_id: printer.id,
         name: name.trim(),
         description: description.trim(),
         turnaround: turnaround.trim(),
@@ -228,7 +232,6 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-900">{name}</h2>
-            <p className="text-sm text-slate-500">{printer.printer_model}</p>
           </div>
           <button
             onClick={() => setEditing(true)}
@@ -282,8 +285,8 @@ export default function ListingEditor({ printer }: { printer: Printer }) {
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Pickup & Delivery</p>
           <div className="flex items-start gap-2 text-sm">
             <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-            {printer.pickup_address
-              ? <span className="text-slate-700">{printer.pickup_address}</span>
+            {shop.pickup_address
+              ? <span className="text-slate-700">{shop.pickup_address}</span>
               : <span className="text-slate-400 italic">No pickup address set</span>}
           </div>
           <div className="flex items-center gap-2 text-sm">

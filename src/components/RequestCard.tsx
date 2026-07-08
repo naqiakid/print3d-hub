@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useTransition, lazy, Suspense } from 'react'
 import { Calendar, FileText, MessageSquare, ExternalLink, Upload, X, Loader2, FileCode2, Plus } from 'lucide-react'
-import type { PrintRequest, RequestStatus, Printer, FilamentMaterial } from '@/lib/types'
+import type { PrintRequest, RequestStatus, RequestPrinterView, FilamentMaterial } from '@/lib/types'
 import {
   STATUS_LABELS,
   STATUS_COLORS,
@@ -55,7 +55,7 @@ function fmtHours(h: number | null | undefined): string {
   return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`
 }
 
-export default function RequestCard({ request, printer }: { request: PrintRequest; printer: Printer }) {
+export default function RequestCard({ request, printer }: { request: PrintRequest; printer: RequestPrinterView }) {
   const [expanded, setExpanded] = useState(false)
   const [showQuoteForm, setShowQuoteForm] = useState(false)
   const [quoteDate, setQuoteDate] = useState('')
@@ -178,6 +178,8 @@ export default function RequestCard({ request, printer }: { request: PrintReques
       setDeliveryCalcError('Cannot calculate — missing address or printer location.')
       return
     }
+    const printerLat = printer.lat
+    const printerLng = printer.lng
     setDeliveryCalcLoading(true)
     setDeliveryCalcError('')
     setDeliveryCalcKm(null)
@@ -191,9 +193,9 @@ export default function RequestCard({ request, printer }: { request: PrintReques
         const cLat = parseFloat(data[0].lat)
         const cLng = parseFloat(data[0].lon)
         const R = 6371
-        const dLat = (cLat - printer.lat) * Math.PI / 180
-        const dLng = (cLng - printer.lng) * Math.PI / 180
-        const a = Math.sin(dLat / 2) ** 2 + Math.cos(printer.lat * Math.PI / 180) * Math.cos(cLat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+        const dLat = (cLat - printerLat) * Math.PI / 180
+        const dLng = (cLng - printerLng) * Math.PI / 180
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(printerLat * Math.PI / 180) * Math.cos(cLat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
         const straight = R * 2 * Math.asin(Math.sqrt(a))
         const road = straight * 1.3
         const rate = printer.delivery_rate_per_km ?? 1.00

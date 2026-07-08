@@ -1,13 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { setPrinterAdvanced } from '@/lib/actions'
+import { setShopAdvanced } from '@/lib/actions'
 
 export default function AdvancedToggle({
-  printerId,
   initial,
 }: {
-  printerId: string
   initial: boolean
 }) {
   const [enabled, setEnabled] = useState(initial)
@@ -17,7 +15,7 @@ export default function AdvancedToggle({
     const next = !enabled
     setEnabled(next)
     startTransition(async () => {
-      const result = await setPrinterAdvanced(printerId, next)
+      const result = await setShopAdvanced(next)
       if (result?.error) setEnabled(!next)
     })
   }

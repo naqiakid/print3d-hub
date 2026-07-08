@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import type { PrintRequest, Printer, FilamentMaterial, Review } from '@/lib/types'
+import type { PrintRequest, Shop, FilamentMaterial, Review } from '@/lib/types'
 import { STATUS_LABELS, MATERIAL_LABELS, SIZE_LABELS, QUALITY_LABELS } from '@/lib/types'
 import { formatRM } from '@/lib/pricing'
 import QuoteActions from '@/components/QuoteActions'
@@ -53,12 +53,12 @@ export default async function TrackPage({
   const request = reqData as unknown as PrintRequest
 
   const { data: printerData } = await supabase
-    .from('printers')
-    .select('name, contact_phone, turnaround, pickup_address, materials')
-    .eq('id', request.printer_id)
+    .from('profiles')
+    .select('name, whatsapp, turnaround, pickup_address, materials')
+    .eq('id', request.owner_id)
     .maybeSingle()
 
-  const printer = printerData as Pick<Printer, 'name' | 'contact_phone' | 'turnaround' | 'pickup_address' | 'materials'> | null
+  const printer = printerData as Pick<Shop, 'name' | 'whatsapp' | 'turnaround' | 'pickup_address' | 'materials'> | null
 
   const { data: reviewData } = await supabase
     .from('reviews')
@@ -441,7 +441,7 @@ export default async function TrackPage({
       {/* Review */}
       {request.status === 'collected' && !review && (
         <div className="mt-6">
-          <ReviewForm requestId={requestId} printerId={request.printer_id} />
+          <ReviewForm requestId={requestId} ownerId={request.owner_id} />
         </div>
       )}
       {review && (
@@ -474,10 +474,10 @@ export default async function TrackPage({
       )}
 
       {/* Contact */}
-      {printer?.contact_phone && (
+      {printer?.whatsapp && (
         <div className="mt-4 text-center text-xs text-slate-400">
           Questions? Contact {printer.name} on{' '}
-          <a href={`https://wa.me/${printer.contact_phone.replace(/\D/g, '')}`} className="text-orange-500 hover:text-orange-600 font-medium">
+          <a href={`https://wa.me/${printer.whatsapp.replace(/\D/g, '')}`} className="text-orange-500 hover:text-orange-600 font-medium">
             WhatsApp
           </a>
         </div>

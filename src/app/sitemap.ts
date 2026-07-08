@@ -5,12 +5,14 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://print3d-hub.vercel.a
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = await createClient()
-  const { data: printers } = await supabase
-    .from('printers')
-    .select('id, created_at')
-    .eq('available', true)
+  const { data: printerRows } = await supabase.from('printers').select('owner_id')
+  const ownerIds = [...new Set((printerRows ?? []).map((p) => p.owner_id))]
 
-  const printerEntries: MetadataRoute.Sitemap = (printers ?? []).map((p) => ({
+  const { data: shops } = ownerIds.length
+    ? await supabase.from('profiles').select('id, created_at').eq('available', true).in('id', ownerIds)
+    : { data: [] }
+
+  const printerEntries: MetadataRoute.Sitemap = (shops ?? []).map((p) => ({
     url: `${APP_URL}/printers/${p.id}`,
     lastModified: new Date(p.created_at),
     changeFrequency: 'weekly',

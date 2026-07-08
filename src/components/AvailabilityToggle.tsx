@@ -5,10 +5,8 @@ import { ToggleLeft, ToggleRight } from 'lucide-react'
 import { updateAvailability } from '@/lib/actions'
 
 export default function AvailabilityToggle({
-  printerId,
   initial,
 }: {
-  printerId: string
   initial: boolean
 }) {
   const [available, setAvailable] = useState(initial)
@@ -18,7 +16,7 @@ export default function AvailabilityToggle({
     const next = !available
     setAvailable(next)
     startTransition(async () => {
-      const result = await updateAvailability(printerId, next)
+      const result = await updateAvailability(next)
       if (result?.error) setAvailable(!next)
     })
   }

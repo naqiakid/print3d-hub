@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, lazy, Suspense } from 'react'
 import { FileCode2, Upload, Plus, X, Loader2, ChevronDown, ChevronUp, Copy, Check, Info } from 'lucide-react'
-import type { Printer, Filament, FilamentMaterial, PrintSize, PrintQuality } from '@/lib/types'
+import type { RequestPrinterView, Filament, FilamentMaterial, PrintSize, PrintQuality } from '@/lib/types'
 import { MATERIAL_LABELS, SIZE_LABELS } from '@/lib/types'
 import { parseGcodeFile } from '@/lib/parse-gcode'
 import { getPresetById } from '@/lib/printer-models'
@@ -173,7 +173,7 @@ type GcodeItem = {
 }
 
 function GcodeTab({ printer, filaments, settings }: {
-  printer: Printer
+  printer: RequestPrinterView
   filaments: Filament[]
   settings: CostSettings
 }) {
@@ -340,7 +340,7 @@ function GcodeTab({ printer, filaments, settings }: {
 // ── Estimate tab ──────────────────────────────────────────────────────────────
 
 function EstimateTab({ printer, filaments, settings }: {
-  printer: Printer
+  printer: RequestPrinterView
   filaments: Filament[]
   settings: CostSettings
 }) {
@@ -508,7 +508,7 @@ function EstimateTab({ printer, filaments, settings }: {
 
 // ── main component ────────────────────────────────────────────────────────────
 
-export default function PriceCalculator({ printer, filaments }: { printer: Printer; filaments: Filament[] }) {
+export default function PriceCalculator({ printer, filaments }: { printer: RequestPrinterView; filaments: Filament[] }) {
   const [tab, setTab] = useState<'gcode' | 'estimate'>('gcode')
   const [settings, setSettings] = useState<CostSettings>({
     electricityRate: printer.electricity_rate ?? DEFAULT_ELECTRICITY_RATE,

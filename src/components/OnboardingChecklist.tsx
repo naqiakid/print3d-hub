@@ -7,33 +7,31 @@ import { CheckCircle2, Circle, X } from 'lucide-react'
 type Step = { key: string; label: string; done: boolean; href?: string }
 
 export default function OnboardingChecklist({
-  printerId,
   hasFilaments,
   isAvailable,
   hasCatalogItem,
   hasRequest,
 }: {
-  printerId: string
   hasFilaments: boolean
   isAvailable: boolean
   hasCatalogItem: boolean
   hasRequest: boolean
 }) {
-  const storageKey = `onboarding_dismissed_${printerId}`
+  const storageKey = 'onboarding_dismissed'
   const [mounted, setMounted] = useState(false)
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
     setDismissed(localStorage.getItem(storageKey) === '1')
     setMounted(true)
-  }, [storageKey])
+  }, [])
 
   if (!mounted || dismissed) return null
 
   const steps: Step[] = [
-    { key: 'filaments', label: 'Add your filament stock', done: hasFilaments, href: `/dashboard/${printerId}/equipment` },
-    { key: 'available', label: 'Turn on availability', done: isAvailable, href: `/dashboard/${printerId}/listing` },
-    { key: 'catalog', label: 'List a product in your catalog', done: hasCatalogItem, href: `/dashboard/${printerId}/catalog` },
+    { key: 'filaments', label: 'Add your filament stock', done: hasFilaments, href: '/dashboard/equipment' },
+    { key: 'available', label: 'Turn on availability', done: isAvailable, href: '/dashboard/listing' },
+    { key: 'catalog', label: 'List a product in your catalog', done: hasCatalogItem, href: '/dashboard/catalog' },
     { key: 'request', label: 'Get your first request', done: hasRequest },
   ]
   const doneCount = steps.filter((s) => s.done).length

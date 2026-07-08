@@ -2,13 +2,11 @@
 
 import { useState, useTransition } from 'react'
 import { Plus, X, ImageIcon } from 'lucide-react'
-import { updatePrinterPhotos } from '@/lib/actions'
+import { updateShopPhotos } from '@/lib/actions'
 
 export default function PhotoGalleryEditor({
-  printerId,
   initialPhotos,
 }: {
-  printerId: string
   initialPhotos: string[]
 }) {
   const [photos, setPhotos] = useState(initialPhotos)
@@ -19,7 +17,7 @@ export default function PhotoGalleryEditor({
   function save(next: string[]) {
     setError('')
     startTransition(async () => {
-      const result = await updatePrinterPhotos(printerId, next)
+      const result = await updateShopPhotos(next)
       if (result?.error) { setError(result.error); return }
       setPhotos(next)
     })

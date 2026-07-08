@@ -5,7 +5,7 @@ import {
   CheckCircle, Upload, X, Loader2, FileBox, Plus, Ruler,
   Link2, FileUp, ExternalLink, Download, HelpCircle,
 } from 'lucide-react'
-import type { Printer, PrintProfile, PrintQuality, PrintSize, Filament, FilamentMaterial } from '@/lib/types'
+import type { RequestPrinterView, PrintProfile, PrintQuality, PrintSize, Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { submitRequest, sliceSTL } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
@@ -563,7 +563,7 @@ export default function RequestForm({
   buildVolume,
   filaments,
 }: {
-  printer: Printer
+  printer: RequestPrinterView
   profiles: PrintProfile[]
   buildVolume: string | null
   filaments: Filament[]
@@ -655,6 +655,8 @@ export default function RequestForm({
       setDeliveryGeoError('')
       return
     }
+    const printerLat = printer.lat
+    const printerLng = printer.lng
     setDeliveryGeoLoading(true)
     setDeliveryGeoError('')
     const timer = setTimeout(async () => {
@@ -668,9 +670,9 @@ export default function RequestForm({
         const cLat = parseFloat(data[0].lat)
         const cLng = parseFloat(data[0].lon)
         const R    = 6371
-        const dLat = (cLat - printer.lat) * Math.PI / 180
-        const dLng = (cLng - printer.lng) * Math.PI / 180
-        const a    = Math.sin(dLat / 2) ** 2 + Math.cos(printer.lat * Math.PI / 180) * Math.cos(cLat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+        const dLat = (cLat - printerLat) * Math.PI / 180
+        const dLng = (cLng - printerLng) * Math.PI / 180
+        const a    = Math.sin(dLat / 2) ** 2 + Math.cos(printerLat * Math.PI / 180) * Math.cos(cLat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
         const straight = R * 2 * Math.asin(Math.sqrt(a))
         const road  = straight * 1.3
         const rate  = printer.delivery_rate_per_km ?? 1.00
@@ -847,7 +849,7 @@ export default function RequestForm({
     const effectiveSize     = modelMode === 'link' && !primaryDims ? linkSize : autoSize
 
     const result = await submitRequest({
-      printer_id:     printer.id,
+      owner_id:       printer.id,
       customer_name:  (form.elements.namedItem('name') as HTMLInputElement).value,
       customer_email: (form.elements.namedItem('email') as HTMLInputElement).value,
       customer_phone: (form.elements.namedItem('phone') as HTMLInputElement).value,

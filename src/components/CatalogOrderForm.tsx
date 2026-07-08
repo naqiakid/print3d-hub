@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { CatalogItem, Printer, PrintProfile, Filament, FilamentMaterial } from '@/lib/types'
+import type { CatalogItem, RequestPrinterView, PrintProfile, Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { submitRequest } from '@/lib/actions'
 import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
@@ -31,7 +31,7 @@ export default function CatalogOrderForm({
   filaments,
 }: {
   item: CatalogItem
-  printer: Printer
+  printer: RequestPrinterView
   profiles: PrintProfile[]
   filaments: Filament[]
 }) {
@@ -82,7 +82,12 @@ export default function CatalogOrderForm({
       ]
     : COLOR_PRESETS.map((c, i) => ({ id: `preset-${i}`, name: c.name, hex: c.hex }))
 
-  const canSubmit = !!(name.trim() && email.trim() && phone.trim() && (!item.allow_custom_text || customText.trim()))
+  const canSubmit = !!(
+    name.trim() &&
+    email.trim() &&
+    isValidMyPhoneDigits(phone.replace(/^\+?60/, '')) &&
+    (!item.allow_custom_text || customText.trim())
+  )
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -115,7 +120,7 @@ export default function CatalogOrderForm({
       selectedAddons.push('text_on_surface')
 
     const result = await submitRequest({
-      printer_id:      printer.id,
+      owner_id:        printer.id,
       customer_name:   name.trim(),
       customer_email:  email.trim(),
       customer_phone:  phone.trim(),
@@ -283,8 +288,7 @@ export default function CatalogOrderForm({
           placeholder="Full name *" required className={inputClass} />
         <input name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
           placeholder="Email address *" required className={inputClass} />
-        <input name="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-          placeholder="Phone / WhatsApp *" required className={inputClass} />
+        <PhoneInput value={phone} onChange={setPhone} required />
       </div>
 
       {/* ── Fulfillment ──────────────────────────────────────── */}

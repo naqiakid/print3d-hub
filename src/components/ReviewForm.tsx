@@ -6,10 +6,10 @@ import { submitReview } from '@/lib/actions'
 
 export default function ReviewForm({
   requestId,
-  printerId,
+  ownerId,
 }: {
   requestId: string
-  printerId: string
+  ownerId: string
 }) {
   const [rating, setRating] = useState(0)
   const [hoverRating, setHoverRating] = useState(0)
@@ -22,7 +22,7 @@ export default function ReviewForm({
     if (rating < 1) { setError('Please pick a star rating.'); return }
     setError('')
     startTransition(async () => {
-      const result = await submitReview(requestId, printerId, rating, comment)
+      const result = await submitReview(requestId, ownerId, rating, comment)
       if ('error' in result) { setError(result.error); return }
       setSubmitted(true)
     })

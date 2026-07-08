@@ -2,7 +2,7 @@
 
 import { useState, lazy, Suspense } from 'react'
 import { Locate, MapPin } from 'lucide-react'
-import type { Printer } from '@/lib/types'
+import type { Shop } from '@/lib/types'
 import PrinterCard from './PrinterCard'
 
 const PrinterMap = lazy(() => import('./PrinterMap'))
@@ -19,7 +19,7 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
 
 type GeoStatus = 'idle' | 'loading' | 'granted' | 'denied'
 
-export default function PrintersBrowse({ printers }: { printers: Printer[] }) {
+export default function PrintersBrowse({ printers }: { printers: Shop[] }) {
   const [userLat, setUserLat] = useState<number | null>(null)
   const [userLng, setUserLng] = useState<number | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
@@ -39,7 +39,7 @@ export default function PrintersBrowse({ printers }: { printers: Printer[] }) {
   }
 
   // Compute distances and sort
-  type WithDist = { printer: Printer; distanceKm: number | undefined }
+  type WithDist = { printer: Shop; distanceKm: number | undefined }
   const sorted: WithDist[] = printers
     .map((p) => ({
       printer: p,

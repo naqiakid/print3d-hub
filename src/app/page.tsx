@@ -2,25 +2,31 @@ import Link from 'next/link'
 import { ArrowRight, Printer, Search, Package } from 'lucide-react'
 import PrinterCard from '@/components/PrinterCard'
 import { createClient } from '@/lib/supabase/server'
-import type { Printer as PrinterType } from '@/lib/types'
+import type { Shop } from '@/lib/types'
 
 export default async function HomePage() {
   const supabase = await createClient()
 
+  const { data: printerRows } = await supabase.from('printers').select('owner_id')
+  const ownerIds = [...new Set((printerRows ?? []).map((p) => p.owner_id))]
+
   const [{ data: printersData }, { count: completedCount }] = await Promise.all([
-    supabase
-      .from('printers')
-      .select('*')
-      .eq('available', true)
-      .order('created_at', { ascending: false })
-      .limit(3),
+    ownerIds.length
+      ? supabase
+          .from('profiles')
+          .select('*')
+          .eq('available', true)
+          .in('id', ownerIds)
+          .order('created_at', { ascending: false })
+          .limit(3)
+      : Promise.resolve({ data: [] }),
     supabase
       .from('requests')
       .select('*', { count: 'exact', head: true })
       .in('status', ['collected', 'reviewed']),
   ])
 
-  const featured = (printersData ?? []) as unknown as PrinterType[]
+  const featured = (printersData ?? []) as unknown as Shop[]
   const totalPrinters = featured.length  // we only fetched available ones for display
   const totalCompleted = completedCount ?? 0
 

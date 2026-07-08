@@ -2,36 +2,32 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Clock, CheckCircle, Weight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import type { PrintProfile, Filament } from '@/lib/types'
-import EquipmentManager from '@/components/EquipmentManager'
+import type { Printer, PrintProfile, Filament } from '@/lib/types'
+import PrinterList from '@/components/PrinterList'
 import FilamentManager from '@/components/FilamentManager'
 
 const COMPLETED_STATUSES = ['done', 'collected', 'reviewed']
 
-export default async function EquipmentPage({
-  params,
-}: {
-  params: Promise<{ printerId: string }>
-}) {
-  const { printerId } = await params
+export default async function EquipmentPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: printerData } = await supabase
+  const { data: printerRows } = await supabase
     .from('printers')
-    .select('id, bed_type')
-    .eq('id', printerId)
+    .select('*')
     .eq('owner_id', user.id)
-    .maybeSingle()
+    .order('created_at', { ascending: true })
 
-  if (!printerData) redirect('/dashboard')
+  if (!printerRows || printerRows.length === 0) redirect('/dashboard')
+  const printers = printerRows as unknown as Printer[]
+  const printerIds = printers.map((p) => p.id)
 
   const [profileResult, filamentResult, usageResult] = await Promise.all([
     supabase
       .from('print_profiles')
       .select('*')
-      .eq('printer_id', printerData.id)
+      .in('printer_id', printerIds)
       .order('nozzle_mm', { ascending: true }),
     supabase
       .from('filaments')
@@ -42,13 +38,18 @@ export default async function EquipmentPage({
     supabase
       .from('requests')
       .select('print_hours, weight_g')
-      .eq('printer_id', printerData.id)
+      .eq('owner_id', user.id)
       .in('status', COMPLETED_STATUSES),
   ])
 
   const profiles  = (profileResult.data  ?? []) as unknown as PrintProfile[]
-  const filaments = (filamentResult.data  ?? []) as unknown as Filament[]
-  const bedTypes  = (printerData.bed_type ?? []) as string[]
+  const filaments = (filamentResult.data ?? []) as unknown as Filament[]
+
+  const profilesByPrinter: Record<string, PrintProfile[]> = {}
+  for (const p of profiles) {
+    if (!profilesByPrinter[p.printer_id]) profilesByPrinter[p.printer_id] = []
+    profilesByPrinter[p.printer_id].push(p)
+  }
 
   const usageRows = usageResult.data ?? []
   const totalHours   = usageRows.reduce((s, r) => s + (r.print_hours ?? 0), 0)
@@ -59,14 +60,14 @@ export default async function EquipmentPage({
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-8">
         <Link
-          href={`/dashboard/${printerData.id}`}
+          href="/dashboard"
           className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
         </Link>
         <h1 className="text-2xl font-bold text-slate-900">Equipment &amp; Filaments</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Manage the hardware on your printer and the filament rolls you have in stock.
+          Manage your printers and the filament rolls you have in stock.
         </p>
       </div>
 
@@ -93,18 +94,21 @@ export default async function EquipmentPage({
         </div>
       </div>
 
-      <EquipmentManager
-        profiles={profiles}
-        bedTypes={bedTypes}
-        printerId={printerData.id}
-      />
+      {/* ── My Printers ── */}
+      <div className="mb-10">
+        <h2 className="text-lg font-semibold text-slate-900">My Printers</h2>
+        <p className="mb-4 mt-1 text-sm text-slate-500">
+          The machines behind your shop. Add one when you get a new printer; expand a printer to manage its nozzles, bed, and capabilities.
+        </p>
+        <PrinterList printers={printers} profilesByPrinter={profilesByPrinter} />
+      </div>
 
-      <div className="mt-12">
+      <div>
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-slate-900">Filaments</h2>
           <p className="mt-1 text-sm text-slate-500">
             Record the filament rolls you have in stock — material, colour, brand, and cost per kg.
-            Used for automatic job pricing. Toggle &quot;in stock&quot; to hide without deleting.
+            Shared across all your printers. Used for automatic job pricing. Toggle &quot;in stock&quot; to hide without deleting.
           </p>
         </div>
         <FilamentManager filaments={filaments} ownerId={user.id} />

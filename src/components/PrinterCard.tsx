@@ -1,10 +1,10 @@
 import Link from 'next/link'
 import { MapPin, Star } from 'lucide-react'
-import type { Printer } from '@/lib/types'
+import type { Shop } from '@/lib/types'
 import { PRINT_TYPE_LABELS, SIZE_LABELS } from '@/lib/types'
 
 type Props = {
-  printer: Printer
+  printer: Shop
   distanceKm?: number
 }
 
@@ -18,7 +18,6 @@ export default function PrinterCard({ printer, distanceKm }: Props) {
             <h3 className="truncate font-semibold text-slate-900 transition-colors group-hover:text-orange-600">
               {printer.name}
             </h3>
-            <p className="text-xs text-slate-500">{printer.printer_model}</p>
           </div>
           <span
             className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${

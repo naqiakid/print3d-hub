@@ -1,11 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
-  ArrowLeft, Star, Clock, Zap, Box, MapPin, Truck, Check, X,
-  Layers, ChevronRight,
+  ArrowLeft, Star, Clock, MapPin, Truck, Check, X,
+  ChevronRight, Printer as PrinterIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import type { Printer, Filament, PrintProfile, CatalogItem, Review } from '@/lib/types'
+import type { Shop, Printer, Filament, PrintProfile, CatalogItem, Review } from '@/lib/types'
 import {
   PRINT_TYPE_LABELS,
   PRINT_TYPE_DESCRIPTIONS,
@@ -38,7 +38,7 @@ const BRAND_GRADIENT: Record<string, [string, string]> = {
 const DEFAULT_GRADIENT: [string, string] = ['#0f172a', '#1e293b']
 
 
-export default async function PrinterDetailPage({
+export default async function ShopDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
@@ -46,35 +46,45 @@ export default async function PrinterDetailPage({
   const { id } = await params
   const supabase = await createClient()
 
-  const { data } = await supabase.from('printers').select('*').eq('id', id).maybeSingle()
+  const { data } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle()
   if (!data) notFound()
-  const printer = data as unknown as Printer
+  const shop = data as unknown as Shop
+
+  const { data: printerData } = await supabase
+    .from('printers')
+    .select('*')
+    .eq('owner_id', shop.id)
+    .order('created_at', { ascending: true })
+  const printers = (printerData ?? []) as unknown as Printer[]
+  const printerIds = printers.map((p) => p.id)
 
   const [{ data: filamentData }, { data: profileData }, { data: catalogData }, { data: reviewData }] = await Promise.all([
     supabase
       .from('filaments')
       .select('*')
-      .eq('owner_id', printer.owner_id)
+      .eq('owner_id', shop.id)
       .eq('in_stock', true)
       .order('material')
       .order('color'),
-    supabase
-      .from('print_profiles')
-      .select('*')
-      .eq('printer_id', printer.id)
-      .eq('is_active', true)
-      .order('is_default', { ascending: false }),
+    printerIds.length
+      ? supabase
+          .from('print_profiles')
+          .select('*')
+          .in('printer_id', printerIds)
+          .eq('is_active', true)
+          .order('is_default', { ascending: false })
+      : Promise.resolve({ data: [] }),
     supabase
       .from('catalog_items')
       .select('*')
-      .eq('printer_id', printer.id)
+      .eq('owner_id', shop.id)
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false }),
     supabase
       .from('reviews')
       .select('*')
-      .eq('printer_id', printer.id)
+      .eq('owner_id', shop.id)
       .neq('comment', '')
       .order('created_at', { ascending: false })
       .limit(5),
@@ -85,9 +95,12 @@ export default async function PrinterDetailPage({
   const catalog   = (catalogData  ?? []) as unknown as CatalogItem[]
   const reviews   = (reviewData   ?? []) as unknown as Review[]
 
-  const preset = findPreset(printer.printer_model)
-  const brand = preset?.brand ?? printer.printer_model.split(' ')[0]
-  const [gradFrom, gradTo] = BRAND_GRADIENT[brand] ?? DEFAULT_GRADIENT
+  // Hero visual takes its brand/image from the first (oldest) machine —
+  // purely cosmetic; per-machine specs live in the Equipment section below.
+  const heroPrinter = printers[0]
+  const preset = heroPrinter ? findPreset(heroPrinter.printer_model) : undefined
+  const brand = preset?.brand ?? heroPrinter?.printer_model.split(' ')[0]
+  const [gradFrom, gradTo] = (brand && BRAND_GRADIENT[brand]) ?? DEFAULT_GRADIENT
 
   // Group filaments by material
   const filamentsByMaterial = filaments.reduce<Record<string, Filament[]>>((acc, f) => {
@@ -96,13 +109,14 @@ export default async function PrinterDetailPage({
     return acc
   }, {})
 
-  // Unique nozzle sizes across all profiles
+  // Unique nozzle sizes across every machine's profiles
   const nozzleSizes = [...new Set(profiles.map((p) => p.nozzle_mm))].sort()
 
   // Aggregate capabilities across all profiles
   const hasCap = (key: keyof PrintProfile) => profiles.some((p) => p[key] === true)
 
-  const buildVolume = preset?.build_volume
+  // Union of bed types across all machines
+  const bedTypes = [...new Set(printers.flatMap((p) => p.bed_type ?? []))]
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -113,17 +127,16 @@ export default async function PrinterDetailPage({
         <ArrowLeft className="h-4 w-4" /> Back to browse
       </Link>
 
-      {/* ── Machine hero ── */}
+      {/* ── Shop hero ── */}
       <div
         className="mb-6 overflow-hidden rounded-2xl shadow-lg"
         style={{ background: `linear-gradient(135deg, ${gradFrom}, ${gradTo})` }}
       >
         <div className="flex flex-col sm:flex-row gap-0">
-          {/* Printer device image */}
           <div className="flex items-center justify-center sm:w-64 py-8 sm:py-0 border-b sm:border-b-0 sm:border-r border-white/10 overflow-hidden">
             <PrinterDeviceImage
               imageUrl={preset?.image_url}
-              alt={printer.printer_model}
+              alt={heroPrinter?.printer_model ?? shop.name}
               className="h-44 w-full object-contain drop-shadow-xl"
               fallbackClassName="w-28 h-28 drop-shadow-lg"
             />
@@ -133,44 +146,28 @@ export default async function PrinterDetailPage({
           <div className="flex-1 p-7">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-white/50 mb-1">{brand}</p>
-                <h1 className="text-2xl font-bold text-white leading-tight">{printer.name}</h1>
-                <p className="text-sm text-white/60 mt-0.5">{printer.printer_model}</p>
+                {brand && <p className="text-xs font-semibold uppercase tracking-widest text-white/50 mb-1">{brand}</p>}
+                <h1 className="text-2xl font-bold text-white leading-tight">{shop.name}</h1>
+                <p className="text-sm text-white/60 mt-0.5">
+                  {printers.length} machine{printers.length !== 1 ? 's' : ''}
+                </p>
               </div>
               <span
                 className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold mt-1 ${
-                  printer.available ? 'bg-green-400/20 text-green-300 ring-1 ring-green-400/30' : 'bg-white/10 text-white/50'
+                  shop.available ? 'bg-green-400/20 text-green-300 ring-1 ring-green-400/30' : 'bg-white/10 text-white/50'
                 }`}
               >
-                {printer.available ? 'Available' : 'Busy'}
+                {shop.available ? 'Available' : 'Busy'}
               </span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {buildVolume && (
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Box className="h-3.5 w-3.5 text-white/40" />
-                    <p className="text-xs text-white/40 uppercase tracking-wide">Build Volume</p>
-                  </div>
-                  <p className="text-sm font-semibold text-white">{buildVolume}</p>
-                </div>
-              )}
-              {preset?.power_watts && (
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Zap className="h-3.5 w-3.5 text-white/40" />
-                    <p className="text-xs text-white/40 uppercase tracking-wide">Power Draw</p>
-                  </div>
-                  <p className="text-sm font-semibold text-white">{preset.power_watts}W</p>
-                </div>
-              )}
               <div>
                 <div className="flex items-center gap-1.5 mb-1">
                   <Clock className="h-3.5 w-3.5 text-white/40" />
                   <p className="text-xs text-white/40 uppercase tracking-wide">Turnaround</p>
                 </div>
-                <p className="text-sm font-semibold text-white">{printer.turnaround}</p>
+                <p className="text-sm font-semibold text-white">{shop.turnaround}</p>
               </div>
               <div>
                 <div className="flex items-center gap-1.5 mb-1">
@@ -178,34 +175,20 @@ export default async function PrinterDetailPage({
                   <p className="text-xs text-white/40 uppercase tracking-wide">Rating</p>
                 </div>
                 <p className="text-sm font-semibold text-white">
-                  {printer.rating} <span className="text-white/40 font-normal text-xs">({printer.review_count})</span>
+                  {shop.rating} <span className="text-white/40 font-normal text-xs">({shop.review_count})</span>
                 </p>
               </div>
-              {nozzleSizes.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Layers className="h-3.5 w-3.5 text-white/40" />
-                    <p className="text-xs text-white/40 uppercase tracking-wide">Nozzle Sizes</p>
-                  </div>
-                  <p className="text-sm font-semibold text-white">{nozzleSizes.map(n => `${n}mm`).join(', ')}</p>
-                </div>
-              )}
-              {preset?.note && (
-                <div className="col-span-2">
-                  <p className="text-xs text-white/50 italic mt-1">{preset.note}</p>
-                </div>
-              )}
             </div>
           </div>
         </div>
       </div>
 
       {/* Sample photos — visual proof up front, before specs */}
-      {printer.sample_photos.length > 0 && (
+      {shop.sample_photos.length > 0 && (
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Sample Prints</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {printer.sample_photos.map((url, i) => (
+            {shop.sample_photos.map((url, i) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img key={i} src={url} alt={`Sample ${i + 1}`} className="aspect-square w-full rounded-xl object-cover border border-slate-100" />
             ))}
@@ -220,7 +203,7 @@ export default async function PrinterDetailPage({
           <p className="mb-6 text-sm text-slate-500">
             Ready-to-order designs from this maker — customise and order directly.
           </p>
-          <CatalogGrid catalog={catalog} filaments={filaments} printerId={printer.id} />
+          <CatalogGrid catalog={catalog} filaments={filaments} printerId={shop.id} />
         </div>
       )}
 
@@ -232,14 +215,14 @@ export default async function PrinterDetailPage({
           {/* Description */}
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">About</h2>
-            <p className="leading-relaxed text-slate-700">{printer.description}</p>
+            <p className="leading-relaxed text-slate-700">{shop.description}</p>
           </section>
 
           {/* What I print */}
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">What I can print</h2>
             <div className="flex flex-wrap gap-3">
-              {printer.print_types.map((type) => (
+              {shop.print_types.map((type) => (
                 <div key={type} className="rounded-xl border border-orange-100 bg-orange-50 px-4 py-2.5">
                   <p className="text-sm font-semibold text-orange-800">{PRINT_TYPE_LABELS[type]}</p>
                   <p className="text-xs text-orange-600 mt-0.5">{PRINT_TYPE_DESCRIPTIONS[type]}</p>
@@ -252,7 +235,7 @@ export default async function PrinterDetailPage({
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">Materials & Colors</h2>
 
-            {printer.materials.map((mat) => {
+            {shop.materials.map((mat) => {
               const colors = filamentsByMaterial[mat] ?? []
               return (
                 <div key={mat} className="mb-5 last:mb-0">
@@ -289,6 +272,31 @@ export default async function PrinterDetailPage({
               )
             })}
           </section>
+
+          {/* Equipment — the machines behind this shop, shown for trust/capacity */}
+          {printers.length > 0 && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-400">Equipment</h2>
+              <div className="space-y-2">
+                {printers.map((p) => {
+                  const ps = findPreset(p.printer_model)
+                  return (
+                    <div key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/50 px-4 py-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white border border-slate-100">
+                        <PrinterIcon className="h-4 w-4 text-slate-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{p.printer_model}</p>
+                        {ps?.build_volume && (
+                          <p className="text-xs text-slate-400">{ps.build_volume} build volume</p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
 
           {/* Print profiles & capabilities */}
           {profiles.length > 0 && (
@@ -346,11 +354,11 @@ export default async function PrinterDetailPage({
           )}
 
           {/* Bed types */}
-          {printer.bed_type && printer.bed_type.length > 0 && (
+          {bedTypes.length > 0 && (
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Print Bed</h2>
               <div className="flex flex-wrap gap-2">
-                {printer.bed_type.map((b) => (
+                {bedTypes.map((b) => (
                   <span key={b} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
                     {bedLabel(b)}
                   </span>
@@ -366,19 +374,19 @@ export default async function PrinterDetailPage({
           {/* CTA card */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-1 text-2xl font-bold text-slate-900">
-              {printer.price_min === 0 && printer.price_max === 0
+              {shop.price_min === 0 && shop.price_max === 0
                 ? 'Quote on request'
-                : `RM${printer.price_min}–RM${printer.price_max}`}
+                : `RM${shop.price_min}–RM${shop.price_max}`}
             </div>
             <p className="mb-4 text-xs text-slate-500">
-              {printer.price_min === 0 && printer.price_max === 0
+              {shop.price_min === 0 && shop.price_max === 0
                 ? 'Upload your STL to get an instant estimate'
                 : 'Price range per job'}
             </p>
 
-            {printer.available ? (
+            {shop.available ? (
               <Link
-                href={`/request/${printer.id}`}
+                href={`/request/${shop.id}`}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
               >
                 Request a Print <ChevronRight className="h-4 w-4" />
@@ -398,16 +406,8 @@ export default async function PrinterDetailPage({
           {/* Quick specs */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3 text-sm">
             <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1">Quick specs</h3>
-            {buildVolume && (
-              <div className="flex items-center gap-2 text-slate-700">
-                <Box className="h-4 w-4 text-slate-400 shrink-0" />
-                <span className="text-xs text-slate-500">Build volume</span>
-                <span className="ml-auto text-xs font-semibold text-slate-800">{buildVolume}</span>
-              </div>
-            )}
             {nozzleSizes.length > 0 && (
               <div className="flex items-center gap-2 text-slate-700">
-                <Layers className="h-4 w-4 text-slate-400 shrink-0" />
                 <span className="text-xs text-slate-500">Nozzle</span>
                 <span className="ml-auto text-xs font-semibold text-slate-800">{nozzleSizes.map(n => `${n}mm`).join(', ')}</span>
               </div>
@@ -415,7 +415,7 @@ export default async function PrinterDetailPage({
             <div className="flex items-center gap-2 text-slate-700">
               <Clock className="h-4 w-4 text-slate-400 shrink-0" />
               <span className="text-xs text-slate-500">Turnaround</span>
-              <span className="ml-auto text-xs font-semibold text-slate-800">{printer.turnaround}</span>
+              <span className="ml-auto text-xs font-semibold text-slate-800">{shop.turnaround}</span>
             </div>
             {filaments.length > 0 && (
               <div className="flex items-center gap-2 text-slate-700">
@@ -427,20 +427,20 @@ export default async function PrinterDetailPage({
           </div>
 
           {/* Pickup & delivery */}
-          {(printer.pickup_address || printer.delivery_available) && (
+          {(shop.pickup_address || shop.delivery_available) && (
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Collection</h3>
-              {printer.pickup_address && (
+              {shop.pickup_address && (
                 <div className="flex items-start gap-2 text-sm">
                   <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                  <span className="text-slate-700 text-xs leading-relaxed">{printer.pickup_address}</span>
+                  <span className="text-slate-700 text-xs leading-relaxed">{shop.pickup_address}</span>
                 </div>
               )}
               <div className="flex items-center gap-2 text-sm">
                 <Truck className="h-4 w-4 text-slate-400 shrink-0" />
-                {printer.delivery_available
+                {shop.delivery_available
                   ? <span className="text-xs text-slate-700">
-                      Delivery available · RM{(printer.delivery_rate_per_km ?? 1).toFixed(2)}/km
+                      Delivery available · RM{(shop.delivery_rate_per_km ?? 1).toFixed(2)}/km
                     </span>
                   : <span className="text-xs text-slate-400">Pickup only</span>}
               </div>
@@ -451,24 +451,24 @@ export default async function PrinterDetailPage({
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Reviews</h3>
             <div className="flex items-center gap-3">
-              <span className="text-3xl font-bold text-slate-900">{printer.rating}</span>
+              <span className="text-3xl font-bold text-slate-900">{shop.rating}</span>
               <div>
                 <div className="flex gap-0.5">
                   {[1, 2, 3, 4, 5].map((i) => (
                     <Star
                       key={i}
                       className={`h-4 w-4 ${
-                        i <= Math.round(printer.rating)
+                        i <= Math.round(shop.rating)
                           ? 'fill-amber-400 text-amber-400'
                           : 'fill-slate-200 text-slate-200'
                       }`}
                     />
                   ))}
                 </div>
-                <p className="mt-0.5 text-xs text-slate-500">{printer.review_count} reviews</p>
+                <p className="mt-0.5 text-xs text-slate-500">{shop.review_count} reviews</p>
               </div>
             </div>
-            {printer.review_count === 0 && (
+            {shop.review_count === 0 && (
               <p className="mt-3 text-xs text-slate-400">Reviews appear after jobs are completed.</p>
             )}
             {reviews.length > 0 && (

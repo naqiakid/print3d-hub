@@ -1,34 +1,44 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import type { Printer, PrintProfile, Filament } from '@/lib/types'
+import type { Shop, Printer, PrintProfile, Filament, RequestPrinterView } from '@/lib/types'
 import { PRINTER_MODELS } from '@/lib/printer-models'
 import RequestForm from '@/components/RequestForm'
 
 export default async function RequestPage({
   params,
 }: {
-  params: Promise<{ printerId: string }>
+  params: Promise<{ ownerId: string }>
 }) {
-  const { printerId } = await params
+  const { ownerId } = await params
   const supabase = await createClient()
 
-  const { data: printerData } = await supabase
-    .from('printers')
+  const { data: shopData } = await supabase
+    .from('profiles')
     .select('*')
-    .eq('id', printerId)
+    .eq('id', ownerId)
     .maybeSingle()
 
-  if (!printerData) notFound()
-  const printer = printerData as unknown as Printer
-  const printerModelId = (printerData as Record<string, unknown>).printer_model_id as string | undefined
-  const buildVolume = printerModelId
-    ? (PRINTER_MODELS.find((m) => m.id === printerModelId)?.build_volume ?? null)
+  if (!shopData) notFound()
+  const shop = shopData as unknown as Shop
+
+  const { data: printerRows } = await supabase
+    .from('printers')
+    .select('*')
+    .eq('owner_id', ownerId)
+    .order('created_at', { ascending: true })
+  const printers = (printerRows ?? []) as unknown as Printer[]
+  if (printers.length === 0) notFound()
+  const primaryPrinter = printers[0]
+
+  const buildVolume = primaryPrinter.printer_model_id
+    ? (PRINTER_MODELS.find((m) => m.id === primaryPrinter.printer_model_id)?.build_volume ?? null)
     : null
 
+  const printerIds = printers.map((p) => p.id)
   const { data: profilesData } = await supabase
     .from('print_profiles')
     .select('*')
-    .eq('printer_id', printerId)
+    .in('printer_id', printerIds)
     .order('is_default', { ascending: false })
 
   const profiles = (profilesData ?? []) as unknown as PrintProfile[]
@@ -36,13 +46,25 @@ export default async function RequestPage({
   const { data: filamentsData } = await supabase
     .from('filaments')
     .select('*')
-    .eq('owner_id', printer.owner_id)
+    .eq('owner_id', shop.id)
     .eq('in_stock', true)
     .order('material')
 
   const filaments = (filamentsData ?? []) as unknown as Filament[]
 
-  if (!printer.available) {
+  // Combine the shop with the primary machine's cost-drivers for the live estimate.
+  const requestPrinter: RequestPrinterView = {
+    ...shop,
+    printer_model: primaryPrinter.printer_model,
+    printer_model_id: primaryPrinter.printer_model_id,
+    filament_costs: primaryPrinter.filament_costs,
+    power_watts: primaryPrinter.power_watts,
+    machine_rate_per_hour: primaryPrinter.machine_rate_per_hour,
+    bed_type: primaryPrinter.bed_type,
+    grams_per_roll: primaryPrinter.grams_per_roll,
+  }
+
+  if (!shop.available) {
     return (
       <div className="mx-auto max-w-xl px-4 py-20 text-center sm:px-6">
         <p className="text-4xl mb-4">😔</p>
@@ -59,12 +81,12 @@ export default async function RequestPage({
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
       <div className="mb-6">
         <p className="text-sm text-slate-500 mb-1">Sending request to</p>
-        <h1 className="text-2xl font-bold text-slate-900">{printer.name}</h1>
-        <p className="text-sm text-slate-500">{printer.printer_model} · {printer.turnaround}</p>
+        <h1 className="text-2xl font-bold text-slate-900">{shop.name}</h1>
+        <p className="text-sm text-slate-500">{primaryPrinter.printer_model} · {shop.turnaround}</p>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <RequestForm printer={printer} profiles={profiles} buildVolume={buildVolume} filaments={filaments} />
+        <RequestForm printer={requestPrinter} profiles={profiles} buildVolume={buildVolume} filaments={filaments} />
       </div>
 
       <p className="mt-4 text-center text-xs text-slate-400">

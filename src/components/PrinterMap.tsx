@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import type { Printer } from '@/lib/types'
+import type { Shop } from '@/lib/types'
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371
@@ -31,7 +31,7 @@ function ensureLeafletCSS() {
 }
 
 interface Props {
-  printers: Printer[]
+  printers: Shop[]
   userLat: number | null
   userLng: number | null
 }
@@ -120,7 +120,6 @@ export default function PrinterMap({ printers, userLat, userLng }: Props) {
                 <strong style="font-size:13px;line-height:1.3">${p.name}</strong>
                 <span style="font-size:10px;font-weight:700;color:${badgeColor};background:${badgeBg};padding:2px 7px;border-radius:20px;white-space:nowrap;margin-top:1px">${p.available ? 'Available' : 'Busy'}</span>
               </div>
-              <p style="margin:0 0 6px;font-size:11px;color:#94a3b8">${p.printer_model}</p>
               ${distHtml}
               <a href="/printers/${p.id}" style="display:block;text-align:center;background:#f97316;color:white;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;text-decoration:none">
                 View printer →
