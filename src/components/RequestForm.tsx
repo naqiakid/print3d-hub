@@ -3,15 +3,15 @@
 import { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react'
 import {
   CheckCircle, Upload, X, Loader2, FileBox, Plus, Ruler,
-  Link2, FileUp, ExternalLink, Download, HelpCircle,
+  Link2, FileUp, ExternalLink, Download, HelpCircle, Camera, ChevronDown,
 } from 'lucide-react'
 import type { RequestPrinterView, PrintProfile, PrintQuality, PrintSize, Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { submitRequest, sliceSTL } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
-import { SIZE_LABELS } from '@/lib/types'
 import {
   calculateEstimate,
+  formatRM,
   DEFAULT_FILAMENT_COST_PER_KG,
   DEFAULT_ELECTRICITY_RATE,
   DEFAULT_MARKUP_PERCENT,
@@ -37,7 +37,7 @@ const COLOR_PRESETS = [
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
 
-type ModelMode = 'link' | 'file' | null
+type ModelMode = 'link' | 'file' | 'describe' | null
 
 export type ThreeMfPart = {
   name: string
@@ -62,8 +62,8 @@ export type FileItem = {
   slicing?: boolean
 }
 
-const ACCEPTED_FORMATS = '.stl,.3mf,.obj'
-const ACCEPTED_EXTS    = ['.stl', '.3mf', '.obj']
+const ACCEPTED_FORMATS = '.stl,.3mf,.obj,.jpg,.jpeg,.png,.webp'
+const ACCEPTED_EXTS    = ['.stl', '.3mf', '.obj', '.jpg', '.jpeg', '.png', '.webp']
 
 const MODEL_SITES = [
   { name: 'MakerWorld', url: 'makerworld.com' },
@@ -229,6 +229,7 @@ async function computeModelDimensions(file: File): Promise<{ x: number; y: numbe
 // ─────────────────────────────────────────────────────────────────────────────
 type FileUploadSectionProps = {
   compact?: boolean
+  photoOnly?: boolean
   fileItems: FileItem[]
   stlItems: FileItem[]
   previewUrls: string[]
@@ -257,6 +258,7 @@ type ColorRow = {
 
 function FileUploadSection({
   compact,
+  photoOnly,
   fileItems,
   stlItems,
   previewUrls,
@@ -289,13 +291,17 @@ function FileUploadSection({
           <Upload className={`text-slate-400 ${compact ? 'h-4 w-4' : 'h-6 w-6'}`} />
         </div>
         <div>
-          <p className={`font-medium text-slate-700 ${compact ? 'text-xs' : 'text-sm'}`}>Drop your model files here</p>
-          <p className="text-xs text-slate-400 mt-0.5">or click to browse · STL, 3MF, OBJ accepted</p>
-          {!compact && <p className="text-xs text-slate-400">3MF files will be split into parts automatically.</p>}
+          <p className={`font-medium text-slate-700 ${compact ? 'text-xs' : 'text-sm'}`}>
+            {photoOnly ? 'Drop a photo here' : 'Drop your model files here'}
+          </p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {photoOnly ? 'or click to browse · JPG, PNG, WEBP accepted' : 'or click to browse · STL, 3MF, OBJ, or a photo'}
+          </p>
+          {!compact && !photoOnly && <p className="text-xs text-slate-400">3MF files will be split into parts automatically.</p>}
         </div>
         <input
           type="file"
-          accept={ACCEPTED_FORMATS}
+          accept={photoOnly ? '.jpg,.jpeg,.png,.webp' : ACCEPTED_FORMATS}
           multiple
           className="hidden"
           onChange={(e) => { if (e.target.files) onDrop(e.target.files) }}
@@ -328,7 +334,7 @@ function FileUploadSection({
       const totalRows  = fileItems.reduce((n, i) => n + (i.parts?.length ?? 1), 0)
       colorRows.push({
         item, partIdx: -1,
-        label: totalRows > 1 ? `Part ${fileIdx + 1}` : 'Color',
+        label: photoOnly ? 'Photo' : totalRows > 1 ? `Part ${fileIdx + 1}` : 'Color',
         color: item.color, colorHex: item.colorHex, filamentId: item.filamentId,
         isFirstForItem: true,
       })
@@ -406,7 +412,9 @@ function FileUploadSection({
                 {row.label}
               </span>
 
-              {filaments.length > 0 ? (
+              {photoOnly ? (
+                <span className="flex-1 text-xs text-slate-400 italic">Reference photo</span>
+              ) : filaments.length > 0 ? (
                 /* Filament swatches grouped by material type */
                 <>
                   <div className="flex flex-col gap-1.5 flex-1 min-w-0">
@@ -493,7 +501,7 @@ function FileUploadSection({
       <div className="flex flex-wrap items-center gap-3 mt-2">
         <button type="button" onClick={() => addMoreRef.current?.click()}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-500 hover:text-orange-600 transition">
-          <Plus className="h-3.5 w-3.5" /> Add more files
+          <Plus className="h-3.5 w-3.5" /> {photoOnly ? 'Add another photo' : 'Add more files'}
         </button>
         {fileItems.filter((i) => i.dimensions).map((item, idx) => {
           const d = item.dimensions!
@@ -521,7 +529,7 @@ function FileUploadSection({
           )
         })}
       </div>
-      <input ref={addMoreRef} type="file" accept={ACCEPTED_FORMATS} multiple className="hidden"
+      <input ref={addMoreRef} type="file" accept={photoOnly ? '.jpg,.jpeg,.png,.webp' : ACCEPTED_FORMATS} multiple className="hidden"
         onChange={(e) => { if (e.target.files) { onAddMore(e.target.files); e.target.value = '' } }} />
 
       {/* Hover tooltip — fixed so overflow:hidden on the part list doesn't clip it */}
@@ -582,6 +590,8 @@ export default function RequestForm({
   const [surfaceText, setSurfaceText]   = useState('')
   const [insertNotes, setInsertNotes]   = useState('')
   const [capTooltip, setCapTooltip]     = useState<{ key: string; x: number; y: number } | null>(null)
+  const [showQualityDetail, setShowQualityDetail]   = useState(false)
+  const [showPrintOptions, setShowPrintOptions]     = useState(false)
   const addInputRef    = useRef<HTMLInputElement>(null)
   const linkUploadRef  = useRef<HTMLInputElement>(null)
 
@@ -596,16 +606,17 @@ export default function RequestForm({
   const [fileItems, setFileItems]   = useState<FileItem[]>([])
   const allUploaded = fileItems.length > 0 && fileItems.every((i) => i.url !== null && !i.uploading)
 
-  const [quality, setQuality]         = useState<PrintQuality | ''>('')
+  // Default to Basic/a common material so a non-technical customer is never
+  // blocked on a decision they're not equipped to make — both stay changeable.
+  const [quality, setQuality]         = useState<PrintQuality | ''>('basic')
   const [quantity, setQuantity]       = useState(1)
-  const [material, setMaterial]       = useState<FilamentMaterial | ''>('')
+  const [material, setMaterial]       = useState<FilamentMaterial | ''>(printer.materials[0] ?? 'pla')
   const materialRef = useRef(material)
   useEffect(() => { materialRef.current = material }, [material])
   const [requestColor, setRequestColor]     = useState('Any')
   const [requestColorHex, setRequestColorHex] = useState('#888888')
   const [customInfill, setCustomInfill]         = useState(40)
   const [customWallCount, setCustomWallCount]   = useState(4)
-  const [linkSize, setLinkSize] = useState<'small' | 'medium' | 'large'>('medium')
   const [deadlineType, setDeadlineType] = useState<'asap' | 'anytime' | 'date'>('date')
   const [hoveredFileId, setHoveredFileId] = useState<string | null>(null)
   const [previewUrls, setPreviewUrls]     = useState<string[]>([])
@@ -843,10 +854,12 @@ export default function RequestForm({
       : (material && ['abs', 'nylon', 'pc'].includes(material)) ? 'strong'
       : 'everyday'
 
-    // For link mode: use the color picker. For file mode: use per-part colors if set.
+    // For link/describe mode: use the color picker. For file mode: use per-part colors if set.
     const effectiveColor    = modelMode === 'file' && hasColorPref ? primaryColor    : requestColor
     const effectiveColorHex = modelMode === 'file' && hasColorPref ? primaryHex      : requestColorHex
-    const effectiveSize     = modelMode === 'link' && !primaryDims ? linkSize : autoSize
+    // No file dimensions available → autoSize silently defaults to 'medium'; the
+    // customer is never asked to guess a size, the owner judges it from the reference.
+    const effectiveSize     = autoSize
 
     const result = await submitRequest({
       owner_id:       printer.id,
@@ -925,41 +938,48 @@ export default function RequestForm({
   }
 
   const modelReady =
+    modelMode === 'describe' ? true :
     modelMode === 'link' ? modelUrl.trim().length > 0 :
     modelMode === 'file' ? (fileItems.length > 0 && allUploaded) :
     false
   const formVisible = modelMode !== null
-  const canSubmit   = !!(formVisible && modelReady && quality && material && !pending)
+  const canSubmit   = !!(formVisible && modelReady && !pending)
 
-  // Derive size for live estimate (mirrors submitRequest logic)
+  // Derive size from real file dimensions when available (used only for the
+  // request record, never shown to the customer as a question).
   const primaryDims   = fileItems.find((i) => i.dimensions)?.dimensions ?? null
   const autoSizeEst: PrintSize = primaryDims
     ? (Math.max(primaryDims.x, primaryDims.y, primaryDims.z) <= 100 ? 'small'
      : Math.max(primaryDims.x, primaryDims.y, primaryDims.z) <= 250 ? 'medium'
      : 'large')
     : 'medium'
-  const estimateSize: PrintSize = modelMode === 'link' ? linkSize : autoSizeEst
 
-  function getQualityEstimate(q: PrintQuality) {
-    if (!material) return null
+  // A price estimate is only ever shown once a real uploaded STL has been
+  // sliced — never a guess based on an unverified size/material pick.
+  const slicedStlFiles = fileItems.filter((i) => /\.stl$/i.test(i.file.name))
+  const hasSlicedEstimate = slicedStlFiles.length > 0 && slicedStlFiles.every((i) => i.weight_g != null)
+  const anyFileSlicing = fileItems.some((i) => i.slicing)
+
+  const fileEstimate = hasSlicedEstimate ? (() => {
+    const mat = (material || printer.materials[0] || 'pla') as FilamentMaterial
     const filamentCosts = printer.filament_costs as Record<string, number> | null
-    const cost_per_kg = filamentCosts?.[material] ?? DEFAULT_FILAMENT_COST_PER_KG[material as FilamentMaterial]
-    const infill    = q === 'basic' ? (defaultProfile?.infill_basic ?? 15) : customInfill
-    const wallCount = q === 'basic' ? (defaultProfile?.wall_count_basic ?? 3) : customWallCount
+    const cost_per_kg = filamentCosts?.[mat] ?? DEFAULT_FILAMENT_COST_PER_KG[mat]
+    const totalWeightG = slicedStlFiles.reduce((s, i) => s + (i.weight_g ?? 0), 0)
+    const totalHours   = slicedStlFiles.reduce((s, i) => s + (i.print_hours ?? 0), 0)
     return calculateEstimate({
-      size: estimateSize,
-      quality: q,
-      material: material as FilamentMaterial,
+      size: autoSizeEst,
+      quality: (quality || 'basic') as PrintQuality,
+      material: mat,
       power_watts: printer.power_watts ?? 200,
       cost_per_kg,
       electricity_rate:      printer.electricity_rate      ?? DEFAULT_ELECTRICITY_RATE,
       markup_percent:        printer.markup_percent        ?? DEFAULT_MARKUP_PERCENT,
       machine_rate_per_hour: printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE,
       waste_percent:         printer.waste_percent         ?? DEFAULT_WASTE_PERCENT,
-      custom_infill: infill,
-      wall_count:    wallCount,
+      known_weight_g: totalWeightG,
+      known_hours:    totalHours,
     })
-  }
+  })() : null
 
   const hasAdvanced = printer.advanced_available
 
@@ -1082,8 +1102,14 @@ export default function RequestForm({
         })()}
 
         {modelMode === null && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {[
+              {
+                mode: 'describe' as const,
+                icon: Camera,
+                title: "I'm not sure / just describe it",
+                desc: "Saw it on social media or don't have a link? Just tell us what you want — a photo helps but isn't required.",
+              },
               {
                 mode: 'link' as const,
                 icon: Link2,
@@ -1106,6 +1132,32 @@ export default function RequestForm({
                 <p className="text-xs text-slate-400">{desc}</p>
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Describe mode — no link, no file required, an optional photo is welcome */}
+        {modelMode === 'describe' && (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+              No problem — just tell us what you want in the description below. If you have a photo (even a screenshot from social media), attach it here and it'll help the owner a lot.
+            </div>
+            <FileUploadSection
+              compact
+              photoOnly
+              fileItems={fileItems}
+              stlItems={stlItems}
+              previewUrls={previewUrls}
+              hoveredFileId={hoveredFileId}
+              onHoverChange={setHoveredFileId}
+              onRemove={removeFile}
+              onUpdateColor={updateFileColor}
+              onUpdatePartColor={updatePartColor}
+              filaments={filaments}
+              addMoreRef={addInputRef}
+              onDrop={addFiles}
+              onAddMore={addFiles}
+              buildVolume={buildVolume}
+            />
           </div>
         )}
 
@@ -1208,8 +1260,8 @@ export default function RequestForm({
         <>
           {/* Material */}
           <div>
-            <h3 className="mb-1 text-sm font-semibold text-slate-700">Material <span className="text-red-500">*</span></h3>
-            <p className="mb-3 text-xs text-slate-400">Which filament do you want your print in?</p>
+            <h3 className="mb-1 text-sm font-semibold text-slate-700">Material</h3>
+            <p className="mb-3 text-xs text-slate-400">Not sure? We'll use a common one for you — only change this if you have a preference.</p>
             <div className="space-y-2">
               {printer.materials.map((mat) => (
                 <button key={mat} type="button" onClick={() => handleSetMaterial(mat)}
@@ -1280,139 +1332,151 @@ export default function RequestForm({
             )}
           </div>
 
-          {/* Size — only for link mode without file dimensions */}
-          {modelMode === 'link' && !fileItems.some((i) => i.dimensions) && (
-            <div>
-              <h3 className="mb-1 text-sm font-semibold text-slate-700">Approximate size</h3>
-              <p className="mb-3 text-xs text-slate-400">Best guess — the owner will confirm from the reference.</p>
-              <div className="grid grid-cols-3 gap-2">
-                {(['small', 'medium', 'large'] as const).map((s) => (
-                  <button key={s} type="button" onClick={() => setLinkSize(s)}
-                    className={`rounded-xl border px-3 py-3 text-center transition ${linkSize === s ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'}`}>
-                    <p className="text-sm font-medium capitalize">{s}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{SIZE_LABELS[s].replace(/^\S+\s+/, '')}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* ── Price estimate — only ever shown from a real sliced file ── */}
+          <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+            {anyFileSlicing ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-orange-400" /> Estimating price from your file…
+              </span>
+            ) : fileEstimate ? (
+              <>
+                <span className="font-semibold text-slate-700">Estimated price: ~{formatRM(fileEstimate.suggested_price)}</span>
+                <span className="block mt-0.5">Based on your uploaded file — {printer.name} will confirm the exact price in your quote.</span>
+              </>
+            ) : (
+              <>
+                Want an instant price estimate? Upload your 3D file (STL) above.
+                <span className="block mt-0.5">
+                  Otherwise, <span className="font-medium text-slate-700">{printer.name}</span> will send you an exact quote after reviewing your request
+                  {(printer.price_min > 0 || printer.price_max > 0) && (
+                    <> — most jobs here run <span className="font-medium text-slate-700">{formatRM(printer.price_min)}–{formatRM(printer.price_max)}</span></>
+                  )}.
+                </span>
+              </>
+            )}
+          </div>
+
         </>
       )}
 
       {/* ── Sections B + C ───────────────────────────────────── */}
       {formVisible && (
         <>
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-slate-700">Quality tier <span className="text-red-500">*</span></h3>
-            <p className="mb-3 text-xs text-slate-400">Choose your print quality. Advanced uses higher infill and more wall layers for a stronger, better-looking result.</p>
-            <div className={`grid gap-2 ${hasAdvanced ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              {([
-                { q: 'basic' as PrintQuality, label: 'Basic', sub: `${defaultProfile?.infill_basic ?? 15}% infill · ${defaultProfile?.wall_count_basic ?? 3} walls` },
-                ...(hasAdvanced ? [{ q: 'advanced' as PrintQuality, label: 'Advanced', sub: 'You choose infill & wall count' }] : []),
-              ]).map(({ q, label, sub }) => {
-                const est = getQualityEstimate(q)
-                return (
-                  <button key={q} type="button" onClick={() => {
-                    setQuality(q)
-                    if (q !== 'advanced') {
-                      setSelectedCaps((prev) => { const n = new Set(prev); n.delete('ironing'); n.delete('fuzzy_skin'); return n })
-                      setDeclinedCaps((prev)  => { const n = new Set(prev); n.delete('ironing'); n.delete('fuzzy_skin'); return n })
-                    }
-                  }}
-                    className={`rounded-xl border px-4 py-3 text-left transition ${quality === q ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'}`}>
-                    <p className={`text-sm font-semibold ${quality === q ? 'text-orange-700' : 'text-slate-800'}`}>{label}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{sub}</p>
-                    {est ? (
-                      <p className={`text-sm font-semibold mt-1 ${quality === q ? 'text-orange-600' : 'text-slate-600'}`}>
-                        ~RM {Math.round(est.suggested_price)}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-slate-400 mt-1">Select material to see estimate</p>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
+          {hasAdvanced && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowQualityDetail((v) => !v)}
+                className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-orange-200 transition"
+              >
+                <span className="text-sm font-medium text-slate-700">Want higher quality or custom settings?</span>
+                <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showQualityDetail ? 'rotate-180' : ''}`} />
+              </button>
 
-            {/* Advanced — customer-set infill & wall count */}
-            {quality === 'advanced' && (
-              <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50/50 p-4 space-y-3">
-                <p className="text-xs font-semibold text-orange-800">Customise print settings</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium text-slate-600">Infill %</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range" min={10} max={100} step={5}
-                        value={customInfill}
-                        onChange={(e) => setCustomInfill(Number(e.target.value))}
-                        className="flex-1 accent-orange-500"
-                      />
-                      <span className="w-10 text-right text-sm font-semibold text-slate-700">{customInfill}%</span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-slate-400">Higher = stronger, slower, more material</p>
+              {showQualityDetail && (
+                <div className="mt-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { q: 'basic' as PrintQuality, label: 'Basic', sub: `${defaultProfile?.infill_basic ?? 15}% infill · ${defaultProfile?.wall_count_basic ?? 3} walls` },
+                      { q: 'advanced' as PrintQuality, label: 'Advanced', sub: 'You choose infill & wall count' },
+                    ]).map(({ q, label, sub }) => (
+                      <button key={q} type="button" onClick={() => {
+                        setQuality(q)
+                        if (q !== 'advanced') {
+                          setSelectedCaps((prev) => { const n = new Set(prev); n.delete('ironing'); n.delete('fuzzy_skin'); return n })
+                          setDeclinedCaps((prev)  => { const n = new Set(prev); n.delete('ironing'); n.delete('fuzzy_skin'); return n })
+                        }
+                      }}
+                        className={`rounded-xl border px-4 py-3 text-left transition ${quality === q ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'}`}>
+                        <p className={`text-sm font-semibold ${quality === q ? 'text-orange-700' : 'text-slate-800'}`}>{label}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{sub}</p>
+                      </button>
+                    ))}
                   </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium text-slate-600">Wall count</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range" min={2} max={8} step={1}
-                        value={customWallCount}
-                        onChange={(e) => setCustomWallCount(Number(e.target.value))}
-                        className="flex-1 accent-orange-500"
-                      />
-                      <span className="w-10 text-right text-sm font-semibold text-slate-700">{customWallCount}</span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-slate-400">More walls = stronger outer shell</p>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* Advanced add-ons — ironing & fuzzy skin */}
-            {quality === 'advanced' && (availableCaps.ironing || availableCaps.fuzzy_skin) && (
-              <div className="mt-3 space-y-2">
-                <p className="text-xs font-medium text-slate-600">Advanced add-ons</p>
-                {(['ironing', 'fuzzy_skin'] as const)
-                  .filter((key) => availableCaps[key])
-                  .map((key) => {
-                    const info = { ironing: { label: 'Ironing (smooth top)', desc: 'Slow second pass over top surfaces — ultra-smooth finish. +15% time.' }, fuzzy_skin: { label: 'Fuzzy skin texture', desc: 'Rough matte texture on outer walls. Great for grip or aesthetic effect.' } }[key]
-                    const state = capState(key)
-                    const conflicted = (key === 'ironing' && capState('fuzzy_skin') === 'yes') || (key === 'fuzzy_skin' && capState('ironing') === 'yes')
-                    return (
-                      <div key={key} className={`rounded-xl border px-3 py-2.5 transition ${conflicted ? 'opacity-40 border-slate-100' : state === 'yes' ? 'border-orange-300 bg-orange-50' : 'border-slate-200 bg-white'}`}>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className={`text-sm font-medium ${state === 'no' ? 'line-through text-slate-400' : 'text-slate-800'}`}>{info.label}</span>
-                          <div className="flex shrink-0 rounded-lg border border-slate-200 overflow-hidden text-xs">
-                            {(['owner', 'yes', 'no'] as const).map((s) => (
-                              <button key={s} type="button" disabled={conflicted} onClick={() => setCapState(key, s)}
-                                className={`px-2.5 py-1 transition font-medium ${state === s ? s === 'yes' ? 'bg-orange-500 text-white' : s === 'no' ? 'bg-slate-200 text-slate-600' : 'bg-slate-100 text-slate-600' : 'text-slate-400 hover:text-slate-600'} ${s !== 'no' ? 'border-r border-slate-200' : ''}`}>
-                                {s === 'owner' ? 'Owner decides' : s === 'yes' ? 'Yes' : 'No'}
-                              </button>
-                            ))}
+                  {/* Advanced — customer-set infill & wall count */}
+                  {quality === 'advanced' && (
+                    <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50/50 p-4 space-y-3">
+                      <p className="text-xs font-semibold text-orange-800">Customise print settings</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium text-slate-600">Infill %</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range" min={10} max={100} step={5}
+                              value={customInfill}
+                              onChange={(e) => setCustomInfill(Number(e.target.value))}
+                              className="flex-1 accent-orange-500"
+                            />
+                            <span className="w-10 text-right text-sm font-semibold text-slate-700">{customInfill}%</span>
                           </div>
+                          <p className="mt-0.5 text-[11px] text-slate-400">Higher = stronger, slower, more material</p>
                         </div>
-                        <p className="mt-1 text-[11px] text-slate-400">{info.desc}</p>
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium text-slate-600">Wall count</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range" min={2} max={8} step={1}
+                              value={customWallCount}
+                              onChange={(e) => setCustomWallCount(Number(e.target.value))}
+                              className="flex-1 accent-orange-500"
+                            />
+                            <span className="w-10 text-right text-sm font-semibold text-slate-700">{customWallCount}</span>
+                          </div>
+                          <p className="mt-0.5 text-[11px] text-slate-400">More walls = stronger outer shell</p>
+                        </div>
                       </div>
-                    )
-                  })}
-              </div>
-            )}
+                    </div>
+                  )}
 
-            {material && (
-              <p className="mt-2 text-[11px] text-slate-400">
-                Estimates based on typical {estimateSize} print in {material.toUpperCase()}. Your final quote may differ.
-              </p>
-            )}
-            {!material && (
-              <p className="mt-2 text-[11px] text-slate-400">Select a material above to see estimated prices.</p>
-            )}
-          </div>
+                  {/* Advanced add-ons — ironing & fuzzy skin */}
+                  {quality === 'advanced' && (availableCaps.ironing || availableCaps.fuzzy_skin) && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs font-medium text-slate-600">Advanced add-ons</p>
+                      {(['ironing', 'fuzzy_skin'] as const)
+                        .filter((key) => availableCaps[key])
+                        .map((key) => {
+                          const info = { ironing: { label: 'Ironing (smooth top)', desc: 'Slow second pass over top surfaces — ultra-smooth finish. +15% time.' }, fuzzy_skin: { label: 'Fuzzy skin texture', desc: 'Rough matte texture on outer walls. Great for grip or aesthetic effect.' } }[key]
+                          const state = capState(key)
+                          const conflicted = (key === 'ironing' && capState('fuzzy_skin') === 'yes') || (key === 'fuzzy_skin' && capState('ironing') === 'yes')
+                          return (
+                            <div key={key} className={`rounded-xl border px-3 py-2.5 transition ${conflicted ? 'opacity-40 border-slate-100' : state === 'yes' ? 'border-orange-300 bg-orange-50' : 'border-slate-200 bg-white'}`}>
+                              <div className="flex items-center justify-between gap-3">
+                                <span className={`text-sm font-medium ${state === 'no' ? 'line-through text-slate-400' : 'text-slate-800'}`}>{info.label}</span>
+                                <div className="flex shrink-0 rounded-lg border border-slate-200 overflow-hidden text-xs">
+                                  {(['owner', 'yes', 'no'] as const).map((s) => (
+                                    <button key={s} type="button" disabled={conflicted} onClick={() => setCapState(key, s)}
+                                      className={`px-2.5 py-1 transition font-medium ${state === s ? s === 'yes' ? 'bg-orange-500 text-white' : s === 'no' ? 'bg-slate-200 text-slate-600' : 'bg-slate-100 text-slate-600' : 'text-slate-400 hover:text-slate-600'} ${s !== 'no' ? 'border-r border-slate-200' : ''}`}>
+                                      {s === 'owner' ? 'Owner decides' : s === 'yes' ? 'Yes' : 'No'}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <p className="mt-1 text-[11px] text-slate-400">{info.desc}</p>
+                            </div>
+                          )
+                        })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Print options (capabilities) ── */}
           {hasAnyCap && (
             <div>
-              <h3 className="mb-1 text-sm font-semibold text-slate-700">Print options</h3>
+              <button
+                type="button"
+                onClick={() => setShowPrintOptions((v) => !v)}
+                className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-orange-200 transition"
+              >
+                <span className="text-sm font-medium text-slate-700">Advanced print options</span>
+                <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showPrintOptions ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showPrintOptions && (
+              <div className="mt-3">
               <p className="mb-3 text-xs text-slate-400">Not sure? Leave on <span className="font-medium text-slate-500">Owner decides</span> — the owner will apply what suits your model best.</p>
 
               {/* ── Owner-decide options (3-state) ── */}
@@ -1577,6 +1641,8 @@ export default function RequestForm({
                     borderTop: '5px solid #1e293b',
                   }} />
                 </div>
+              )}
+              </div>
               )}
             </div>
           )}
