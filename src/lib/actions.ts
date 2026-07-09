@@ -501,11 +501,33 @@ export async function submitRequest(data: {
   catalog_item_id?: string | null
   custom_infill?: number | null
   custom_wall_count?: number | null
+  quantity?: number
 }): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
 
   // Strip optional columns that may not exist yet if migrations haven't run
-  const { color_preferences, fulfillment, delivery_address, declined_addons, catalog_item_id, custom_infill, custom_wall_count, ...baseData } = data
+  const { color_preferences, fulfillment, delivery_address, declined_addons, catalog_item_id, custom_infill, custom_wall_count, quantity, ...baseData } = data
+
+  // Catalog orders are pre-priced — the price was already fixed when the owner
+  // listed the item, so the customer isn't waiting on a manual quote. Look the
+  // real price up server-side (never trust a client-supplied price) so the
+  // owner's dashboard can skip straight to Accept/Decline.
+  let catalogPricing: { quoted_price: number } | Record<string, never> = {}
+  if (catalog_item_id) {
+    const { data: item } = await supabase
+      .from('catalog_items')
+      .select('base_price, material_prices, allow_material_choice')
+      .eq('id', catalog_item_id)
+      .maybeSingle()
+    const unitPrice = item
+      ? (item.allow_material_choice ? item.material_prices?.[data.material] : null) ?? item.base_price ?? 0
+      : 0
+    if (unitPrice > 0) {
+      const qty = quantity && quantity > 0 ? quantity : 1
+      catalogPricing = { quoted_price: Math.round(unitPrice * qty * 100) / 100 }
+    }
+  }
+
   const insertPayload = {
     ...baseData,
     ...(color_preferences?.length ? { color_preferences } : {}),
@@ -515,6 +537,7 @@ export async function submitRequest(data: {
     ...(catalog_item_id ? { catalog_item_id } : {}),
     ...(custom_infill != null ? { custom_infill } : {}),
     ...(custom_wall_count != null ? { custom_wall_count } : {}),
+    ...catalogPricing,
   }
 
   const { data: inserted, error } = await supabase

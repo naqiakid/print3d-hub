@@ -147,6 +147,7 @@ export default function CatalogOrderForm({
       fulfillment,
       delivery_address: fulfillment === 'delivery' ? deliveryAddress.trim() || null : null,
       catalog_item_id: item.id,
+      quantity,
     })
 
     setPending(false)

@@ -342,6 +342,8 @@ export default function RequestCard({ request, printer }: { request: PrintReques
     })
   }
 
+  const isCatalogOrder = !!request.catalog_item_id
+
   const TERMINAL = new Set<RequestStatus>(['collected', 'declined', 'cancelled', 'reviewed'])
   const daysUntilDeadline = Math.ceil(
     (new Date(request.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
@@ -656,8 +658,14 @@ export default function RequestCard({ request, printer }: { request: PrintReques
           {request.quoted_price && (
             <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 text-sm">
               <p className="font-medium text-amber-900">
-                Quote sent: RM{request.quoted_price} · Ready by{' '}
-                {request.quoted_by_date && new Date(request.quoted_by_date).toLocaleDateString('en-MY', { weekday: 'short', day: 'numeric', month: 'short' })}
+                {isCatalogOrder ? (
+                  <>Catalog price: RM{request.quoted_price}</>
+                ) : (
+                  <>
+                    Quote sent: RM{request.quoted_price} · Ready by{' '}
+                    {request.quoted_by_date && new Date(request.quoted_by_date).toLocaleDateString('en-MY', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  </>
+                )}
               </p>
               {request.quote_message && <p className="mt-1 text-amber-700">{request.quote_message}</p>}
             </div>
@@ -1132,7 +1140,19 @@ export default function RequestCard({ request, printer }: { request: PrintReques
           {/* Action buttons */}
           {!showQuoteForm && (
             <div className="flex gap-2 pt-1">
-              {request.status === 'new' && (
+              {request.status === 'new' && isCatalogOrder && (
+                <>
+                  <button onClick={() => handleStatusUpdate('accepted')} disabled={isPending}
+                    className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-600 disabled:opacity-50">
+                    {isPending ? '...' : 'Accept'}
+                  </button>
+                  <button onClick={() => handleStatusUpdate('declined')} disabled={isPending}
+                    className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-200 disabled:opacity-50">
+                    {isPending ? '...' : 'Decline'}
+                  </button>
+                </>
+              )}
+              {request.status === 'new' && !isCatalogOrder && (
                 <>
                   <button onClick={openQuoteForm} disabled={isPending}
                     className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-600 disabled:opacity-50">
