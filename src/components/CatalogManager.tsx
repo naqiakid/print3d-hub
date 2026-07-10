@@ -159,6 +159,12 @@ export default function CatalogManager({
 
   function handleSave() {
     if (!form.name.trim()) { setError('Product name is required.'); return }
+    if (form.allow_material_choice) {
+      const anyPrice = Object.values(form.material_prices).some((p) => parseFloat(p) > 0)
+      if (!anyPrice) { setError('Set a price for at least one material.'); return }
+    } else if (!form.base_price || parseFloat(form.base_price) <= 0) {
+      setError('Set a price for this product.'); return
+    }
     setError('')
 
     // Derive base_price from min material price when allow_material_choice is ON
@@ -595,6 +601,13 @@ function CatalogForm({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  // Auto-open Advanced options when editing a product that already uses them,
+  // so the owner doesn't lose visibility of their existing configuration.
+  const [showAdvanced, setShowAdvanced] = useState(() => !!(
+    form.description || form.category || form.photo_url || form.model_url || form.stl_urls.length > 0 ||
+    form.allow_material_choice || form.allow_custom_text || form.allow_resize ||
+    (!form.allow_color_choice && (form.material || form.color))
+  ))
 
   // Unique materials the owner has in stock
   const uniqueMaterials = [...new Set(filaments.map((f) => f.material))] as FilamentMaterial[]
@@ -627,7 +640,7 @@ function CatalogForm({
 
   return (
     <>
-      {/* Name + description */}
+      {/* Name + price — the only two fields required to list a product */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-600">Product name <span className="text-red-500">*</span></label>
@@ -635,10 +648,40 @@ function CatalogForm({
             placeholder="e.g. Custom Name Keychain" className={inputClass} />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Description</label>
-          <input value={form.description} onChange={(e) => set('description', e.target.value)}
-            placeholder="What is this print?" className={inputClass} />
+          <label className="mb-1 block text-xs font-medium text-slate-600">
+            Price (RM) {!form.allow_material_choice && <span className="text-red-500">*</span>}
+          </label>
+          {form.allow_material_choice ? (
+            <div className="flex h-[38px] items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-400">
+              Set per material in Advanced options
+            </div>
+          ) : (
+            <input type="number" min="0" step="0.50" value={form.base_price}
+              onChange={(e) => set('base_price', e.target.value)}
+              placeholder="e.g. 15.00" className={inputClass} />
+          )}
         </div>
+      </div>
+      {!form.allow_material_choice && (
+        <GcodeCalculator printer={printer} defaultMaterial={defaultMaterial}
+          onUsePrice={(price) => set('base_price', price)} />
+      )}
+
+      {/* ── Advanced options ── */}
+      <button type="button" onClick={() => setShowAdvanced((v) => !v)}
+        className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600 hover:border-orange-200 transition">
+        <span>Advanced options</span>
+        <ChevronUp className={`h-4 w-4 transition-transform ${showAdvanced ? '' : 'rotate-180'}`} />
+      </button>
+
+      {showAdvanced && (
+      <>
+
+      {/* Description */}
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-600">Description</label>
+        <input value={form.description} onChange={(e) => set('description', e.target.value)}
+          placeholder="What is this print?" className={inputClass} />
       </div>
 
       {/* Category */}
@@ -821,19 +864,6 @@ function CatalogForm({
           </>
         )}
 
-        {/* Price (hidden when allow_material_choice ON — derived from per-material prices) */}
-        {!form.allow_material_choice && (
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Starting price (RM, optional)</label>
-            <input type="number" min="0" step="0.50" value={form.base_price}
-              onChange={(e) => set('base_price', e.target.value)}
-              placeholder="e.g. 15.00" className={inputClass} />
-            <div className="mt-1">
-              <GcodeCalculator printer={printer} defaultMaterial={defaultMaterial}
-                onUsePrice={(price) => set('base_price', price)} />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* ── Other customisations ── */}
@@ -882,6 +912,9 @@ function CatalogForm({
           </label>
         </div>
       </div>
+
+      </>
+      )}
 
       {error && <p className="text-xs text-red-500">{error}</p>}
 
