@@ -360,63 +360,68 @@ export default function RequestCard({ request, printer }: { request: PrintReques
       {/* Summary row */}
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center gap-4 px-5 py-4 text-left hover:bg-slate-50 transition"
+        className="flex w-full flex-col gap-3 p-4 text-left hover:bg-slate-50 transition"
       >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <span className="font-bold text-slate-900 truncate">{request.customer_name}</span>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${STATUS_COLORS[request.status]}`}>
+        {/* Header Row (Name + Status Badge + Arrow) */}
+        <div className="flex items-center justify-between w-full gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-bold text-slate-900 truncate text-sm">{request.customer_name}</span>
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wide uppercase ${STATUS_COLORS[request.status]}`}>
               {getStatusLabel(request.status, request.fulfillment)}
             </span>
           </div>
-          
-          {/* Tag / Chip row */}
-          <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-            {/* Request Type Tag */}
-            {(() => {
-              const isCatalog = !!request.catalog_item_id
-              const hasStl = !!(request.stl_url || request.stl_urls?.length > 0 || request.file_url)
-              return isCatalog ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
-                  🛍️ Shop Order
-                </span>
-              ) : hasStl ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 border border-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-600">
-                  ⚙️ Custom STL
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-600">
-                  🔗 Reference
-                </span>
-              )
-            })()}
-
-            {/* Fulfillment Mode Tag */}
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-              request.fulfillment === 'delivery'
-                ? 'bg-blue-50 border-blue-100 text-blue-600'
-                : 'bg-slate-50 border-slate-200 text-slate-600'
-            }`}>
-              {request.fulfillment === 'delivery' ? '🚚 Delivery' : '🏠 Pickup'}
-            </span>
-
-            {/* Material + Color Tag */}
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-              {request.color && request.color !== 'Any' && (
-                <span className="h-2 w-2 rounded-full border border-slate-300 shrink-0" style={{ background: request.color_hex || '#888' }} />
-              )}
-              {MATERIAL_LABELS[request.material] ?? request.material}
-              {request.color && request.color !== 'Any' ? ` · ${request.color}` : ''}
-            </span>
-          </div>
-
-          <p className="text-xs text-slate-500 font-medium truncate">
-            {request.model_title || request.description || 'No description provided'}
-          </p>
+          <span className="text-slate-350 text-xs shrink-0">{expanded ? '▲' : '▼'}</span>
         </div>
-        
-        <div className="shrink-0 text-right text-xs space-y-1">
-          <div className={`flex items-center gap-1 justify-end font-semibold ${isUrgent ? 'text-red-500' : 'text-slate-500'}`}>
+
+        {/* Subtitle / Description */}
+        <p className="text-xs text-slate-500 font-medium line-clamp-2 w-full">
+          {request.model_title || request.description || 'No description provided'}
+        </p>
+
+        {/* Tag / Chip row */}
+        <div className="flex flex-wrap items-center gap-1.5 w-full">
+          {/* Request Type Tag */}
+          {(() => {
+            const isCatalog = !!request.catalog_item_id
+            const hasStl = !!(request.stl_url || request.stl_urls?.length > 0 || request.file_url)
+            return isCatalog ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+                🛍️ Shop Order
+              </span>
+            ) : hasStl ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 border border-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-600">
+                ⚙️ Custom STL
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-600">
+                🔗 Reference
+              </span>
+            )
+          })()}
+
+          {/* Fulfillment Mode Tag */}
+          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+            request.fulfillment === 'delivery'
+              ? 'bg-blue-50 border-blue-100 text-blue-600'
+              : 'bg-slate-50 border-slate-200 text-slate-600'
+          }`}>
+            {request.fulfillment === 'delivery' ? '🚚 Delivery' : '🏠 Pickup'}
+          </span>
+
+          {/* Material + Color Tag */}
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+            {request.color && request.color !== 'Any' && (
+              <span className="h-2 w-2 rounded-full border border-slate-350 shrink-0" style={{ background: request.color_hex || '#888' }} />
+            )}
+            {MATERIAL_LABELS[request.material] ?? request.material}
+            {request.color && request.color !== 'Any' ? ` · ${request.color}` : ''}
+          </span>
+        </div>
+
+        {/* Footer Row (Expected Due Date + Price) */}
+        <div className="flex items-center justify-between w-full border-t border-slate-100 pt-2.5 mt-0.5">
+          {/* Due Date */}
+          <div className={`flex items-center gap-1.5 text-[11px] font-semibold ${isUrgent ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
             <Calendar className="h-3.5 w-3.5 shrink-0" />
             <span>
               {isUrgent && daysUntilDeadline <= 0
@@ -424,13 +429,14 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                 : `Due ${new Date(request.deadline).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}`}
             </span>
           </div>
+
+          {/* Price */}
           {request.quoted_price && (
-            <div className="text-sm font-bold text-slate-800">
+            <span className="text-xs font-extrabold text-slate-800 bg-slate-50 border border-slate-200 rounded-md px-2 py-0.5">
               RM {request.quoted_price.toFixed(2)}
-            </div>
+            </span>
           )}
         </div>
-        <span className="text-slate-300 text-xs">{expanded ? '▲' : '▼'}</span>
       </button>
 
       {expanded && (
