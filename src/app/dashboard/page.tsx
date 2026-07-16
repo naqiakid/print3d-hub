@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { Star, Package, CheckCircle, Clock, Wallet } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import type { Shop, PrintRequest, RequestStatus, RequestPrinterView } from '@/lib/types'
-import RequestCard from '@/components/RequestCard'
+import JobQueueBoard from '@/components/JobQueueBoard'
 import OnboardingChecklist from '@/components/OnboardingChecklist'
 
 export default async function DashboardPage() {
@@ -212,40 +212,7 @@ export default async function DashboardPage() {
       {/* ── Job Queue ── */}
       <div>
         <h2 className="mb-4 text-lg font-semibold text-slate-900">Job queue</h2>
-
-        {/* Tabs */}
-        <div className="mb-5 flex gap-1 overflow-x-auto">
-          {tabs.map((tab) => {
-            const count = requests.filter((r) => tab.statuses.includes(r.status)).length
-            return (
-              <button
-                key={tab.label}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 transition first:bg-slate-100"
-              >
-                {tab.label}
-                {count > 0 && (
-                  <span className="rounded-full bg-orange-100 px-1.5 py-0.5 text-xs font-semibold text-orange-600">
-                    {count}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Request list */}
-        <div className="space-y-3">
-          {requests.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center">
-              <p className="text-slate-400">No requests yet</p>
-              <p className="mt-1 text-xs text-slate-300">
-                Share your listing to start getting print requests
-              </p>
-            </div>
-          ) : (
-            requests.map((request) => <RequestCard key={request.id} request={request} printer={requestPrinter} />)
-          )}
-        </div>
+        <JobQueueBoard requests={requests} printer={requestPrinter} />
       </div>
     </div>
   )
