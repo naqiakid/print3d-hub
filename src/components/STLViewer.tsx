@@ -221,9 +221,13 @@ export default function STLViewer({
             child.traverse((c) => { if (c instanceof THREE.Mesh) c.material = mat })
           })
         } else {
-          // Single colour for the whole model
-          const mat = makeMat(colorsRef.current[i] || '#cccccc')
-          obj.traverse((child) => { if (child instanceof THREE.Mesh) child.material = mat })
+          // If this is a multi-part container (e.g. 3MF assembly) but has no custom part colors assigned directly,
+          // make it inherit the colors of the other files loaded in the viewer!
+          obj.children.forEach((child, j) => {
+            const inheritedColor = colorsRef.current[j] || colorsRef.current[i] || '#cccccc'
+            const mat = makeMat(inheritedColor)
+            child.traverse((c) => { if (c instanceof THREE.Mesh) c.material = mat })
+          })
         }
 
         const box    = new THREE.Box3().setFromObject(obj)
@@ -326,6 +330,19 @@ export default function STLViewer({
       if (parts && parts.length > 0 && obj instanceof THREE.Group) {
         obj.children.forEach((child, j) => {
           const color = parts[j] || objColor
+          child.traverse((c) => {
+            if (c instanceof THREE.Mesh) {
+              const mat = c.material as THREE.MeshPhongMaterial
+              mat.color.set(new THREE.Color(color))
+              mat.needsUpdate = true
+            }
+          })
+        })
+      } else if (obj instanceof THREE.Group) {
+        // If this is a group (e.g. 3MF assembly) but has no custom part colors assigned directly,
+        // make it inherit the colors of the other files loaded in the viewer!
+        obj.children.forEach((child, j) => {
+          const color = (colorsProp ?? [])[j] || objColor
           child.traverse((c) => {
             if (c instanceof THREE.Mesh) {
               const mat = c.material as THREE.MeshPhongMaterial
