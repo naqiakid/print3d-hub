@@ -440,7 +440,11 @@ export default function RequestCard({ request, printer }: { request: PrintReques
       </button>
 
       {expanded && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          draggable="false"
+          onDragStart={(e) => e.stopPropagation()}
+        >
           {/* Backdrop */}
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setExpanded(false)} />
           
@@ -465,6 +469,31 @@ export default function RequestCard({ request, printer }: { request: PrintReques
             
             {/* Modal Scrollable Body */}
             <div className="flex-1 overflow-y-auto space-y-5 pr-1 text-left">
+              {isCatalogOrder && (
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 flex gap-4 items-start">
+                  {request.model_image ? (
+                    <img
+                      src={request.model_image}
+                      alt={request.model_title || 'Product photo'}
+                      className="h-20 w-20 shrink-0 rounded-xl object-cover border border-emerald-100 bg-white"
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                  ) : (
+                    <div className="h-20 w-20 shrink-0 rounded-xl bg-emerald-100 flex items-center justify-center text-2xl">
+                      🛍️
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Catalog Product</p>
+                    <h4 className="text-base font-extrabold text-slate-900 mt-0.5">{request.model_title || 'Unknown Catalog Product'}</h4>
+                    {request.catalog_item_id && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Product ID: <code className="bg-slate-100 px-1 py-0.5 rounded text-[11px] font-mono">{request.catalog_item_id.slice(0, 8)}</code>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
           {/* 3D preview with customer's chosen colors */}
           {(() => {
             const stlUrls = (request.stl_urls?.length ?? 0) > 0
