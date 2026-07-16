@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import type { PrintRequest, Shop, FilamentMaterial, Review } from '@/lib/types'
-import { STATUS_LABELS, MATERIAL_LABELS, SIZE_LABELS, QUALITY_LABELS, getStatusLabel } from '@/lib/types'
+import { STATUS_LABELS, MATERIAL_LABELS, SIZE_LABELS, QUALITY_LABELS, getStatusLabel, getWhatsAppLink } from '@/lib/types'
 import { formatRM } from '@/lib/pricing'
 import QuoteActions from '@/components/QuoteActions'
 import STLViewer from '@/components/STLViewerWrapper'
@@ -11,6 +11,8 @@ import GcodeViewer from '@/components/GcodeViewerWrapper'
 import ReviseRequest from '@/components/ReviseRequest'
 import ReviewForm from '@/components/ReviewForm'
 import ReceiptActions from '@/components/ReceiptActions'
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://print3d-hub.vercel.app'
 
 const PICKUP_TIMELINE: { status: string; label: string }[] = [
   { status: 'new',       label: 'Request received' },
@@ -147,6 +149,32 @@ export default async function TrackPage({
           </p>
         )}
       </div>
+
+      {/* WhatsApp Notify Owner Banner */}
+      {request.status === 'new' && printer?.whatsapp && (
+        <div className="mb-6 rounded-2xl border border-green-200 bg-green-50/50 p-5 space-y-3 shadow-sm">
+          <div className="flex gap-2">
+            <span className="text-lg shrink-0">💬</span>
+            <div>
+              <h3 className="text-sm font-bold text-green-800">Expedite your quote</h3>
+              <p className="text-xs text-green-700 mt-0.5 leading-relaxed">
+                Send a WhatsApp message directly to the owner so they know a new order request is waiting for them!
+              </p>
+            </div>
+          </div>
+          <a
+            href={getWhatsAppLink(
+              printer.whatsapp,
+              `Hello ${printer.name}! I have just submitted/updated a print request (#${request.id.slice(0,8).toUpperCase()}) on Print3DHub.\n\nYou can review it and submit your price quote here:\n${APP_URL}/track/${request.id}`
+            )}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-700 transition text-center"
+          >
+            Notify Owner on WhatsApp
+          </a>
+        </div>
+      )}
 
       {/* Status timeline */}
       {!isNegative ? (

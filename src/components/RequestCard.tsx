@@ -10,6 +10,7 @@ import {
   MATERIAL_LABELS,
   SIZE_LABELS,
   getStatusLabel,
+  getWhatsAppLink,
 } from '@/lib/types'
 import { updateRequestStatus, sendQuote } from '@/lib/actions'
 import {
@@ -26,6 +27,8 @@ import { getPresetById } from '@/lib/printer-models'
 import { parseGcodeFile } from '@/lib/parse-gcode'
 
 const STLViewer = lazy(() => import('./STLViewer'))
+
+const APP_URL = typeof window !== 'undefined' ? window.location.origin : 'https://print3d-hub.vercel.app'
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
@@ -1255,39 +1258,104 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                 </>
               )}
               {request.status === 'quoted' && (
-                <p className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-2 text-sm text-amber-700">
-                  Awaiting customer acceptance
-                </p>
+                <div className="flex flex-col gap-2 w-full">
+                  <p className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-2 text-sm text-amber-700">
+                    Awaiting customer acceptance
+                  </p>
+                  <a
+                    href={getWhatsAppLink(
+                      request.customer_phone,
+                      `Hi ${request.customer_name}! I have submitted the quote for your 3D print request (#${request.id.slice(0,8).toUpperCase()}).\n\nTotal price: RM ${((request.quoted_price ?? 0) + (request.delivery_cost ?? 0)).toFixed(2)}\nExpected completion: ${request.quoted_by_date ? new Date(request.quoted_by_date).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}\n\nReview and accept the quote here:\n${APP_URL}/track/${request.id}`
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-green-200 bg-green-50 px-4 py-2 text-xs font-semibold text-green-700 hover:bg-green-100 transition text-center"
+                  >
+                    💬 Notify Customer on WhatsApp
+                  </a>
+                </div>
               )}
               {request.status === 'accepted' && (
-                <button onClick={() => handleStatusUpdate('printing')} disabled={isPending}
-                  className="rounded-xl bg-purple-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-purple-600 disabled:opacity-50">
-                  {isPending ? '...' : 'Mark as Printing'}
-                </button>
+                <div className="flex flex-col gap-2 w-full">
+                  <button onClick={() => handleStatusUpdate('printing')} disabled={isPending}
+                    className="rounded-xl bg-purple-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-purple-600 disabled:opacity-50">
+                    {isPending ? '...' : 'Mark as Printing'}
+                  </button>
+                  <a
+                    href={getWhatsAppLink(
+                      request.customer_phone,
+                      `Hi ${request.customer_name}! Just wanted to let you know that I've accepted your 3D print request (#${request.id.slice(0,8).toUpperCase()}) and it is now queued for printing. You can track progress here:\n${APP_URL}/track/${request.id}`
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-green-200 bg-green-50 px-4 py-2 text-xs font-semibold text-green-700 hover:bg-green-100 transition text-center"
+                  >
+                    💬 Notify Customer on WhatsApp
+                  </a>
+                </div>
               )}
               {request.status === 'printing' && (
-                <button onClick={() => handleStatusUpdate('done')} disabled={isPending}
-                  className="rounded-xl bg-teal-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-600 disabled:opacity-50">
-                  {isPending ? '...' : 'Mark as Done'}
-                </button>
+                <div className="flex flex-col gap-2 w-full">
+                  <button onClick={() => handleStatusUpdate('done')} disabled={isPending}
+                    className="rounded-xl bg-teal-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-600 disabled:opacity-50">
+                    {isPending ? '...' : 'Mark as Done'}
+                  </button>
+                  <a
+                    href={getWhatsAppLink(
+                      request.customer_phone,
+                      `Hi ${request.customer_name}! Your 3D print request (#${request.id.slice(0,8).toUpperCase()}) is currently printing on the machine! Follow progress live here:\n${APP_URL}/track/${request.id}`
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-green-200 bg-green-50 px-4 py-2 text-xs font-semibold text-green-700 hover:bg-green-100 transition text-center"
+                  >
+                    💬 Notify Customer on WhatsApp
+                  </a>
+                </div>
               )}
               {request.status === 'done' && (
-                request.fulfillment === 'delivery' ? (
-                  <button onClick={() => handleStatusUpdate('shipping')} disabled={isPending}
-                    className="rounded-xl bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50">
-                    {isPending ? '...' : 'Mark as Shipped'}
-                  </button>
-                ) : (
-                  <button onClick={() => handleStatusUpdate('collected')} disabled={isPending}
-                    className="rounded-xl bg-green-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-green-600 disabled:opacity-50">
-                    {isPending ? '...' : 'Mark as Collected'}
-                  </button>
-                )
+                <div className="flex flex-col gap-2 w-full">
+                  {request.fulfillment === 'delivery' ? (
+                    <button onClick={() => handleStatusUpdate('shipping')} disabled={isPending}
+                      className="rounded-xl bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50">
+                      {isPending ? '...' : 'Mark as Shipped'}
+                    </button>
+                  ) : (
+                    <button onClick={() => handleStatusUpdate('collected')} disabled={isPending}
+                      className="rounded-xl bg-green-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-green-600 disabled:opacity-50">
+                      {isPending ? '...' : 'Mark as Collected'}
+                    </button>
+                  )}
+                  <a
+                    href={getWhatsAppLink(
+                      request.customer_phone,
+                      `Hi ${request.customer_name}! Great news: your 3D print (#${request.id.slice(0,8).toUpperCase()}) is completed and ready! You can coordinate pickup/delivery and view completion photos here:\n${APP_URL}/track/${request.id}`
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-green-200 bg-green-50 px-4 py-2 text-xs font-semibold text-green-700 hover:bg-green-100 transition text-center"
+                  >
+                    💬 Send Completion Notification
+                  </a>
+                </div>
               )}
               {request.status === 'shipping' && (
-                <p className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-700 font-medium">
-                  Shipped · Awaiting customer confirmation
-                </p>
+                <div className="flex flex-col gap-2 w-full">
+                  <p className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-700 font-medium">
+                    Shipped · Awaiting customer confirmation
+                  </p>
+                  <a
+                    href={getWhatsAppLink(
+                      request.customer_phone,
+                      `Hi ${request.customer_name}! Your 3D print order (#${request.id.slice(0,8).toUpperCase()}) has been shipped and is on the way! You can track package delivery details here:\n${APP_URL}/track/${request.id}`
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-green-200 bg-green-50 px-4 py-2 text-xs font-semibold text-green-700 hover:bg-green-100 transition text-center"
+                  >
+                    💬 Send Shipping Tracker Link
+                  </a>
+                </div>
               )}
             </div>
           )}

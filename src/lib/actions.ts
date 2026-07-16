@@ -9,14 +9,25 @@ import { calculatePriceRange } from './pricing'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://print3d-hub.vercel.app'
 
 async function sendEmail(to: string, subject: string, html: string) {
+  // Console logger for local testing
+  const plainText = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  console.log('\n✉️  [NOTIFICATION EMAIL TRIGGERED]')
+  console.log(`   To:      ${to}`)
+  console.log(`   Subject: ${subject}`)
+  console.log(`   Body:    ${plainText.slice(0, 150)}...`)
+  console.log('──────────────────────────────────────────────────\n')
+
   const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) return
+  if (!apiKey) {
+    console.log('ℹ️  Resend API Key is missing. Email was logged to console only.')
+    return
+  }
   try {
     const { Resend } = await import('resend')
     const resend = new Resend(apiKey)
     await resend.emails.send({ from: 'Print3D Hub <onboarding@resend.dev>', to, subject, html })
-  } catch {
-    // Fire-and-forget
+  } catch (err: any) {
+    console.error('❌ Resend failed to send email:', err?.message || err)
   }
 }
 

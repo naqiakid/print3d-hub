@@ -285,3 +285,13 @@ export const STATUS_COLORS: Record<RequestStatus, string> = {
   cancelled: 'bg-slate-100 text-slate-500',
   reviewed: 'bg-slate-100 text-slate-500',
 }
+
+export function getWhatsAppLink(phone: string, message: string): string {
+  let cleanPhone = phone.replace(/\D/g, '')
+  if (cleanPhone.startsWith('0')) {
+    cleanPhone = '60' + cleanPhone.slice(1)
+  } else if (!cleanPhone.startsWith('60') && (cleanPhone.length === 9 || cleanPhone.length === 10)) {
+    cleanPhone = '60' + cleanPhone
+  }
+  return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
+}
