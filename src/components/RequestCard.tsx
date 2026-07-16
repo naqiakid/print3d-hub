@@ -417,9 +417,32 @@ export default function RequestCard({ request, printer }: { request: PrintReques
         <span className="text-slate-300 text-xs">{expanded ? '▲' : '▼'}</span>
       </button>
 
-      {/* Expanded detail */}
       {expanded && (
-        <div className="border-t border-slate-100 px-5 py-4 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setExpanded(false)} />
+          
+          {/* Modal Container */}
+          <div className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 flex flex-col space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Job Details</p>
+                <h3 className="text-base font-bold text-slate-900">
+                  {request.customer_name} · #{request.id.slice(0, 8).toUpperCase()}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            {/* Modal Scrollable Body */}
+            <div className="flex-1 overflow-y-auto space-y-5 pr-1 text-left">
           {/* 3D preview with customer's chosen colors */}
           {(() => {
             const stlUrls = (request.stl_urls?.length ?? 0) > 0
@@ -1217,6 +1240,8 @@ export default function RequestCard({ request, printer }: { request: PrintReques
             </div>
           )}
         </div>
+            </div>
+          </div>
       )}
     </div>
   )
