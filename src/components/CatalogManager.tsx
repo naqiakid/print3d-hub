@@ -980,11 +980,30 @@ function CatalogForm({
         </div>
         {linkError && <p className="mt-1 text-[11px] text-red-500">{linkError}</p>}
 
-        <div className="mt-3 rounded-xl bg-orange-50/50 border border-orange-100 p-3 space-y-1">
-          <p className="text-[11px] font-bold text-orange-700 flex items-center gap-1">💡 Tip for Multi-Part Assemblies</p>
-          <p className="text-[10px] text-slate-500 leading-relaxed">
-            Assemble and align your parts in your slicer (e.g., OrcaSlicer, Bambu Studio) or CAD tool first. In the <b>Objects</b> tab, right-click each part and select <b>Export as STL</b>. When you upload those separate STL files here, the 3D viewer will automatically assemble them correctly!
+        <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200/60 p-3.5 space-y-2">
+          <p className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+            🧩 Configuring Multi-Part 3D Previews
           </p>
+          <div className="space-y-2 text-[10px] text-slate-600 leading-relaxed">
+            <div className="flex gap-2">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700 font-bold text-[9px]">1</span>
+              <div>
+                <strong className="text-slate-800 font-semibold">Upload individual printable parts:</strong> Upload separate <code>.stl</code> files for each part (e.g., <code>partA.stl</code>, <code>partB.stl</code>). This is required for printing, custom color selection, and auto-pricing.
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700 font-bold text-[9px]">2</span>
+              <div>
+                <strong className="text-slate-800 font-semibold">Upload assembled preview model:</strong> Upload a single <code>.3mf</code> file showing how all parts fit together. Include <code>preview</code> or <code>assemble</code> in the file name (e.g., <code>pokeball_preview.3mf</code>) to mark it as a preview-only model (not for printing).
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700 font-bold text-[9px]">3</span>
+              <div>
+                <strong className="text-slate-800 font-semibold">Map meshes to parts:</strong> Scroll down to the <b>🧩 Assembled Preview Mesh Mapping</b> section below. Hover over each row to see the mesh highlight inside the 3D window, then link it to the corresponding printable STL file.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
