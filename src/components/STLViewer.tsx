@@ -33,6 +33,7 @@ export default function STLViewer({
   const cameraRef   = useRef<THREE.PerspectiveCamera | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
+  const [dims, setDims]       = useState<{ x: number; y: number; z: number } | null>(null)
 
   // Refs so the scene-setup effect can read current colours without them being deps
   const colorsRef     = useRef<string[]>([])
@@ -44,6 +45,7 @@ export default function STLViewer({
   useEffect(() => {
     const mount = mountRef.current
     objectsRef.current = []
+    setDims(null)
 
     let blobUrl: string | null = null
     const urls      = file ? ((blobUrl = URL.createObjectURL(file)), [blobUrl]) : (urlsProp ?? [])
@@ -133,6 +135,20 @@ export default function STLViewer({
       const dist    = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.5
 
       group.position.sub(centre2)
+
+      // Add a grid helper representing the print bed
+      const gridW = maxDim * 2.5
+      const gridHelper = new THREE.GridHelper(gridW, 20, 0xf97316, 0xcbd5e1)
+      gridHelper.position.y = -size.y / 2 - 0.05
+      scene.add(gridHelper)
+
+      // Save dimensions (in mm)
+      setDims({
+        x: Math.round(size.x * 10) / 10,
+        y: Math.round(size.y * 10) / 10,
+        z: Math.round(size.z * 10) / 10,
+      })
+
       camera.position.set(0, dist * 0.4, dist)
       camera.near = dist / 100
       camera.far  = dist * 100
@@ -338,6 +354,14 @@ export default function STLViewer({
   return (
     <div className={`relative overflow-hidden rounded-xl bg-slate-50 ${className ?? ''}`}>
       <div ref={mountRef} className="w-full h-full" />
+      {dims && (
+        <div className="absolute left-3 top-3 rounded-xl bg-slate-900/80 px-2.5 py-1.5 text-[11px] font-medium text-white backdrop-blur-sm shadow-md select-none border border-white/10 pointer-events-none">
+          <p className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">Scale / Dimensions</p>
+          <p className="font-mono">
+            {dims.x} × {dims.y} × {dims.z} mm
+          </p>
+        </div>
+      )}
       {loading && !error && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-2">
