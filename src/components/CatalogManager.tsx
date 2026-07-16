@@ -45,6 +45,19 @@ function fmtHours(h: number | null | undefined): string {
 
 // ── Form state ────────────────────────────────────────────────────────────────
 
+const COLOR_PRESETS = [
+  { name: 'Black',   hex: '#1a1a1a' },
+  { name: 'White',   hex: '#f5f5f5' },
+  { name: 'Grey',    hex: '#6b7280' },
+  { name: 'Natural', hex: '#d4b896' },
+  { name: 'Red',     hex: '#dc2626' },
+  { name: 'Blue',    hex: '#2563eb' },
+  { name: 'Green',   hex: '#16a34a' },
+  { name: 'Yellow',  hex: '#ca8a04' },
+  { name: 'Orange',  hex: '#ea580c' },
+  { name: 'Purple',  hex: '#7c3aed' },
+]
+
 const CATEGORY_PRESETS = ['Home Decor', 'Keychains', 'Figurines', 'Organizers', 'Gifts & Toys', 'Tools & Parts']
 
 type FormState = {
@@ -670,6 +683,22 @@ function CatalogForm({
   // Default material for G-code calculator
   const defaultMaterial = (form.material || uniqueMaterials[0] || 'pla') as FilamentMaterial
 
+  const defaultColorsList: { color: string; color_hex: string }[] = (() => {
+    if (filaments.length > 0) {
+      const seen = new Set<string>()
+      const list: { color: string; color_hex: string }[] = []
+      filaments.forEach((f) => {
+        const key = `${f.color.trim().toLowerCase()}-${f.color_hex.trim().toLowerCase()}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          list.push({ color: f.color, color_hex: f.color_hex })
+        }
+      })
+      return list
+    }
+    return COLOR_PRESETS.map((c) => ({ color: c.name, color_hex: c.hex }))
+  })()
+
   async function handleStlFiles(files: FileList | null) {
     if (!files || files.length === 0) return
     const allowed = Array.from(files).filter((f) => ['.stl', '.3mf'].some((ext) => f.name.toLowerCase().endsWith(ext)))
@@ -1008,7 +1037,7 @@ function CatalogForm({
                 )}
 
                 {/* Multi-part color selection (regardless of allow_color_choice, to set defaults) */}
-                {form.stl_urls.length > 1 && form.material && (
+                {form.stl_urls.length > 1 && (
                   <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-3">
                     <div>
                       <p className="text-xs font-semibold text-slate-700">Default Part Colors</p>
@@ -1019,7 +1048,7 @@ function CatalogForm({
                         const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
                         const currentPartColor = (() => {
                           const parts = form.color.split('|')
-                          return parts[i] || ''
+                          return parts[i] || 'Any'
                         })()
                         const currentPartColorHex = (() => {
                           const parts = form.color_hex.split('|')
@@ -1028,38 +1057,37 @@ function CatalogForm({
                         return (
                           <div key={url} className="space-y-1 border-b border-slate-100/50 pb-2 last:border-0 last:pb-0">
                             <p className="text-[11px] font-semibold text-slate-600 truncate">{filename}</p>
-                            {colorsForMaterial.length === 0 ? (
-                              <p className="text-[10px] text-slate-400">No filaments in stock.</p>
-                            ) : (
-                              <div className="flex flex-wrap gap-1">
-                                {colorsForMaterial.map((f) => {
-                                  const selected = currentPartColor === f.color && currentPartColorHex === f.color_hex
-                                  return (
-                                    <button key={f.id} type="button"
-                                      onClick={() => {
-                                        const colors = form.color.split('|')
-                                        const hexes = form.color_hex.split('|')
-                                        while (colors.length < form.stl_urls.length) {
-                                          colors.push('')
-                                          hexes.push('#888888')
-                                        }
-                                        colors[i] = f.color
-                                        hexes[i] = f.color_hex
-                                        set('color', colors.slice(0, form.stl_urls.length).join('|'))
-                                        set('color_hex', hexes.slice(0, form.stl_urls.length).join('|'))
-                                      }}
-                                      className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition ${
-                                        selected
-                                          ? 'border-orange-500 bg-orange-50 text-orange-700 font-semibold shadow-sm'
-                                          : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200'
-                                      }`}>
+                            <div className="flex flex-wrap gap-1">
+                              {/* Add 'Any' option first */}
+                              {[{ color: 'Any', color_hex: '#888888' }, ...defaultColorsList].map((f, idx) => {
+                                const selected = currentPartColor === f.color && currentPartColorHex === f.color_hex
+                                return (
+                                  <button key={`${f.color}-${idx}`} type="button"
+                                    onClick={() => {
+                                      const colors = form.color.split('|')
+                                      const hexes = form.color_hex.split('|')
+                                      while (colors.length < form.stl_urls.length) {
+                                        colors.push('Any')
+                                        hexes.push('#888888')
+                                      }
+                                      colors[i] = f.color
+                                      hexes[i] = f.color_hex
+                                      set('color', colors.slice(0, form.stl_urls.length).join('|'))
+                                      set('color_hex', hexes.slice(0, form.stl_urls.length).join('|'))
+                                    }}
+                                    className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition ${
+                                      selected
+                                        ? 'border-orange-500 bg-orange-50 text-orange-700 font-semibold shadow-sm'
+                                        : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200'
+                                    }`}>
+                                    {f.color !== 'Any' && (
                                       <span className="h-1.5 w-1.5 rounded-full border border-slate-350 shrink-0" style={{ background: f.color_hex }} />
-                                      {f.color}
-                                    </button>
-                                  )
-                                })}
-                              </div>
-                            )}
+                                    )}
+                                    {f.color}
+                                  </button>
+                                )
+                              })}
+                            </div>
                           </div>
                         )
                       })}

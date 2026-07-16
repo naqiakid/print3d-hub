@@ -38,7 +38,10 @@ export default function STLViewer({
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
   const [dims, setDims]       = useState<{ x: number; y: number; z: number } | null>(null)
-  const [isAssembled, setIsAssembled] = useState(true)
+  const [isAssembled, setIsAssembled] = useState(() => {
+    if (assemblyOffsets && assemblyOffsets.length > 0) return true
+    return false
+  })
 
   // Refs so the scene-setup effect can read current colours without them being deps
   const colorsRef     = useRef<string[]>([])
