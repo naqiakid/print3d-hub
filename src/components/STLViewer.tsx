@@ -34,6 +34,7 @@ export default function STLViewer({
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
   const [dims, setDims]       = useState<{ x: number; y: number; z: number } | null>(null)
+  const [isAssembled, setIsAssembled] = useState(true)
 
   // Refs so the scene-setup effect can read current colours without them being deps
   const colorsRef     = useRef<string[]>([])
@@ -115,7 +116,7 @@ export default function STLViewer({
     function onAllLoaded() {
       if (loaded !== urls.length || hasError) return
 
-      if (urls.length > 1) {
+      if (urls.length > 1 && !isAssembled) {
         const extents = objectsRef.current.map((obj) =>
           new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3()).x
         )
@@ -182,7 +183,9 @@ export default function STLViewer({
         geometry.computeBoundingBox()
         const centre = new THREE.Vector3()
         geometry.boundingBox!.getCenter(centre)
-        geometry.translate(-centre.x, -centre.y, -centre.z)
+        if (!isAssembled) {
+          geometry.translate(-centre.x, -centre.y, -centre.z)
+        }
 
         group.add(mesh)
         objectsRef.current[i] = mesh
@@ -207,7 +210,9 @@ export default function STLViewer({
 
         const box    = new THREE.Box3().setFromObject(obj)
         const centre = box.getCenter(new THREE.Vector3())
-        obj.position.sub(centre)
+        if (!isAssembled) {
+          obj.position.sub(centre)
+        }
 
         obj.userData.index = i
         group.add(obj)
@@ -274,8 +279,7 @@ export default function STLViewer({
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [file, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(',')])
+  }, [file, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(','), isAssembled])
 
   // ── Live colour updates (no scene rebuild) ───────────────────────
   useEffect(() => {
@@ -361,6 +365,15 @@ export default function STLViewer({
             {dims.x} × {dims.y} × {dims.z} mm
           </p>
         </div>
+      )}
+      {!loading && !error && urlsProp && urlsProp.length > 1 && (
+        <button
+          type="button"
+          onClick={() => setIsAssembled((v) => !v)}
+          className="absolute right-3 top-3 rounded-xl bg-slate-900/80 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-slate-800 transition backdrop-blur-sm shadow-md select-none border border-white/10 active:scale-95"
+        >
+          {isAssembled ? '📦 View Exploded' : '🧩 View Assembled'}
+        </button>
       )}
       {loading && !error && (
         <div className="absolute inset-0 flex items-center justify-center">

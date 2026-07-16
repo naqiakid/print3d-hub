@@ -7,6 +7,8 @@ import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { submitRequest } from '@/lib/actions'
 import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
 import AddressInput from './AddressInput'
+import ProductMediaGallery from '@/components/ProductMediaGallery'
+import { ExternalLink } from 'lucide-react'
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
@@ -30,11 +32,13 @@ export default function CatalogOrderForm({
   printer,
   profiles,
   filaments,
+  shopName,
 }: {
   item: CatalogItem
   printer: RequestPrinterView
   profiles: PrintProfile[]
   filaments: Filament[]
+  shopName: string
 }) {
   const router = useRouter()
 
@@ -182,8 +186,68 @@ export default function CatalogOrderForm({
     router.push(`/track/${result.id}`)
   }
 
+  const customisationBadges: string[] = []
+  if (item.allow_custom_text)    customisationBadges.push(item.text_prompt)
+  if (item.allow_color_choice)   customisationBadges.push('Color choice')
+  if (item.allow_resize)         customisationBadges.push(`${item.resize_min_pct}–${item.resize_max_pct}% resize`)
+  if (item.allow_material_choice) customisationBadges.push('Material choice')
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <div className="space-y-6">
+      {/* Product header */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        {/* Photo gallery / video / 3D viewer with LIVE custom color updates */}
+        <ProductMediaGallery
+          photoUrls={item.photo_urls?.length ? item.photo_urls : (item.photo_url ? [item.photo_url] : [])}
+          videoUrl={item.video_url ?? null}
+          stlUrls={item.stl_urls ?? []}
+          name={item.name}
+          colors={item.stl_urls.length > 1 ? partColorHexes : [colorHex]}
+        />
+        <div className="p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">{item.name}</h1>
+              <p className="text-sm text-slate-500 mt-0.5">{shopName}</p>
+            </div>
+            {item.base_price && (
+              <div className="text-right shrink-0">
+                <p className="text-xs text-slate-400">From</p>
+                <p className="text-xl font-bold text-orange-600">RM {item.base_price.toFixed(2)}</p>
+              </div>
+            )}
+          </div>
+
+          {item.description && (
+            <p className="mt-3 text-sm text-slate-600 leading-relaxed">{item.description}</p>
+          )}
+
+          {customisationBadges.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {customisationBadges.map((badge) => (
+                <span key={badge} className="rounded-full bg-orange-50 border border-orange-200 px-2.5 py-0.5 text-xs font-medium text-orange-600">
+                  {badge}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {item.model_url && (
+            <a
+              href={item.model_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-orange-500 transition"
+            >
+              <ExternalLink className="h-3 w-3" /> View original design
+            </a>
+          )}
+        </div>
+      </div>
+
+      <h2 className="text-lg font-bold text-slate-900 border-t border-slate-100 pt-6 mt-2">Customise your order</h2>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
 
       {/* ── Customisations ────────────────────────────────────── */}
 
@@ -425,5 +489,6 @@ export default function CatalogOrderForm({
         You&apos;ll receive a quote from the owner before anything is printed.
       </p>
     </form>
+    </div>
   )
 }

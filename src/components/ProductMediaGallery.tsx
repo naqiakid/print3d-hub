@@ -31,11 +31,15 @@ export default function ProductMediaGallery({
   videoUrl,
   stlUrls,
   name,
+  colors,
+  partColors,
 }: {
   photoUrls: string[]
   videoUrl: string | null
   stlUrls: string[]
   name: string
+  colors?: string[]
+  partColors?: string[][]
 }) {
   const hasPhotos = photoUrls.length > 0
   const hasVideo  = !!videoUrl
@@ -154,8 +158,8 @@ export default function ProductMediaGallery({
 
       {/* 3D viewer panel */}
       {tab === '3d' && has3D && (
-        <div className="bg-slate-50 p-3">
-          <STLViewer urls={stlUrls} />
+        <div className="bg-slate-50 p-3" style={{ height: 340 }}>
+          <STLViewer urls={stlUrls} colors={colors} partColors={partColors} className="h-full" />
         </div>
       )}
 
