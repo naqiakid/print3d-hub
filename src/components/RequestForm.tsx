@@ -942,7 +942,10 @@ export default function RequestForm({
     modelMode === 'file' ? (fileItems.length > 0 && allUploaded) :
     false
   const formVisible = modelMode !== null
-  const canSubmit   = !!(formVisible && modelReady && !pending)
+  const deliveryReady =
+    fulfillment !== 'delivery' ||
+    (deliveryAddress.trim().length > 0 && !deliveryGeoLoading && !deliveryGeoError && !!deliveryEstimate)
+  const canSubmit   = !!(formVisible && modelReady && deliveryReady && !pending)
 
   // Derive size from real file dimensions when available (used only for the
   // request record, never shown to the customer as a question).

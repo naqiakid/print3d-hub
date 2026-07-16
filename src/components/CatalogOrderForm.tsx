@@ -86,7 +86,8 @@ export default function CatalogOrderForm({
     name.trim() &&
     email.trim() &&
     isValidMyPhoneDigits(phone.replace(/^\+?60/, '')) &&
-    (!item.allow_custom_text || customText.trim())
+    (!item.allow_custom_text || customText.trim()) &&
+    (fulfillment !== 'delivery' || deliveryAddress.trim().length > 0)
   )
 
   async function handleSubmit(e: React.FormEvent) {
