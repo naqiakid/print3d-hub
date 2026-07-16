@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import type { PrintRequest, Shop, FilamentMaterial, Review } from '@/lib/types'
-import { STATUS_LABELS, MATERIAL_LABELS, SIZE_LABELS, QUALITY_LABELS, getStatusLabel, getWhatsAppLink } from '@/lib/types'
+import { STATUS_LABELS, MATERIAL_LABELS, SIZE_LABELS, QUALITY_LABELS, getStatusLabel, getWhatsAppLink, cleanDescription } from '@/lib/types'
 import { formatRM } from '@/lib/pricing'
 import QuoteActions from '@/components/QuoteActions'
 import STLViewer from '@/components/STLViewerWrapper'
@@ -433,7 +433,7 @@ export default async function TrackPage({
       {/* Order summary */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
         <h2 className="text-sm font-semibold text-slate-700">Order summary</h2>
-        <p className="text-sm text-slate-600">{request.description}</p>
+        <p className="text-sm text-slate-600">{cleanDescription(request.description)}</p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
           <div>
             <span className="text-slate-400">Material</span>

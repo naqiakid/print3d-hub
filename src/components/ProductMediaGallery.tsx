@@ -26,6 +26,8 @@ function getYouTubeEmbed(url: string): string | null {
   return null
 }
 
+import { PartAssembly } from '@/lib/types'
+
 export default function ProductMediaGallery({
   photoUrls,
   videoUrl,
@@ -33,6 +35,7 @@ export default function ProductMediaGallery({
   name,
   colors,
   partColors,
+  assemblyOffsets,
 }: {
   photoUrls: string[]
   videoUrl: string | null
@@ -40,6 +43,7 @@ export default function ProductMediaGallery({
   name: string
   colors?: string[]
   partColors?: string[][]
+  assemblyOffsets?: PartAssembly[]
 }) {
   const hasPhotos = photoUrls.length > 0
   const hasVideo  = !!videoUrl
@@ -159,7 +163,7 @@ export default function ProductMediaGallery({
       {/* 3D viewer panel */}
       {tab === '3d' && has3D && (
         <div className="bg-slate-50 p-3" style={{ height: 340 }}>
-          <STLViewer urls={stlUrls} colors={colors} partColors={partColors} className="h-full" />
+          <STLViewer urls={stlUrls} colors={colors} partColors={partColors} assemblyOffsets={assemblyOffsets} className="h-full" />
         </div>
       )}
 

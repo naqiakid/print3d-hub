@@ -7,11 +7,14 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
+import { PartAssembly } from '@/lib/types'
+
 type Props = {
   urls?: string[]
   fileNames?: string[]      // original file names — used to pick the right loader per URL
   colors?: string[]         // one colour per URL (whole-object fallback)
   partColors?: string[][]   // per-URL array of per-part colours (for multi-object 3MF)
+  assemblyOffsets?: PartAssembly[]
   file?: File
   highlightIndex?: number   // which slot to spotlight (-1 or undefined = all normal)
   className?: string
@@ -22,6 +25,7 @@ export default function STLViewer({
   fileNames: fileNamesProp,
   colors: colorsProp,
   partColors: partColorsProp,
+  assemblyOffsets,
   file,
   highlightIndex,
   className,
@@ -183,8 +187,22 @@ export default function STLViewer({
         geometry.computeBoundingBox()
         const centre = new THREE.Vector3()
         geometry.boundingBox!.getCenter(centre)
-        if (!isAssembled) {
+        
+        // Center the part first if in exploded view OR if custom assembly offsets exist
+        const shouldCenter = !isAssembled || !!(assemblyOffsets && assemblyOffsets[i])
+        if (shouldCenter) {
           geometry.translate(-centre.x, -centre.y, -centre.z)
+        }
+
+        // Apply custom position and rotation offsets
+        if (isAssembled && assemblyOffsets && assemblyOffsets[i]) {
+          const offset = assemblyOffsets[i]
+          mesh.position.set(offset.x, offset.y, offset.z)
+          mesh.rotation.set(
+            THREE.MathUtils.degToRad(offset.rx ?? 0),
+            THREE.MathUtils.degToRad(offset.ry ?? 0),
+            THREE.MathUtils.degToRad(offset.rz ?? 0)
+          )
         }
 
         group.add(mesh)
@@ -210,8 +228,22 @@ export default function STLViewer({
 
         const box    = new THREE.Box3().setFromObject(obj)
         const centre = box.getCenter(new THREE.Vector3())
-        if (!isAssembled) {
+        
+        // Center the part first if in exploded view OR if custom assembly offsets exist
+        const shouldCenter = !isAssembled || !!(assemblyOffsets && assemblyOffsets[i])
+        if (shouldCenter) {
           obj.position.sub(centre)
+        }
+
+        // Apply custom position and rotation offsets
+        if (isAssembled && assemblyOffsets && assemblyOffsets[i]) {
+          const offset = assemblyOffsets[i]
+          obj.position.set(offset.x, offset.y, offset.z)
+          obj.rotation.set(
+            THREE.MathUtils.degToRad(offset.rx ?? 0),
+            THREE.MathUtils.degToRad(offset.ry ?? 0),
+            THREE.MathUtils.degToRad(offset.rz ?? 0)
+          )
         }
 
         obj.userData.index = i
@@ -279,7 +311,7 @@ export default function STLViewer({
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
-  }, [file, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(','), isAssembled])
+  }, [file, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(','), isAssembled, JSON.stringify(assemblyOffsets)])
 
   // ── Live colour updates (no scene rebuild) ───────────────────────
   useEffect(() => {

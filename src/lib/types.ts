@@ -295,3 +295,35 @@ export function getWhatsAppLink(phone: string, message: string): string {
   }
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
 }
+
+export interface PartAssembly {
+  x: number
+  y: number
+  z: number
+  rx: number
+  ry: number
+  rz: number
+}
+
+export function parseAssemblyMetadata(description: string | null | undefined): PartAssembly[] {
+  if (!description) return []
+  const match = description.match(/<!-- ASSEMBLY_METADATA: (.*?) -->/)
+  if (match) {
+    try {
+      return JSON.parse(match[1])
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+export function cleanDescription(description: string | null | undefined): string {
+  if (!description) return ''
+  return description.replace(/\s*<!-- ASSEMBLY_METADATA: .*? -->/g, '').trim()
+}
+
+export function serializeAssemblyMetadata(description: string, metadata: PartAssembly[]): string {
+  const clean = cleanDescription(description)
+  return `${clean}\n\n<!-- ASSEMBLY_METADATA: ${JSON.stringify(metadata)} -->`
+}

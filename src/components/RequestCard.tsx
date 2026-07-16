@@ -11,6 +11,8 @@ import {
   SIZE_LABELS,
   getStatusLabel,
   getWhatsAppLink,
+  parseAssemblyMetadata,
+  cleanDescription,
 } from '@/lib/types'
 import { updateRequestStatus, sendQuote } from '@/lib/actions'
 import {
@@ -380,7 +382,7 @@ export default function RequestCard({ request, printer, onCardDragStart }: { req
 
         {/* Subtitle / Description */}
         <p className="text-xs text-slate-500 font-medium line-clamp-2 w-full">
-          {request.model_title || request.description || 'No description provided'}
+          {request.model_title || cleanDescription(request.description) || 'No description provided'}
         </p>
 
         {/* Tag / Chip row */}
@@ -546,6 +548,7 @@ export default function RequestCard({ request, printer, onCardDragStart }: { req
                     fileNames={fileNames}
                     colors={colorsByFile.map((c) => c.color)}
                     partColors={colorsByFile.map((c) => c.parts)}
+                    assemblyOffsets={parseAssemblyMetadata(request.description)}
                     className="h-full"
                   />
                 </Suspense>

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { CatalogItem, RequestPrinterView, PrintProfile, Filament, FilamentMaterial } from '@/lib/types'
-import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
+import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, cleanDescription } from '@/lib/types'
 import { submitRequest } from '@/lib/actions'
 import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
 import AddressInput from './AddressInput'
@@ -155,7 +155,7 @@ export default function CatalogOrderForm({
       customer_name:   name.trim(),
       customer_email:  email.trim(),
       customer_phone:  phone.trim(),
-      description:     `Catalog order: ${item.name}`,
+      description:     `Catalog order: ${item.name}${item.description ? `\n\n${item.description}` : ''}`,
       print_type:      ['abs', 'nylon', 'pc'].includes(material) ? 'strong' : 'everyday',
       material,
       color:           item.stl_urls.length > 1 ? partColors.join('|') : color,
@@ -203,6 +203,7 @@ export default function CatalogOrderForm({
           stlUrls={item.stl_urls ?? []}
           name={item.name}
           colors={item.stl_urls.length > 1 ? partColorHexes : [colorHex]}
+          assemblyOffsets={parseAssemblyMetadata(item.description)}
         />
         <div className="p-5">
           <div className="flex items-start justify-between gap-3">
@@ -218,8 +219,8 @@ export default function CatalogOrderForm({
             )}
           </div>
 
-          {item.description && (
-            <p className="mt-3 text-sm text-slate-600 leading-relaxed">{item.description}</p>
+          {item.description && cleanDescription(item.description) && (
+            <p className="mt-3 text-sm text-slate-600 leading-relaxed">{cleanDescription(item.description)}</p>
           )}
 
           {customisationBadges.length > 0 && (
