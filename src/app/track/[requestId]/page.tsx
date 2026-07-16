@@ -416,20 +416,12 @@ export default async function TrackPage({
             <span className="ml-2 font-medium text-slate-900">{QUALITY_LABELS[request.quality]}</span>
           </div>
           {(() => {
-            const hasDims = request.notes?.match(/^\[\d+\.?\d*×\d+\.?\d*×\d+\.?\d*mm\]/)
-            const hasStl = !!(request.stl_url || request.stl_urls?.length > 0 || request.file_url || request.model_url)
-            if (!hasDims && !hasStl) return null
+            const m = request.notes?.match(/^\[(\d+\.?\d*)×(\d+\.?\d*)×(\d+\.?\d*)mm\]/)
+            if (!m) return null
             return (
               <div>
                 <span className="text-slate-400">Size</span>
-                <span className="ml-2 font-medium text-slate-900">
-                  {(() => {
-                    const m = request.notes?.match(/^\[(\d+\.?\d*)×(\d+\.?\d*)×(\d+\.?\d*)mm\]/)
-                    return m
-                      ? `${m[1]} × ${m[2]} × ${m[3]} mm`
-                      : SIZE_LABELS[request.size]
-                  })()}
-                </span>
+                <span className="ml-2 font-medium text-slate-900">{m[1]} × {m[2]} × {m[3]} mm</span>
               </div>
             )
           })()}
