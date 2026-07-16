@@ -20,6 +20,7 @@ import {
 } from '@/lib/pricing'
 
 import AddressInput from './AddressInput'
+import PhoneInput, { isValidMyPhoneDigits } from './PhoneInput'
 
 const STLViewer = lazy(() => import('./STLViewer'))
 
@@ -580,6 +581,7 @@ export default function RequestForm({
 }) {
   const [requestId, setRequestId]     = useState<string | null>(null)
   const [customerEmail, setCustomerEmail] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
   const [fulfillment, setFulfillment]         = useState<'pickup' | 'delivery'>('pickup')
   const [deliveryAddress, setDeliveryAddress] = useState('')
   const [deliveryGeoLoading, setDeliveryGeoLoading] = useState(false)
@@ -888,7 +890,7 @@ export default function RequestForm({
       owner_id:       printer.id,
       customer_name:  (form.elements.namedItem('name') as HTMLInputElement).value,
       customer_email: (form.elements.namedItem('email') as HTMLInputElement).value,
-      customer_phone: (form.elements.namedItem('phone') as HTMLInputElement).value,
+      customer_phone: customerPhone,
       description:    (form.elements.namedItem('description') as HTMLTextAreaElement).value,
       print_type:     derivedPrintType,
       material:       material as FilamentMaterial,
@@ -968,7 +970,8 @@ export default function RequestForm({
   const deliveryReady =
     fulfillment !== 'delivery' ||
     (deliveryAddress.trim().length > 0 && !deliveryGeoLoading && !deliveryGeoError && !!deliveryEstimate)
-  const canSubmit   = !!(formVisible && modelReady && deliveryReady && !pending)
+  const phoneReady = isValidMyPhoneDigits(customerPhone.replace(/^\+?60/, ''))
+  const canSubmit   = !!(formVisible && modelReady && deliveryReady && phoneReady && !pending)
 
   // Derive size from real file dimensions when available (used only for the
   // request record, never shown to the customer as a question).
@@ -1790,7 +1793,7 @@ export default function RequestForm({
               </div>
               <div>
                 <label htmlFor="phone" className="mb-1 block text-xs font-medium text-slate-600">WhatsApp <span className="text-red-500">*</span></label>
-                <input id="phone" name="phone" type="tel" required placeholder="+601X-XXXXXXX" className={inputClass} />
+                <PhoneInput value={customerPhone} onChange={setCustomerPhone} required />
               </div>
               <div className="sm:col-span-2">
                 <label htmlFor="email" className="mb-1 block text-xs font-medium text-slate-600">Email <span className="text-red-500">*</span></label>
