@@ -38,10 +38,7 @@ export default function STLViewer({
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
   const [dims, setDims]       = useState<{ x: number; y: number; z: number } | null>(null)
-  const [isAssembled, setIsAssembled] = useState(() => {
-    if (assemblyOffsets && assemblyOffsets.length > 0) return true
-    return false
-  })
+  const isAssembled = false
 
   // Refs so the scene-setup effect can read current colours without them being deps
   const colorsRef     = useRef<string[]>([])
@@ -315,7 +312,7 @@ export default function STLViewer({
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
-  }, [file, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(','), isAssembled, JSON.stringify(assemblyOffsets)])
+  }, [file, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(','), JSON.stringify(assemblyOffsets)])
 
   // ── Live colour updates (no scene rebuild) ───────────────────────
   useEffect(() => {
@@ -402,15 +399,7 @@ export default function STLViewer({
           </p>
         </div>
       )}
-      {!loading && !error && urlsProp && urlsProp.length > 1 && (
-        <button
-          type="button"
-          onClick={() => setIsAssembled((v) => !v)}
-          className="absolute right-3 top-3 rounded-xl bg-slate-900/80 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-slate-800 transition backdrop-blur-sm shadow-md select-none border border-white/10 active:scale-95"
-        >
-          {isAssembled ? '📦 View Exploded' : '🧩 View Assembled'}
-        </button>
-      )}
+
       {loading && !error && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-2">
