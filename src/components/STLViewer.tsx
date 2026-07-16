@@ -38,7 +38,7 @@ export default function STLViewer({
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
   const [dims, setDims]       = useState<{ x: number; y: number; z: number } | null>(null)
-  const isAssembled = true
+  const isAssembled = false
 
   // Refs so the scene-setup effect can read current colours without them being deps
   const colorsRef     = useRef<string[]>([])
@@ -188,8 +188,8 @@ export default function STLViewer({
         const centre = new THREE.Vector3()
         geometry.boundingBox!.getCenter(centre)
         
-        // Center the part first if it is a single file OR if custom assembly offsets exist
-        const shouldCenter = urls.length === 1 || !!(assemblyOffsets && assemblyOffsets[i])
+        // Center the part first if in exploded view OR if custom assembly offsets exist
+        const shouldCenter = !isAssembled || !!(assemblyOffsets && assemblyOffsets[i])
         if (shouldCenter) {
           geometry.translate(-centre.x, -centre.y, -centre.z)
         }
@@ -229,8 +229,8 @@ export default function STLViewer({
         const box    = new THREE.Box3().setFromObject(obj)
         const centre = box.getCenter(new THREE.Vector3())
         
-        // Center the part first if it is a single file OR if custom assembly offsets exist
-        const shouldCenter = urls.length === 1 || !!(assemblyOffsets && assemblyOffsets[i])
+        // Center the part first if in exploded view OR if custom assembly offsets exist
+        const shouldCenter = !isAssembled || !!(assemblyOffsets && assemblyOffsets[i])
         if (shouldCenter) {
           obj.position.sub(centre)
         }
