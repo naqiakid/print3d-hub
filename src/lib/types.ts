@@ -318,14 +318,37 @@ export function parseAssemblyMetadata(description: string | null | undefined): P
   return []
 }
 
-export function cleanDescription(description: string | null | undefined): string {
-  if (!description) return ''
-  return description.replace(/\s*<!-- ASSEMBLY_METADATA: .*? -->/g, '').trim()
+export function parseMeshMapping(description: string | null | undefined): Record<number, number> {
+  if (!description) return {}
+  const match = description.match(/<!-- MESH_MAPPING: (.*?) -->/)
+  if (match) {
+    try {
+      return JSON.parse(match[1])
+    } catch {
+      return {}
+    }
+  }
+  return {}
 }
 
-export function serializeAssemblyMetadata(description: string, metadata: PartAssembly[]): string {
+export function cleanDescription(description: string | null | undefined): string {
+  if (!description) return ''
+  return description
+    .replace(/\s*<!-- ASSEMBLY_METADATA: .*? -->/g, '')
+    .replace(/\s*<!-- MESH_MAPPING: .*? -->/g, '')
+    .trim()
+}
+
+export function serializeAssemblyMetadata(description: string, metadata: PartAssembly[], meshMapping?: Record<number, number>): string {
   const clean = cleanDescription(description)
-  return `${clean}\n\n<!-- ASSEMBLY_METADATA: ${JSON.stringify(metadata)} -->`
+  let result = clean
+  if (metadata && metadata.length > 0) {
+    result += `\n\n<!-- ASSEMBLY_METADATA: ${JSON.stringify(metadata)} -->`
+  }
+  if (meshMapping && Object.keys(meshMapping).length > 0) {
+    result += `\n\n<!-- MESH_MAPPING: ${JSON.stringify(meshMapping)} -->`
+  }
+  return result
 }
 
 export function getDirectDownloadUrl(url: string | null | undefined): string {

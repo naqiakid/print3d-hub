@@ -6,11 +6,13 @@ import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, 
 
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView, PartAssembly } from '@/lib/types'
-import { MATERIAL_LABELS, parseAssemblyMetadata, cleanDescription, serializeAssemblyMetadata, isPreviewFile } from '@/lib/types'
+import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 import { getPresetById } from '@/lib/printer-models'
 import { parseGcodeFile } from '@/lib/parse-gcode'
+import * as THREE from 'three'
+import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js'
 import {
   DEFAULT_ELECTRICITY_RATE,
   DEFAULT_MARKUP_PERCENT,
@@ -154,11 +156,12 @@ export default function CatalogManager({
   const [items, setItems] = useState<CatalogItem[]>(initialItems)
   const [editing, setEditing] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(BLANK)
+  const [editingMeshMapping, setEditingMeshMapping] = useState<Record<number, number>>({})
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
 
-  function openNew() { setForm(BLANK); setEditing('new'); setError('') }
-  function openEdit(item: CatalogItem) { setForm(itemToForm(item)); setEditing(item.id); setError('') }
+  function openNew() { setForm(BLANK); setEditing('new'); setEditingMeshMapping({}); setError('') }
+  function openEdit(item: CatalogItem) { setForm(itemToForm(item)); setEditing(item.id); setEditingMeshMapping(parseMeshMapping(item.description)); setError('') }
   function closeForm() { setEditing(null); setError('') }
 
   function set<K extends keyof FormState>(key: K, val: FormState[K]) {
@@ -202,9 +205,19 @@ export default function CatalogManager({
       if (!isNaN(n) && n > 0) materialPricesNum[mat] = n
     }
 
+    // Preserve original assembly metadata if editing, or default to empty
+    const originalItem = editing !== 'new' ? items.find(i => i.id === editing) : null
+    const assemblyOffsets = originalItem ? parseAssemblyMetadata(originalItem.description) : []
+
+    const finalDescription = serializeAssemblyMetadata(
+      form.description.trim(),
+      assemblyOffsets,
+      editingMeshMapping
+    )
+
     const data = {
       name: form.name.trim(),
-      description: form.description.trim(),
+      description: finalDescription,
       category: form.category.trim() || null,
       photo_url: (form.photo_urls[0] ?? form.photo_url.trim()) || null,
       photo_urls: form.photo_urls,
@@ -335,6 +348,8 @@ export default function CatalogManager({
                 setMaterialPrice={setMaterialPrice}
                 filaments={filaments}
                 printer={printer}
+                meshMapping={editingMeshMapping}
+                setMeshMapping={setEditingMeshMapping}
                 onSave={handleSave} onCancel={closeForm}
                 isPending={isPending} error={error}
               />
@@ -377,6 +392,8 @@ export default function CatalogManager({
             setMaterialPrice={setMaterialPrice}
             filaments={filaments}
             printer={printer}
+            meshMapping={editingMeshMapping}
+            setMeshMapping={setEditingMeshMapping}
             onSave={handleSave} onCancel={closeForm}
             isPending={isPending} error={error}
           />
@@ -611,7 +628,7 @@ function GcodeCalculator({
 
 function CatalogForm({
   form, set, toggleAvailableMaterial, setMaterialPrice,
-  filaments, printer, onSave, onCancel, isPending, error,
+  filaments, printer, meshMapping, setMeshMapping, onSave, onCancel, isPending, error,
 }: {
   form: FormState
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void
@@ -619,11 +636,49 @@ function CatalogForm({
   setMaterialPrice: (mat: string, price: string) => void
   filaments: Filament[]
   printer: RequestPrinterView
+  meshMapping: Record<number, number>
+  setMeshMapping: React.Dispatch<React.SetStateAction<Record<number, number>>>
   onSave: () => void
   onCancel: () => void
   isPending: boolean
   error: string
 }) {
+  const previewUrl = form.stl_urls.find(url => isPreviewFile(url))
+  const [previewMeshes, setPreviewMeshes] = useState<string[]>([])
+  const [loadingMeshes, setLoadingMeshes] = useState(false)
+
+  useEffect(() => {
+    if (!previewUrl) {
+      setPreviewMeshes([])
+      return
+    }
+
+    setLoadingMeshes(true)
+    const downloadUrl = getDirectDownloadUrl(previewUrl)
+    
+    fetch(downloadUrl)
+      .then(res => {
+        if (!res.ok) throw new Error()
+        return res.arrayBuffer()
+      })
+      .then(buffer => {
+        const loader = new ThreeMFLoader()
+        const obj = loader.parse(buffer)
+        const meshes: string[] = []
+        obj.traverse(c => {
+          if (c instanceof THREE.Mesh) {
+            meshes.push(c.name || `Mesh ${meshes.length + 1}`)
+          }
+        })
+        setPreviewMeshes(meshes)
+        setLoadingMeshes(false)
+      })
+      .catch((err) => {
+        console.error("Scanner error:", err)
+        setPreviewMeshes([])
+        setLoadingMeshes(false)
+      })
+  }, [previewUrl])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -1100,6 +1155,69 @@ function CatalogForm({
                         )
                       })}
                     </div>
+                  </div>
+                )}
+
+                {/* Assembled Preview Mesh Mapping (only if there is an assembled preview file) */}
+                {previewUrl && (
+                  <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">🧩 Assembled Preview Mesh Mapping</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Link each mesh in the 3MF preview to the correct printable part so colors show accurately.
+                      </p>
+                    </div>
+
+                    {loadingMeshes ? (
+                      <div className="flex items-center gap-2 py-2 text-xs text-slate-400">
+                        <Loader2 className="h-3 w-3 animate-spin text-orange-500" />
+                        <span>Scanning preview model meshes…</span>
+                      </div>
+                    ) : previewMeshes.length === 0 ? (
+                      <p className="py-2 text-[11px] italic text-slate-400">No meshes detected or unable to scan the preview model.</p>
+                    ) : (
+                      <div className="grid gap-2">
+                        {previewMeshes.map((meshName, meshIdx) => {
+                          const currentStlIdx = meshMapping[meshIdx] ?? ''
+                          const printableParts = form.stl_urls.filter(url => !isPreviewFile(url))
+                          return (
+                            <div key={meshIdx} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white p-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[11px] font-medium text-slate-700 truncate">
+                                  {meshIdx + 1}. <span className="font-mono text-[10px] text-orange-600 bg-orange-50/50 px-1 py-0.5 rounded border border-orange-100/50 font-bold">{meshName}</span>
+                                </p>
+                              </div>
+                              <select
+                                value={currentStlIdx}
+                                onChange={(e) => {
+                                  const val = e.target.value === '' ? undefined : parseInt(e.target.value)
+                                  setMeshMapping(prev => {
+                                    const next = { ...prev }
+                                    if (val === undefined) {
+                                      delete next[meshIdx]
+                                    } else {
+                                      next[meshIdx] = val
+                                    }
+                                    return next
+                                  })
+                                }}
+                                className="rounded bg-slate-50 border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-650 focus:border-orange-500 focus:outline-none transition min-w-[120px] max-w-[180px]"
+                              >
+                                <option value="">-- Match by Name (Auto) --</option>
+                                {printableParts.map((url, printableIdx) => {
+                                  const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${printableIdx + 1}`
+                                  return (
+                                    <option key={printableIdx} value={printableIdx}>
+                                      {filename}
+                                    </option>
+                                  )
+                                })}
+                              </select>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { CatalogItem, RequestPrinterView, PrintProfile, Filament, FilamentMaterial } from '@/lib/types'
-import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, cleanDescription, isPreviewFile } from '@/lib/types'
+import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, parseMeshMapping, cleanDescription, isPreviewFile } from '@/lib/types'
 import { submitRequest } from '@/lib/actions'
 import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
 import AddressInput from './AddressInput'
@@ -210,6 +210,7 @@ export default function CatalogOrderForm({
             return '#ffffff' // preview file fallback color
           })}
           assemblyOffsets={parseAssemblyMetadata(item.description)}
+          meshMapping={parseMeshMapping(item.description)}
         />
         <div className="p-5">
           <div className="flex items-start justify-between gap-3">

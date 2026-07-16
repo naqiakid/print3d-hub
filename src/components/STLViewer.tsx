@@ -7,7 +7,7 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
-import { PartAssembly, getDirectDownloadUrl } from '@/lib/types'
+import { PartAssembly, getDirectDownloadUrl, isPreviewFile } from '@/lib/types'
 
 type Props = {
   urls?: string[]
@@ -15,6 +15,7 @@ type Props = {
   colors?: string[]         // one colour per URL (whole-object fallback)
   partColors?: string[][]   // per-URL array of per-part colours (for multi-object 3MF)
   assemblyOffsets?: PartAssembly[]
+  meshMapping?: Record<number, number>
   file?: File
   highlightIndex?: number   // which slot to spotlight (-1 or undefined = all normal)
   className?: string
@@ -26,6 +27,7 @@ export default function STLViewer({
   colors: colorsProp,
   partColors: partColorsProp,
   assemblyOffsets,
+  meshMapping,
   file,
   highlightIndex,
   className,
@@ -38,7 +40,18 @@ export default function STLViewer({
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
   const [dims, setDims]       = useState<{ x: number; y: number; z: number } | null>(null)
-  const isAssembled = false
+
+  const previewUrls = (urlsProp ?? []).filter(url => isPreviewFile(url))
+  const printableUrls = (urlsProp ?? []).filter(url => !isPreviewFile(url))
+  const hasPreview = previewUrls.length > 0
+
+  const [subTab, setSubTab] = useState<'assembled' | 'parts'>(hasPreview ? 'assembled' : 'parts')
+
+  useEffect(() => {
+    setSubTab(hasPreview ? 'assembled' : 'parts')
+  }, [urlsProp?.join(',')])
+
+  const isAssembled = subTab === 'assembled'
 
   // Refs so the scene-setup effect can read current colours without them being deps
   const colorsRef     = useRef<string[]>([])
@@ -53,7 +66,8 @@ export default function STLViewer({
     setDims(null)
 
     let blobUrl: string | null = null
-    const urls      = file ? ((blobUrl = URL.createObjectURL(file)), [blobUrl]) : (urlsProp ?? [])
+    const activeUrls = subTab === 'assembled' ? previewUrls : printableUrls
+    const urls      = file ? ((blobUrl = URL.createObjectURL(file)), [blobUrl]) : activeUrls
     const fileNames = fileNamesProp ?? []
 
     if (!mount || urls.length === 0) return
@@ -224,8 +238,37 @@ export default function STLViewer({
         } else {
           // If this is a multi-part container (e.g. 3MF assembly) but has no custom part colors assigned directly,
           // make it inherit the colors of the other files loaded in the viewer!
+          // We try to match each mesh by the owner's manual mapping first, then by name, and finally fallback to index.
           meshes.forEach((mesh, j) => {
-            const inheritedColor = colorsRef.current[j] || colorsRef.current[i] || '#cccccc'
+            let matchedColor: string | null = null
+
+            // 1. Manual mapping
+            if (meshMapping && meshMapping[j] !== undefined) {
+              const mappedStlIdx = meshMapping[j]
+              const url = printableUrls[mappedStlIdx]
+              if (url) {
+                const fullIdx = (urlsProp ?? []).indexOf(url)
+                matchedColor = colorsRef.current[fullIdx]
+              }
+            }
+
+            // 2. Name-based matching
+            if (!matchedColor) {
+              const meshName = (mesh.name || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+              for (let idx = 0; idx < printableUrls.length; idx++) {
+                const url = printableUrls[idx]
+                const filename = url.split('/').pop()?.toLowerCase() || ''
+                const cleanFilename = filename.replace(/\.[a-z0-9]+$/, '').replace(/[^a-z0-9]/g, '')
+                
+                if (meshName && cleanFilename && (cleanFilename.includes(meshName) || meshName.includes(cleanFilename))) {
+                  const fullIdx = (urlsProp ?? []).indexOf(url)
+                  matchedColor = colorsRef.current[fullIdx]
+                  break
+                }
+              }
+            }
+
+            const inheritedColor = matchedColor || colorsRef.current[j] || colorsRef.current[i] || '#cccccc'
             mesh.material = makeMat(inheritedColor)
           })
         }
@@ -357,7 +400,7 @@ export default function STLViewer({
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
-  }, [file, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(','), JSON.stringify(assemblyOffsets)])
+  }, [file, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(','), subTab, JSON.stringify(assemblyOffsets), JSON.stringify(meshMapping)])
 
   // ── Live colour updates (no scene rebuild) ───────────────────────
   useEffect(() => {
@@ -382,8 +425,41 @@ export default function STLViewer({
         } else {
           // If this is a group (e.g. 3MF assembly) but has no custom part colors assigned directly,
           // make it inherit the colors of the other files loaded in the viewer!
+          // We try to match each mesh by the owner's manual mapping first, then by name, and finally fallback to index.
           meshes.forEach((mesh, j) => {
-            const color = (colorsProp ?? [])[j] || objColor
+            let matchedColor: string | null = null
+
+            // 1. Manual mapping
+            if (meshMapping && meshMapping[j] !== undefined) {
+              const mappedStlIdx = meshMapping[j]
+              const url = printableUrls[mappedStlIdx]
+              if (url) {
+                const fullIdx = (urlsProp ?? []).indexOf(url)
+                if (fullIdx !== -1 && colorsProp && colorsProp[fullIdx]) {
+                  matchedColor = colorsProp[fullIdx]
+                }
+              }
+            }
+
+            // 2. Name-based matching
+            if (!matchedColor) {
+              const meshName = (mesh.name || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+              for (let idx = 0; idx < printableUrls.length; idx++) {
+                const url = printableUrls[idx]
+                const filename = url.split('/').pop()?.toLowerCase() || ''
+                const cleanFilename = filename.replace(/\.[a-z0-9]+$/, '').replace(/[^a-z0-9]/g, '')
+                
+                if (meshName && cleanFilename && (cleanFilename.includes(meshName) || meshName.includes(cleanFilename))) {
+                  const fullIdx = (urlsProp ?? []).indexOf(url)
+                  if (fullIdx !== -1 && colorsProp && colorsProp[fullIdx]) {
+                    matchedColor = colorsProp[fullIdx]
+                    break
+                  }
+                }
+              }
+            }
+
+            const color = matchedColor || (colorsProp ?? [])[j] || objColor
             const mat = mesh.material as THREE.MeshPhongMaterial
             mat.color.set(new THREE.Color(color))
             mat.needsUpdate = true
@@ -408,6 +484,7 @@ export default function STLViewer({
   }, [
     (colorsProp ?? []).join(','),
     (partColorsProp ?? []).map((a) => (a ?? []).join(',')).join('|'),
+    JSON.stringify(meshMapping),
   ])
 
   // ── Highlight effect ─────────────────────────────────────────────
@@ -452,6 +529,32 @@ export default function STLViewer({
           <p className="font-mono">
             {dims.x} × {dims.y} × {dims.z} mm
           </p>
+        </div>
+      )}
+      {hasPreview && (
+        <div className="absolute right-3 top-3 flex items-center gap-1 rounded-xl bg-slate-900/80 p-0.5 border border-white/10 backdrop-blur-sm shadow-md select-none">
+          <button
+            type="button"
+            onClick={() => setSubTab('assembled')}
+            className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition active:scale-95 ${
+              subTab === 'assembled'
+                ? 'bg-orange-500 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            🧩 Assembled
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubTab('parts')}
+            className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition active:scale-95 ${
+              subTab === 'parts'
+                ? 'bg-orange-500 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            📦 Parts
+          </button>
         </div>
       )}
 

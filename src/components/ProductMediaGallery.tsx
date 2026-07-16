@@ -36,6 +36,7 @@ export default function ProductMediaGallery({
   colors,
   partColors,
   assemblyOffsets,
+  meshMapping,
 }: {
   photoUrls: string[]
   videoUrl: string | null
@@ -44,6 +45,7 @@ export default function ProductMediaGallery({
   colors?: string[]
   partColors?: string[][]
   assemblyOffsets?: PartAssembly[]
+  meshMapping?: Record<number, number>
 }) {
   const hasPhotos = photoUrls.length > 0
   const hasVideo  = !!videoUrl
@@ -163,7 +165,7 @@ export default function ProductMediaGallery({
       {/* 3D viewer panel */}
       {tab === '3d' && has3D && (
         <div className="bg-slate-50 p-3" style={{ height: 340 }}>
-          <STLViewer urls={stlUrls} colors={colors} partColors={partColors} assemblyOffsets={assemblyOffsets} className="h-full" />
+          <STLViewer urls={stlUrls} colors={colors} partColors={partColors} assemblyOffsets={assemblyOffsets} meshMapping={meshMapping} className="h-full" />
         </div>
       )}
 
