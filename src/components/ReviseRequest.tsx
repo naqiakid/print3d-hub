@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import type { FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { updateRequest } from '@/lib/actions'
@@ -43,6 +43,18 @@ export default function ReviseRequest({
   const [done, setDone] = useState(false)
   const [isPending, startTransition] = useTransition()
 
+  // Listen for hashchange to auto-expand when routed from Decline dialog
+  useEffect(() => {
+    const checkHash = () => {
+      if (typeof window !== 'undefined' && window.location.hash === '#revise-request-section') {
+        setOpen(true)
+      }
+    }
+    checkHash()
+    window.addEventListener('hashchange', checkHash)
+    return () => window.removeEventListener('hashchange', checkHash)
+  }, [])
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
@@ -80,7 +92,7 @@ export default function ReviseRequest({
   if (!canReviseAnything) return null
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+    <div id="revise-request-section" className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
