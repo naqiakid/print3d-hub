@@ -278,14 +278,12 @@ export default function JobQueueBoard({
                     </div>
                   ) : (
                     colRequests.map((request) => (
-                      <div
+                      <RequestCard
                         key={request.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, request.id)}
-                        className="cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow duration-200 rounded-xl"
-                      >
-                        <RequestCard request={request} printer={printer} />
-                      </div>
+                        request={request}
+                        printer={printer}
+                        onCardDragStart={(e) => handleDragStart(e, request.id)}
+                      />
                     ))
                   )}
                 </div>

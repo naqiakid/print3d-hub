@@ -59,7 +59,7 @@ function fmtHours(h: number | null | undefined): string {
   return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`
 }
 
-export default function RequestCard({ request, printer }: { request: PrintRequest; printer: RequestPrinterView }) {
+export default function RequestCard({ request, printer, onCardDragStart }: { request: PrintRequest; printer: RequestPrinterView; onCardDragStart?: (e: React.DragEvent) => void }) {
   const [expanded, setExpanded] = useState(false)
   const [showQuoteForm, setShowQuoteForm] = useState(false)
   const [quoteDate, setQuoteDate] = useState('')
@@ -363,6 +363,8 @@ export default function RequestCard({ request, printer }: { request: PrintReques
       {/* Summary row */}
       <button
         onClick={() => setExpanded((v) => !v)}
+        draggable={!!onCardDragStart}
+        onDragStart={onCardDragStart}
         className="flex w-full flex-col gap-3 p-4 text-left hover:bg-slate-50 transition"
       >
         {/* Header Row (Name + Status Badge + Arrow) */}
