@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowRight, Printer, Search, Package } from 'lucide-react'
+import { ArrowRight, Upload, Sliders, ShoppingBag, Search, Printer, Package } from 'lucide-react'
 import PrinterCard from '@/components/PrinterCard'
 import { createClient } from '@/lib/supabase/server'
 import type { Shop } from '@/lib/types'
@@ -27,16 +27,17 @@ export default async function HomePage() {
   ])
 
   const featured = (printersData ?? []) as unknown as Shop[]
-  const totalPrinters = featured.length  // we only fetched available ones for display
+  const totalPrinters = ownerIds.length
   const totalCompleted = completedCount ?? 0
 
   return (
     <div className="flex flex-col">
+
       {/* ── Hero ── */}
       <section className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
-        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-orange-500/20 px-3 py-1 text-sm text-orange-300">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-orange-500/20 px-3 py-1.5 text-sm text-orange-300">
               <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
               Local 3D Printing Network
             </div>
@@ -44,29 +45,105 @@ export default async function HomePage() {
             <h1 className="mb-5 text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
               Get anything{' '}
               <span className="text-orange-400">3D printed</span>
-              <br />
-              near you
+              {' '}near you
             </h1>
 
             <p className="mb-8 max-w-lg text-lg leading-relaxed text-slate-300">
-              Connect with local 3D printer owners. Upload your STL file, get an
-              instant price estimate, and pick it up — no technical knowledge required.
+              Find a local 3D printer owner, choose how you want to order, and pick up
+              your print — no technical knowledge required.
             </p>
 
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
                 href="/printers"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-orange-600"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:bg-orange-600"
               >
                 Find a Printer Near Me <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
                 href="/register"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-600 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-600 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-700"
               >
                 List Your Printer
               </Link>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Three ways to order ── */}
+      <section className="py-20 bg-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-12 text-center">
+            <h2 className="mb-3 text-3xl font-bold text-slate-900">Three ways to order</h2>
+            <p className="mx-auto max-w-md text-slate-500">
+              Whether you have a design ready or just know what you want, there is an option for you.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+
+            {/* 1 — Fully custom */}
+            <div className="relative flex flex-col rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:border-orange-200 hover:shadow-md transition">
+              <span className="absolute right-5 top-4 text-5xl font-black text-slate-100 select-none">01</span>
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100">
+                <Upload className="h-5 w-5 text-orange-600" />
+              </div>
+              <h3 className="mb-2 text-lg font-bold text-slate-900">Fully custom print</h3>
+              <p className="mb-6 flex-1 text-sm leading-relaxed text-slate-500">
+                Have your own design? Upload an STL file or share a link from Printables,
+                MakerWorld, or Thingiverse. The owner gives you a quote and prints it exactly as you want.
+              </p>
+              <Link
+                href="/printers"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-500 hover:text-orange-600 transition"
+              >
+                Find a printer <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+
+            {/* 2 — Semi-custom */}
+            <div className="relative flex flex-col rounded-2xl border border-orange-200 bg-orange-50/40 p-8 shadow-sm hover:shadow-md transition">
+              <span className="absolute right-5 top-4 text-5xl font-black text-orange-100 select-none">02</span>
+              <div className="mb-1 self-start rounded-full bg-orange-500 px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                Most popular
+              </div>
+              <div className="mb-4 mt-4 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100">
+                <Sliders className="h-5 w-5 text-orange-600" />
+              </div>
+              <h3 className="mb-2 text-lg font-bold text-slate-900">Semi-custom</h3>
+              <p className="mb-6 flex-1 text-sm leading-relaxed text-slate-500">
+                Browse ready-to-print designs listed by local makers. Personalise with
+                your own text, pick a color, choose a material, or resize — whatever
+                options the owner has made available.
+              </p>
+              <Link
+                href="/browse/custom"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-500 hover:text-orange-600 transition"
+              >
+                Browse designs <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+
+            {/* 3 — Ready-made */}
+            <div className="relative flex flex-col rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:border-orange-200 hover:shadow-md transition">
+              <span className="absolute right-5 top-4 text-5xl font-black text-slate-100 select-none">03</span>
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100">
+                <ShoppingBag className="h-5 w-5 text-orange-600" />
+              </div>
+              <h3 className="mb-2 text-lg font-bold text-slate-900">Ready-made product</h3>
+              <p className="mb-6 flex-1 text-sm leading-relaxed text-slate-500">
+                Just want the thing? Some makers list finished products at a fixed price —
+                no decisions needed. Order it and collect it.
+              </p>
+              <Link
+                href="/browse/ready"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-500 hover:text-orange-600 transition"
+              >
+                See what&apos;s available <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+
           </div>
         </div>
       </section>
@@ -76,9 +153,7 @@ export default async function HomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-12 text-center">
             <h2 className="mb-3 text-3xl font-bold text-slate-900">How it works</h2>
-            <p className="mx-auto max-w-md text-slate-600">
-              Three simple steps. No account needed.
-            </p>
+            <p className="mx-auto max-w-md text-slate-500">Three simple steps. No account needed.</p>
           </div>
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
@@ -92,21 +167,18 @@ export default async function HomePage() {
               {
                 icon: Package,
                 step: '02',
-                title: 'Upload your STL file',
-                desc: 'Upload your 3D model and get an instant price estimate before committing to anything.',
+                title: 'Choose how you want to order',
+                desc: 'Upload your own design, personalise a listed product, or order something ready-made.',
               },
               {
                 icon: Printer,
                 step: '03',
                 title: 'Pick it up locally',
-                desc: 'The owner prints your model and you collect it. Pay directly at pickup.',
+                desc: 'The owner prints your order and you collect it nearby. Pay directly at pickup or on delivery.',
               },
             ].map(({ icon: Icon, step, title, desc }) => (
-              <div
-                key={step}
-                className="relative rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
-              >
-                <span className="absolute right-5 top-4 text-5xl font-black text-slate-100">
+              <div key={step} className="relative rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+                <span className="absolute right-5 top-4 text-5xl font-black text-slate-100 select-none">
                   {step}
                 </span>
                 <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-orange-100">
@@ -126,13 +198,13 @@ export default async function HomePage() {
           <div className="mb-8 flex items-end justify-between">
             <div>
               <h2 className="text-3xl font-bold text-slate-900">Available now</h2>
-              <p className="mt-1 text-slate-600">Ready to take your order</p>
+              <p className="mt-1 text-slate-500">Makers ready to take your order</p>
             </div>
             <Link
               href="/printers"
               className="hidden items-center gap-1 text-sm font-medium text-orange-500 hover:text-orange-600 sm:flex"
             >
-              See all printers <ArrowRight className="h-4 w-4" />
+              See all <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
 
@@ -153,10 +225,7 @@ export default async function HomePage() {
 
           {featured.length > 0 && (
             <div className="mt-8 text-center sm:hidden">
-              <Link
-                href="/printers"
-                className="inline-flex items-center gap-1 text-sm font-medium text-orange-500"
-              >
+              <Link href="/printers" className="inline-flex items-center gap-1 text-sm font-medium text-orange-500">
                 See all printers <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
@@ -167,18 +236,22 @@ export default async function HomePage() {
       {/* ── Live stats ── */}
       {(totalPrinters > 0 || totalCompleted > 0) && (
         <section className="border-y border-slate-200 bg-white">
-          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-            <div className="flex flex-wrap justify-center gap-12 text-center">
+          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+            <div className="flex flex-wrap justify-center gap-16 text-center">
               {totalPrinters > 0 && (
                 <div>
                   <div className="text-3xl font-bold text-slate-900">{totalPrinters}</div>
-                  <div className="mt-0.5 text-sm text-slate-500">Printer{totalPrinters !== 1 ? 's' : ''} available</div>
+                  <div className="mt-1 text-sm text-slate-500">
+                    Printer{totalPrinters !== 1 ? 's' : ''} on the network
+                  </div>
                 </div>
               )}
               {totalCompleted > 0 && (
                 <div>
                   <div className="text-3xl font-bold text-slate-900">{totalCompleted}</div>
-                  <div className="mt-0.5 text-sm text-slate-500">Print{totalCompleted !== 1 ? 's' : ''} completed</div>
+                  <div className="mt-1 text-sm text-slate-500">
+                    Print{totalCompleted !== 1 ? 's' : ''} completed
+                  </div>
                 </div>
               )}
             </div>
@@ -195,18 +268,19 @@ export default async function HomePage() {
                 Own a 3D printer? Put it to work.
               </h2>
               <p className="mt-2 text-orange-100">
-                List your printer for free and start earning from print jobs in your area.
+                List your printer for free and start earning from jobs in your area.
               </p>
             </div>
             <Link
               href="/register"
-              className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-semibold text-orange-600 shadow transition-colors hover:bg-orange-50"
+              className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-semibold text-orange-600 shadow transition hover:bg-orange-50"
             >
               List My Printer <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </div>
       </section>
+
     </div>
   )
 }

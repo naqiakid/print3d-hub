@@ -37,7 +37,7 @@ const COLOR_PRESETS = [
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
 
-type ModelMode = 'link' | 'file' | 'describe' | null
+type ModelMode = 'link' | 'file' | null
 
 export type ThreeMfPart = {
   name: string
@@ -938,7 +938,6 @@ export default function RequestForm({
   }
 
   const modelReady =
-    modelMode === 'describe' ? true :
     modelMode === 'link' ? modelUrl.trim().length > 0 :
     modelMode === 'file' ? (fileItems.length > 0 && allUploaded) :
     false
@@ -1036,6 +1035,17 @@ export default function RequestForm({
     })
   }
 
+  // Dynamic description text based on model mode
+  let descLabel = 'About your print'
+  let descSub = 'A short description of what this part is for helps the owner quote and print it accurately.'
+  let descPlaceholder = 'e.g. This is a replacement gear for a toy car. Needs to be printed in a strong material like PETG or ABS to withstand pressure.'
+
+  if (modelMode === 'link') {
+    descLabel = 'Describe your request'
+    descSub = 'Describe what you want the owner to print from your link. Specify any preferences for size, quantity, or custom options.'
+    descPlaceholder = 'e.g. Please print 2 copies of the phone stand model in the link. Default size is perfect.'
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
 
@@ -1102,14 +1112,8 @@ export default function RequestForm({
         })()}
 
         {modelMode === null && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {[
-              {
-                mode: 'describe' as const,
-                icon: Camera,
-                title: "I'm not sure / just describe it",
-                desc: "Saw it on social media or don't have a link? Just tell us what you want — a photo helps but isn't required.",
-              },
               {
                 mode: 'link' as const,
                 icon: Link2,
@@ -1135,31 +1139,7 @@ export default function RequestForm({
           </div>
         )}
 
-        {/* Describe mode — no link, no file required, an optional photo is welcome */}
-        {modelMode === 'describe' && (
-          <div className="space-y-3">
-            <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-              No problem — just tell us what you want in the description below. If you have a photo (even a screenshot from social media), attach it here and it'll help the owner a lot.
-            </div>
-            <FileUploadSection
-              compact
-              photoOnly
-              fileItems={fileItems}
-              stlItems={stlItems}
-              previewUrls={previewUrls}
-              hoveredFileId={hoveredFileId}
-              onHoverChange={setHoveredFileId}
-              onRemove={removeFile}
-              onUpdateColor={updateFileColor}
-              onUpdatePartColor={updatePartColor}
-              filaments={filaments}
-              addMoreRef={addInputRef}
-              onDrop={addFiles}
-              onAddMore={addFiles}
-              buildVolume={buildVolume}
-            />
-          </div>
-        )}
+
 
         {/* Link mode */}
         {modelMode === 'link' && (
@@ -1369,7 +1349,7 @@ export default function RequestForm({
                 onClick={() => setShowQualityDetail((v) => !v)}
                 className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-orange-200 transition"
               >
-                <span className="text-sm font-medium text-slate-700">Want higher quality or custom settings?</span>
+                <span className="text-sm font-medium text-slate-700">Print Strength & Quality (Optional)</span>
                 <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showQualityDetail ? 'rotate-180' : ''}`} />
               </button>
 
@@ -1471,7 +1451,7 @@ export default function RequestForm({
                 onClick={() => setShowPrintOptions((v) => !v)}
                 className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-orange-200 transition"
               >
-                <span className="text-sm font-medium text-slate-700">Advanced print options</span>
+                <span className="text-sm font-medium text-slate-700">Special Features & Customization (Optional)</span>
                 <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showPrintOptions ? 'rotate-180' : ''}`} />
               </button>
 
@@ -1667,11 +1647,11 @@ export default function RequestForm({
 
           <div>
             <label htmlFor="description" className="mb-1 block text-xs font-medium text-slate-600">
-              What is this for? <span className="text-red-500">*</span>
+              {descLabel} <span className="text-red-500">*</span>
             </label>
-            <p className="mb-2 text-xs text-slate-400">A short description helps the owner understand your request and quote accurately.</p>
+            <p className="mb-2 text-xs text-slate-400">{descSub}</p>
             <textarea id="description" name="description" required rows={3}
-              placeholder="e.g. A desk phone stand, roughly 10 cm tall. Needs to hold a phone at 45°."
+              placeholder={descPlaceholder}
               className={`${inputClass} resize-none`} />
           </div>
 

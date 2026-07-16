@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Printer } from 'lucide-react'
 import NavLinks from './NavLinks'
 import UserMenu from './UserMenu'
+import MobileMenu from './MobileMenu'
 import { createClient } from '@/lib/supabase/server'
 
 export default async function Navbar() {
@@ -49,12 +50,13 @@ export default async function Navbar() {
               </Link>
               <Link
                 href="/register"
-                className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600"
+                className="hidden rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600 sm:block"
               >
                 List Your Printer
               </Link>
             </>
           )}
+          <MobileMenu userEmail={user?.email ?? null} />
         </div>
       </div>
     </header>

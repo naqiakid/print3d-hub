@@ -2,33 +2,8 @@
 
 import { useEffect, useRef } from 'react'
 import type { Shop } from '@/lib/types'
-
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
-function ensureLeafletCSS() {
-  if (document.querySelector('link[data-leaflet-css]')) return
-  const link = document.createElement('link')
-  link.rel = 'stylesheet'
-  link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
-  link.setAttribute('data-leaflet-css', '1')
-  document.head.appendChild(link)
-
-  if (!document.querySelector('style[data-map-anim]')) {
-    const style = document.createElement('style')
-    style.setAttribute('data-map-anim', '1')
-    style.textContent =
-      '@keyframes map-ping{0%{transform:scale(1);opacity:.7}100%{transform:scale(2.8);opacity:0}}'
-    document.head.appendChild(style)
-  }
-}
+import { haversineKm } from '@/lib/geo'
+import { ensureLeafletCSS } from '@/lib/leaflet-utils'
 
 interface Props {
   printers: Shop[]

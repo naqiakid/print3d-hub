@@ -71,9 +71,9 @@ export default function CatalogGrid({
             >
               {/* Photo */}
               <div className="relative h-44 w-full overflow-hidden bg-slate-100 flex items-center justify-center">
-                {item.photo_url ? (
+                {(item.photo_urls?.[0] ?? item.photo_url) ? (
                   <img
-                    src={item.photo_url}
+                    src={(item.photo_urls?.[0] ?? item.photo_url) as string}
                     alt={item.name}
                     className={`h-full w-full object-cover transition duration-300 ${
                       inStock ? 'group-hover:scale-105' : 'grayscale'

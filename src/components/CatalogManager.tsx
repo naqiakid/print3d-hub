@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, ChevronUp } from 'lucide-react'
+import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, ChevronUp, Image as ImageIcon, Video } from 'lucide-react'
 import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView } from '@/lib/types'
 import { MATERIAL_LABELS } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
@@ -48,7 +48,9 @@ type FormState = {
   name: string
   description: string
   category: string
-  photo_url: string
+  photo_url: string           // legacy single URL (back-compat)
+  photo_urls: string[]        // uploaded product photos
+  video_url: string           // YouTube / direct video link
   model_url: string
   stl_urls: string[]
   allow_custom_text: boolean
@@ -73,6 +75,8 @@ const BLANK: FormState = {
   description: '',
   category: '',
   photo_url: '',
+  photo_urls: [],
+  video_url: '',
   model_url: '',
   stl_urls: [],
   allow_custom_text: false,
@@ -100,6 +104,8 @@ function itemToForm(item: CatalogItem): FormState {
     description: item.description,
     category: item.category ?? '',
     photo_url: item.photo_url ?? '',
+    photo_urls: item.photo_urls ?? [],
+    video_url: item.video_url ?? '',
     model_url: item.model_url ?? '',
     stl_urls: item.stl_urls ?? [],
     allow_custom_text: item.allow_custom_text,
@@ -184,7 +190,9 @@ export default function CatalogManager({
       name: form.name.trim(),
       description: form.description.trim(),
       category: form.category.trim() || null,
-      photo_url: form.photo_url.trim() || null,
+      photo_url: (form.photo_urls[0] ?? form.photo_url.trim()) || null,
+      photo_urls: form.photo_urls,
+      video_url: form.video_url.trim() || null,
       model_url: form.model_url.trim() || null,
       stl_urls: form.stl_urls,
       allow_custom_text: form.allow_custom_text,
@@ -211,6 +219,8 @@ export default function CatalogManager({
           created_at: new Date().toISOString(),
           ...data,
           photo_url: data.photo_url ?? null,
+          photo_urls: data.photo_urls ?? [],
+          video_url: data.video_url ?? null,
           model_url: data.model_url ?? null,
           stl_urls: data.stl_urls ?? [],
           material: data.material ?? null,
@@ -252,8 +262,8 @@ export default function CatalogManager({
         <div key={item.id} className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
           <div className="flex gap-4 p-4">
             <div className="h-20 w-20 shrink-0 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center">
-              {item.photo_url
-                ? <img src={item.photo_url} alt={item.name} className="h-full w-full object-cover" />
+              {(item.photo_urls?.[0] ?? item.photo_url)
+                ? <img src={(item.photo_urls?.[0] ?? item.photo_url) as string} alt={item.name} className="h-full w-full object-cover" />
                 : <Package className="h-8 w-8 text-slate-300" />}
             </div>
             <div className="flex-1 min-w-0">
@@ -599,12 +609,38 @@ function CatalogForm({
   error: string
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [uploadingPhotos, setUploadingPhotos] = useState(false)
+  const [photoUploadError, setPhotoUploadError] = useState('')
+
+  async function handlePhotoFiles(files: FileList | File[] | null) {
+    if (!files || files.length === 0) return
+    const allowed = Array.from(files).filter((f) => /\.(jpe?g|png|webp|gif)$/i.test(f.name))
+    if (allowed.length === 0) { setPhotoUploadError('Only JPG, PNG, WebP, or GIF images are accepted.'); return }
+    setUploadingPhotos(true); setPhotoUploadError('')
+    const supabase = createClient()
+    const newUrls: string[] = []
+    for (const file of allowed) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `catalog/photos/${Date.now()}-${safeName}`
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('stl-files')
+        .upload(path, file, { contentType: file.type })
+      if (uploadErr || !uploadData) { setPhotoUploadError(uploadErr?.message ?? 'Upload failed'); setUploadingPhotos(false); return }
+      const { data: urlData } = supabase.storage.from('stl-files').getPublicUrl(path)
+      newUrls.push(urlData.publicUrl)
+    }
+    set('photo_urls', [...form.photo_urls, ...newUrls])
+    setUploadingPhotos(false)
+    if (photoInputRef.current) photoInputRef.current.value = ''
+  }
   // Auto-open Advanced options when editing a product that already uses them,
   // so the owner doesn't lose visibility of their existing configuration.
   const [showAdvanced, setShowAdvanced] = useState(() => !!(
-    form.description || form.category || form.photo_url || form.model_url || form.stl_urls.length > 0 ||
+    form.description || form.category || form.photo_urls.length > 0 || form.photo_url ||
+    form.video_url || form.model_url || form.stl_urls.length > 0 ||
     form.allow_material_choice || form.allow_custom_text || form.allow_resize ||
     (!form.allow_color_choice && (form.material || form.color))
   ))
@@ -707,19 +743,81 @@ function CatalogForm({
           placeholder="Or type your own category" className={inputClass} />
       </div>
 
-      {/* Photo + design link */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Photo URL</label>
-          <input value={form.photo_url} onChange={(e) => set('photo_url', e.target.value)}
-            placeholder="https://... (imgur, google photos, etc.)" className={inputClass} />
-          <p className="mt-1 text-[11px] text-slate-400">Upload to Imgur or Google Photos and paste the link.</p>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Original design link (optional)</label>
-          <input value={form.model_url} onChange={(e) => set('model_url', e.target.value)}
-            placeholder="https://www.makerworld.com/..." className={inputClass} />
-        </div>
+      {/* ── Photos ── */}
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-600">Product photos</label>
+        <p className="mb-2 text-[11px] text-slate-400">
+          Upload photos of your finished print — JPG, PNG, or WebP. First photo is the cover image.
+        </p>
+
+        {/* Preview grid */}
+        {form.photo_urls.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {form.photo_urls.map((url, i) => (
+              <div key={url} className="relative h-20 w-20 shrink-0 rounded-xl overflow-hidden border border-slate-200">
+                <img src={url} alt={`Photo ${i + 1}`} className="h-full w-full object-cover" />
+                {i === 0 && (
+                  <span className="absolute bottom-0 left-0 right-0 bg-black/40 text-center text-[9px] font-semibold text-white py-0.5">
+                    Cover
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => set('photo_urls', form.photo_urls.filter((_, idx) => idx !== i))}
+                  className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70 transition"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Drop zone */}
+        <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple className="hidden"
+          onChange={(e) => handlePhotoFiles(e.target.files)} />
+        <label
+          className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed border-slate-200 px-4 py-3 hover:border-orange-300 hover:bg-orange-50/30 transition"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); handlePhotoFiles(e.dataTransfer.files) }}
+          onClick={() => photoInputRef.current?.click()}
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100">
+            {uploadingPhotos
+              ? <Loader2 className="h-4 w-4 text-slate-400 animate-spin" />
+              : <ImageIcon className="h-4 w-4 text-slate-400" />}
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-700">
+              {uploadingPhotos ? 'Uploading…' : 'Drop photos here or click to browse'}
+            </p>
+            <p className="text-[11px] text-slate-400">JPG · PNG · WebP · GIF · multiple allowed</p>
+          </div>
+        </label>
+        {photoUploadError && <p className="mt-1 text-[11px] text-red-500">{photoUploadError}</p>}
+      </div>
+
+      {/* ── Video ── */}
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-600">
+          <span className="inline-flex items-center gap-1.5"><Video className="h-3.5 w-3.5" /> Video link (optional)</span>
+        </label>
+        <input
+          value={form.video_url}
+          onChange={(e) => set('video_url', e.target.value)}
+          placeholder="https://youtube.com/... or https://youtu.be/..."
+          className={inputClass}
+        />
+        <p className="mt-1 text-[11px] text-slate-400">
+          YouTube or direct video URL — shown on your product page so customers can see it in action.
+        </p>
+      </div>
+
+      {/* ── Design link ── */}
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-600">Original design link (optional)</label>
+        <input value={form.model_url} onChange={(e) => set('model_url', e.target.value)}
+          placeholder="https://www.makerworld.com/..." className={inputClass} />
       </div>
 
       {/* 3D model upload */}

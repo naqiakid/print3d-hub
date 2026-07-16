@@ -45,21 +45,21 @@ export default function UserMenu({ email }: { email: string }) {
               <LayoutDashboard className="h-4 w-4 text-slate-400" /> Dashboard
             </Link>
             <Link
-              href="/dashboard"
+              href="/dashboard/listing"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
             >
               <Store className="h-4 w-4 text-slate-400" /> My Listing
             </Link>
             <Link
-              href="/dashboard"
+              href="/dashboard/catalog"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
             >
               <ShoppingBag className="h-4 w-4 text-slate-400" /> My Products
             </Link>
             <Link
-              href="/dashboard"
+              href="/dashboard/equipment"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
             >

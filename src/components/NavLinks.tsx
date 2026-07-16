@@ -3,7 +3,10 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-const links = [{ href: '/printers', label: 'Browse Printers' }]
+const links = [
+  { href: '/printers',        label: 'Browse Printers' },
+  { href: '/browse/products', label: 'Browse Products' },
+]
 
 export default function NavLinks() {
   const pathname = usePathname()

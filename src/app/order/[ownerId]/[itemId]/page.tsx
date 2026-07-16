@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { Shop, Printer, CatalogItem, PrintProfile, Filament, RequestPrinterView } from '@/lib/types'
 import CatalogOrderForm from '@/components/CatalogOrderForm'
 import STLViewer from '@/components/STLViewerWrapper'
+import ProductMediaGallery from '@/components/ProductMediaGallery'
 
 export default async function CatalogOrderPage({
   params,
@@ -83,13 +84,13 @@ export default async function CatalogOrderPage({
 
       {/* Product header */}
       <div className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        {item.photo_url && (
-          <img
-            src={item.photo_url}
-            alt={item.name}
-            className="h-56 w-full object-cover"
-          />
-        )}
+        {/* Photo gallery / video / 3D viewer */}
+        <ProductMediaGallery
+          photoUrls={item.photo_urls?.length ? item.photo_urls : (item.photo_url ? [item.photo_url] : [])}
+          videoUrl={item.video_url ?? null}
+          stlUrls={item.stl_urls ?? []}
+          name={item.name}
+        />
         <div className="p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -131,8 +132,8 @@ export default async function CatalogOrderPage({
         </div>
       </div>
 
-      {/* 3D preview */}
-      {item.stl_urls?.length > 0 && (
+      {/* 3D preview — only shown if no photos/video (gallery handles it when there are) */}
+      {item.stl_urls?.length > 0 && !(item.photo_urls?.length || item.photo_url || item.video_url) && (
         <div className="mb-8">
           <STLViewer urls={item.stl_urls} />
         </div>

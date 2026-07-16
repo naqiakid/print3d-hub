@@ -148,8 +148,16 @@ export default async function ShopDetailPage({
               <div>
                 {brand && <p className="text-xs font-semibold uppercase tracking-widest text-white/50 mb-1">{brand}</p>}
                 <h1 className="text-2xl font-bold text-white leading-tight">{shop.name}</h1>
-                <p className="text-sm text-white/60 mt-0.5">
-                  {printers.length} machine{printers.length !== 1 ? 's' : ''}
+                <p className="text-sm text-white/60 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span>{printers.length} machine{printers.length !== 1 ? 's' : ''}</span>
+                  {printers.length > 0 && (
+                    <>
+                      <span className="text-white/30">•</span>
+                      <span className="text-white/80 font-medium">
+                        {printers.map((p) => p.printer_model).join(', ')}
+                      </span>
+                    </>
+                  )}
                 </p>
               </div>
               <span
@@ -177,6 +185,34 @@ export default async function ShopDetailPage({
                 <p className="text-sm font-semibold text-white">
                   {shop.rating} <span className="text-white/40 font-normal text-xs">({shop.review_count})</span>
                 </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-white/10 pt-5">
+              <div>
+                <p className="text-xs text-white/40 uppercase tracking-wide mb-0.5">Price range</p>
+                <p className="text-lg font-bold text-white">
+                  {shop.price_min === 0 && shop.price_max === 0
+                    ? 'Quote on request'
+                    : `RM${shop.price_min}–RM${shop.price_max}`}
+                </p>
+              </div>
+              <div>
+                {shop.available ? (
+                  <Link
+                    href={`/request/${shop.id}`}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 shadow-md shadow-orange-950/20 active:scale-[0.98]"
+                  >
+                    Request a Custom Print <ChevronRight className="h-4 w-4" />
+                  </Link>
+                ) : (
+                  <button
+                    disabled
+                    className="inline-flex items-center justify-center rounded-xl bg-white/10 px-6 py-3 text-sm font-semibold text-white/40 cursor-not-allowed"
+                  >
+                    Currently Busy
+                  </button>
+                )}
               </div>
             </div>
           </div>

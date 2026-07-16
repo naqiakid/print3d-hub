@@ -131,7 +131,7 @@ export default function CatalogOrderForm({
       color_hex:       colorHex,
       supports:        false,
       size:            'medium',
-      quality:         'presentable',
+      quality:         'basic',
       deadline,
       notes:           parts.join('\n') || 'No additional notes.',
       model_url:       item.model_url ?? null,

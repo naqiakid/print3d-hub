@@ -9,6 +9,7 @@ import {
   PRINT_TYPE_LABELS,
   MATERIAL_LABELS,
   SIZE_LABELS,
+  getStatusLabel,
 } from '@/lib/types'
 import { updateRequestStatus, sendQuote } from '@/lib/actions'
 import {
@@ -365,7 +366,7 @@ export default function RequestCard({ request, printer }: { request: PrintReques
           <div className="flex items-center gap-2 mb-1">
             <span className="font-semibold text-slate-900 truncate">{request.customer_name}</span>
             <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[request.status]}`}>
-              {STATUS_LABELS[request.status]}
+              {getStatusLabel(request.status, request.fulfillment)}
             </span>
           </div>
           {/* Key job info — what the owner needs at a glance */}
@@ -680,17 +681,31 @@ export default function RequestCard({ request, printer }: { request: PrintReques
             <span className="text-base leading-none mt-0.5">
               {request.fulfillment === 'delivery' ? '🚚' : '🏠'}
             </span>
-            <div>
-              <p className="font-medium text-slate-800">
-                {request.fulfillment === 'delivery' ? 'Delivery requested' : 'Pickup'}
-                {request.fulfillment === 'delivery' && printer.delivery_rate_per_km && (
-                  <span className="ml-1.5 text-xs font-normal text-slate-400">
-                    RM {Number(printer.delivery_rate_per_km).toFixed(2)}/km
-                  </span>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                <span>
+                  {request.fulfillment === 'delivery' ? 'Delivery requested' : 'Pickup'}
+                  {request.fulfillment === 'delivery' && printer.delivery_rate_per_km && (
+                    <span className="ml-1.5 text-xs font-normal text-slate-400">
+                      RM {Number(printer.delivery_rate_per_km).toFixed(2)}/km
+                    </span>
+                  )}
+                </span>
+                {request.fulfillment === 'delivery' && request.delivery_address && (
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(request.delivery_address)}${
+                      printer.lat && printer.lng ? `&origin=${printer.lat},${printer.lng}` : ''
+                    }`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> Get Directions
+                  </a>
                 )}
               </p>
               {request.fulfillment === 'delivery' && request.delivery_address && (
-                <p className="text-xs text-slate-500 mt-0.5">{request.delivery_address}</p>
+                <p className="text-xs text-slate-500 mt-1">{request.delivery_address}</p>
               )}
               {request.fulfillment === 'pickup' && printer.pickup_address && (
                 <p className="text-xs text-slate-500 mt-0.5">{printer.pickup_address}</p>
@@ -1182,10 +1197,22 @@ export default function RequestCard({ request, printer }: { request: PrintReques
                 </button>
               )}
               {request.status === 'done' && (
-                <button onClick={() => handleStatusUpdate('collected')} disabled={isPending}
-                  className="rounded-xl bg-green-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-green-600 disabled:opacity-50">
-                  {isPending ? '...' : 'Mark as Collected'}
-                </button>
+                request.fulfillment === 'delivery' ? (
+                  <button onClick={() => handleStatusUpdate('shipping')} disabled={isPending}
+                    className="rounded-xl bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50">
+                    {isPending ? '...' : 'Mark as Shipped'}
+                  </button>
+                ) : (
+                  <button onClick={() => handleStatusUpdate('collected')} disabled={isPending}
+                    className="rounded-xl bg-green-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-green-600 disabled:opacity-50">
+                    {isPending ? '...' : 'Mark as Collected'}
+                  </button>
+                )
+              )}
+              {request.status === 'shipping' && (
+                <p className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-700 font-medium">
+                  Shipped · Awaiting customer confirmation
+                </p>
               )}
             </div>
           )}

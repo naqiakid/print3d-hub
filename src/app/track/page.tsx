@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Package, Search } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { STATUS_LABELS, type RequestStatus } from '@/lib/types'
+import { STATUS_LABELS, type RequestStatus, getStatusLabel } from '@/lib/types'
 import { formatRM } from '@/lib/pricing'
 
 type RequestRow = {
@@ -10,6 +10,7 @@ type RequestRow = {
   status: string
   description: string
   quoted_price: number | null
+  fulfillment: 'pickup' | 'delivery'
   printers: { name: string } | null
 }
 
@@ -19,6 +20,7 @@ const STATUS_COLORS: Record<RequestStatus, string> = {
   accepted:  'bg-blue-100 text-blue-700',
   printing:  'bg-indigo-100 text-indigo-700',
   done:      'bg-green-100 text-green-700',
+  shipping:  'bg-blue-100 text-blue-700',
   collected: 'bg-green-100 text-green-700',
   reviewed:  'bg-green-100 text-green-700',
   declined:  'bg-red-100 text-red-600',
@@ -41,7 +43,7 @@ export default async function TrackLookupPage({
     const supabase = await createClient()
     const { data } = await supabase
       .from('requests')
-      .select('id, created_at, status, description, quoted_price, printers(name)')
+      .select('id, created_at, status, description, quoted_price, fulfillment, printers(name)')
       .eq('customer_email', trimmedEmail)
       .order('created_at', { ascending: false })
     requests = (data ?? []) as unknown as RequestRow[]
@@ -115,7 +117,7 @@ export default async function TrackLookupPage({
                 <span
                   className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[req.status as RequestStatus] ?? 'bg-slate-100 text-slate-600'}`}
                 >
-                  {STATUS_LABELS[req.status as RequestStatus] ?? req.status}
+                  {getStatusLabel(req.status as RequestStatus, req.fulfillment) ?? req.status}
                 </span>
               </div>
               <p className="mt-2 text-xs font-medium text-orange-500">View details →</p>

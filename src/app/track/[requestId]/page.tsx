@@ -3,15 +3,16 @@ import { notFound } from 'next/navigation'
 import { Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import type { PrintRequest, Shop, FilamentMaterial, Review } from '@/lib/types'
-import { STATUS_LABELS, MATERIAL_LABELS, SIZE_LABELS, QUALITY_LABELS } from '@/lib/types'
+import { STATUS_LABELS, MATERIAL_LABELS, SIZE_LABELS, QUALITY_LABELS, getStatusLabel } from '@/lib/types'
 import { formatRM } from '@/lib/pricing'
 import QuoteActions from '@/components/QuoteActions'
 import STLViewer from '@/components/STLViewerWrapper'
 import GcodeViewer from '@/components/GcodeViewerWrapper'
 import ReviseRequest from '@/components/ReviseRequest'
 import ReviewForm from '@/components/ReviewForm'
+import ReceiptActions from '@/components/ReceiptActions'
 
-const TIMELINE: { status: string; label: string }[] = [
+const PICKUP_TIMELINE: { status: string; label: string }[] = [
   { status: 'new',       label: 'Request received' },
   { status: 'quoted',    label: 'Quote sent' },
   { status: 'accepted',  label: 'Accepted' },
@@ -20,10 +21,20 @@ const TIMELINE: { status: string; label: string }[] = [
   { status: 'collected', label: 'Collected' },
 ]
 
+const DELIVERY_TIMELINE: { status: string; label: string }[] = [
+  { status: 'new',       label: 'Request received' },
+  { status: 'quoted',    label: 'Quote sent' },
+  { status: 'accepted',  label: 'Accepted' },
+  { status: 'printing',  label: 'Printing' },
+  { status: 'done',      label: 'Ready for delivery' },
+  { status: 'shipping',  label: 'Out for delivery' },
+  { status: 'collected', label: 'Delivered' },
+]
+
 const TERMINAL_NEGATIVE = ['declined', 'cancelled']
 
-function stepIndex(status: string) {
-  return TIMELINE.findIndex((s) => s.status === status)
+function stepIndex(status: string, timeline: { status: string; label: string }[]) {
+  return timeline.findIndex((s) => s.status === status)
 }
 
 const ADDON_LABELS: Record<string, string> = {
@@ -60,11 +71,44 @@ export default async function TrackPage({
 
   const printer = printerData as Pick<Shop, 'name' | 'whatsapp' | 'turnaround' | 'pickup_address' | 'materials'> | null
 
-  const { data: reviewData } = await supabase
-    .from('reviews')
-    .select('*')
-    .eq('request_id', requestId)
-    .maybeSingle()
+  type CatalogFlags = {
+    allow_material_choice: boolean
+    allow_color_choice: boolean
+    allow_custom_text: boolean
+    allow_resize: boolean
+  }
+  let catalogFlags: CatalogFlags | null = null
+
+  const [catalogResult, filamentResult, reviewResult] = await Promise.all([
+    request.catalog_item_id
+      ? supabase
+          .from('catalog_items')
+          .select('allow_material_choice, allow_color_choice, allow_custom_text, allow_resize')
+          .eq('id', request.catalog_item_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from('filaments')
+      .select('id, material, color, color_hex')
+      .eq('owner_id', request.owner_id)
+      .eq('in_stock', true)
+      .order('material')
+      .order('color'),
+    supabase
+      .from('reviews')
+      .select('*')
+      .eq('request_id', requestId)
+      .maybeSingle(),
+  ])
+
+  if (catalogResult.data) {
+    catalogFlags = catalogResult.data as CatalogFlags
+  }
+
+  type FilamentColor = { id: string; material: string; color: string; color_hex: string }
+  const filaments = (filamentResult.data ?? []) as FilamentColor[]
+
+  const { data: reviewData } = reviewResult
   const review = reviewData as unknown as Review | null
 
   // Parse special lines out of notes once — used in both the quote card and order summary
@@ -81,10 +125,12 @@ export default async function TrackPage({
     .trim()
 
   const isNegative = TERMINAL_NEGATIVE.includes(request.status)
-  const currentStep = stepIndex(request.status)
+  const isDelivery  = request.fulfillment === 'delivery'
 
-  const hasGcode   = (request.gcode_urls?.length ?? 0) > 0
-  const hasAddons  = (request.selected_addons?.length ?? 0) > 0
+  const dynamicTimeline = isDelivery ? DELIVERY_TIMELINE : PICKUP_TIMELINE
+  const currentStep = stepIndex(request.status, dynamicTimeline)
+
+  const hasGcode    = (request.gcode_urls?.length ?? 0) > 0
   const hasSupports = request.supports || request.selected_addons?.includes('supports')
 
   return (
@@ -93,7 +139,7 @@ export default async function TrackPage({
       <div className="mb-6">
         <p className="text-sm text-slate-500 mb-1">Order tracking</p>
         <h1 className="text-2xl font-bold text-slate-900">
-          {isNegative ? STATUS_LABELS[request.status] : 'Your print is on the way'}
+          {isNegative ? getStatusLabel(request.status, request.fulfillment) : 'Your print is on the way'}
         </h1>
         {printer && (
           <p className="text-sm text-slate-500 mt-1">
@@ -106,10 +152,10 @@ export default async function TrackPage({
       {!isNegative ? (
         <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6">
           <div className="space-y-0">
-            {TIMELINE.map((step, i) => {
+            {dynamicTimeline.map((step, i) => {
               const done = currentStep >= i
               const active = currentStep === i
-              const isLast = i === TIMELINE.length - 1
+              const isLast = i === dynamicTimeline.length - 1
               return (
                 <div key={step.status} className="flex gap-3">
                   <div className="flex flex-col items-center">
@@ -438,6 +484,13 @@ export default async function TrackPage({
         )}
       </div>
 
+      {/* Confirm Receipt (delivery orders in shipping status) */}
+      {request.status === 'shipping' && isDelivery && (
+        <div className="mt-6">
+          <ReceiptActions requestId={requestId} />
+        </div>
+      )}
+
       {/* Review */}
       {request.status === 'collected' && !review && (
         <div className="mt-6">
@@ -469,7 +522,10 @@ export default async function TrackPage({
           currentSelectedAddons={request.selected_addons ?? []}
           currentDeclinedAddons={request.declined_addons ?? []}
           availableMaterials={printer.materials as FilamentMaterial[]}
+          filaments={filaments}
           status={request.status}
+          allowMaterialChange={catalogFlags ? catalogFlags.allow_material_choice : true}
+          allowColorChange={catalogFlags ? catalogFlags.allow_color_choice : true}
         />
       )}
 

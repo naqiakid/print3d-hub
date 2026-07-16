@@ -1,4 +1,4 @@
-﻿'use server'
+'use server'
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -673,6 +673,35 @@ export async function updateRequestStatus(
     await deductFilamentForRequest(supabase, user.id, requestId)
   }
 
+  if (status === 'shipping') {
+    supabase
+      .from('requests')
+      .select('customer_name, customer_email, owner_id')
+      .eq('id', requestId)
+      .single()
+      .then(({ data: req }) => {
+        if (!req) return
+        supabase
+          .from('profiles')
+          .select('name')
+          .eq('id', req.owner_id)
+          .single()
+          .then(({ data: printer }) => {
+            const printerName = printer?.name ?? 'your printer'
+            const trackingUrl = `${APP_URL}/track/${requestId}`
+            sendEmail(
+              req.customer_email,
+              `Your print from ${printerName} is on the way!`,
+              `<h2>Good news!</h2>
+               <p>Hi ${req.customer_name || 'there'},</p>
+               <p><strong>${printerName}</strong> has marked your print job as out for delivery/shipped.</p>
+               <p>Once you receive your item, please confirm receipt and leave a review here:</p>
+               <p><a href="${trackingUrl}" style="font-size:16px;font-weight:bold">${trackingUrl}</a></p>`,
+            )
+          })
+      })
+  }
+
   if (status === 'collected') {
     supabase
       .from('requests')
@@ -702,6 +731,58 @@ export async function updateRequestStatus(
   }
 
   revalidatePath('/dashboard')
+}
+
+export async function confirmDeliveryReceived(
+  requestId: string,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient()
+
+  const { data: req, error: fetchErr } = await supabase
+    .from('requests')
+    .select('customer_name, customer_email, owner_id, status, fulfillment')
+    .eq('id', requestId)
+    .maybeSingle()
+
+  if (fetchErr || !req) {
+    return { error: 'Request not found.' }
+  }
+
+  if (req.status !== 'shipping' || req.fulfillment !== 'delivery') {
+    return { error: 'Request is not in shipping state or is not a delivery order.' }
+  }
+
+  const { error: updateErr } = await supabase
+    .from('requests')
+    .update({ status: 'collected' })
+    .eq('id', requestId)
+
+  if (updateErr) {
+    return { error: updateErr.message }
+  }
+
+  // Trigger feedback email
+  supabase
+    .from('profiles')
+    .select('name')
+    .eq('id', req.owner_id)
+    .single()
+    .then(({ data: printer }) => {
+      const printerName = printer?.name ?? 'your printer'
+      const trackingUrl = `${APP_URL}/track/${requestId}`
+      sendEmail(
+        req.customer_email,
+        `How was your print from ${printerName}?`,
+        `<h2>Hope you love it!</h2>
+         <p>Hi ${req.customer_name || 'there'},</p>
+         <p>Your print job from <strong>${printerName}</strong> was marked as received. Got a minute to leave a quick review?</p>
+         <p><a href="${trackingUrl}" style="font-size:16px;font-weight:bold">${trackingUrl}</a></p>`,
+      )
+    })
+
+  revalidatePath('/dashboard', 'layout')
+  revalidatePath(`/track/${requestId}`)
+  return { success: true }
 }
 
 export async function submitReview(
@@ -1073,6 +1154,8 @@ type CatalogItemData = {
   name: string
   description: string
   photo_url?: string | null
+  photo_urls?: string[]
+  video_url?: string | null
   model_url?: string | null
   stl_urls?: string[]
   allow_custom_text: boolean

@@ -6,19 +6,7 @@ import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { updateRequest } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
 
-const COLOR_PRESETS = [
-  { name: 'Any / Owner decides', hex: '#888888' },
-  { name: 'Black',   hex: '#1a1a1a' },
-  { name: 'White',   hex: '#f5f5f5' },
-  { name: 'Grey',    hex: '#6b7280' },
-  { name: 'Natural', hex: '#d4b896' },
-  { name: 'Red',     hex: '#dc2626' },
-  { name: 'Blue',    hex: '#2563eb' },
-  { name: 'Green',   hex: '#16a34a' },
-  { name: 'Yellow',  hex: '#ca8a04' },
-  { name: 'Orange',  hex: '#ea580c' },
-  { name: 'Purple',  hex: '#7c3aed' },
-]
+type FilamentColor = { id: string; material: string; color: string; color_hex: string }
 
 export default function ReviseRequest({
   requestId,
@@ -28,7 +16,10 @@ export default function ReviseRequest({
   currentSelectedAddons,
   currentDeclinedAddons,
   availableMaterials,
+  filaments,
   status,
+  allowMaterialChange = true,
+  allowColorChange = true,
 }: {
   requestId: string
   currentMaterial: string
@@ -37,7 +28,10 @@ export default function ReviseRequest({
   currentSelectedAddons: string[]
   currentDeclinedAddons: string[]
   availableMaterials: FilamentMaterial[]
+  filaments: FilamentColor[]
   status: string
+  allowMaterialChange?: boolean
+  allowColorChange?: boolean
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -48,8 +42,6 @@ export default function ReviseRequest({
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
   const [isPending, startTransition] = useTransition()
-
-  if (!['new', 'quoted'].includes(status)) return null
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -81,6 +73,12 @@ export default function ReviseRequest({
     )
   }
 
+  if (!['new', 'quoted'].includes(status)) return null
+
+  // If neither material nor color can be changed on a catalog order, there's nothing to revise
+  const canReviseAnything = allowMaterialChange || allowColorChange
+  if (!canReviseAnything) return null
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
       <button
@@ -93,7 +91,10 @@ export default function ReviseRequest({
           <p className="text-xs text-slate-400 mt-0.5">
             {status === 'quoted'
               ? 'Modifying will reset the quote — the owner will need to re-review.'
-              : 'You can update material or color before the owner quotes.'}
+              : [
+                  allowMaterialChange && 'material',
+                  allowColorChange && 'color',
+                ].filter(Boolean).join(' or ') + ' can still be updated before the owner quotes.'}
           </p>
         </div>
         <span className="text-slate-300 text-xs ml-4">{open ? '▲' : '▼'}</span>
@@ -101,40 +102,77 @@ export default function ReviseRequest({
 
       {open && (
         <form onSubmit={handleSubmit} className="border-t border-slate-100 px-5 py-4 space-y-5">
-          {/* Material */}
-          <div>
-            <h3 className="mb-2 text-xs font-semibold text-slate-700 uppercase tracking-wide">Material</h3>
-            <div className="space-y-2">
-              {availableMaterials.map((mat) => (
-                <button key={mat} type="button" onClick={() => setMaterial(mat)}
-                  className={`w-full rounded-xl border px-3 py-2 text-left transition ${material === mat ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'}`}>
-                  <p className={`text-sm font-medium ${material === mat ? 'text-orange-700' : 'text-slate-800'}`}>{MATERIAL_LABELS[mat]}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{MATERIAL_DESCRIPTIONS[mat]}</p>
-                </button>
-              ))}
+          {/* Material — only shown when the catalog item (or non-catalog order) allows it */}
+          {allowMaterialChange && (
+            <div>
+              <h3 className="mb-2 text-xs font-semibold text-slate-700 uppercase tracking-wide">Material</h3>
+              <div className="space-y-2">
+                {availableMaterials.map((mat) => (
+                  <button key={mat} type="button" onClick={() => { setMaterial(mat); setColor('Any'); setColorHex('#888888') }}
+                    className={`w-full rounded-xl border px-3 py-2 text-left transition ${material === mat ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'}`}>
+                    <p className={`text-sm font-medium ${material === mat ? 'text-orange-700' : 'text-slate-800'}`}>{MATERIAL_LABELS[mat]}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{MATERIAL_DESCRIPTIONS[mat]}</p>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Color */}
-          <div>
-            <h3 className="mb-2 text-xs font-semibold text-slate-700 uppercase tracking-wide">Color</h3>
-            <div className="flex flex-wrap gap-2">
-              {COLOR_PRESETS.map(({ name, hex }) => (
-                <button key={name} type="button"
-                  onClick={() => { setColor(name === 'Any / Owner decides' ? 'Any' : name); setColorHex(hex) }}
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                    (name === 'Any / Owner decides' ? color === 'Any' : color === name)
-                      ? 'border-orange-500 bg-orange-50 text-orange-700'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
-                  }`}>
-                  {name !== 'Any / Owner decides' && (
-                    <span className="h-3 w-3 rounded-full border border-slate-200 shrink-0" style={{ background: hex }} />
-                  )}
-                  {name}
-                </button>
-              ))}
+          {/* Color — filtered to the currently selected material, from real filament stock */}
+          {allowColorChange && (
+            <div>
+              <h3 className="mb-2 text-xs font-semibold text-slate-700 uppercase tracking-wide">Color</h3>
+              {(() => {
+                const colorsForMaterial = filaments.filter((f) => f.material === material)
+                const colorOptions: { id: string; name: string; hex: string }[] =
+                  colorsForMaterial.length > 0
+                    ? [
+                        { id: '__any__', name: 'Any / Owner decides', hex: '#888888' },
+                        ...colorsForMaterial.map((f) => ({ id: f.id, name: f.color, hex: f.color_hex })),
+                      ]
+                    : [{ id: '__any__', name: 'Any / Owner decides', hex: '#888888' }]
+
+                return (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      {colorOptions.map(({ id, name, hex }) => {
+                        const isAny = id === '__any__'
+                        const isSelected = isAny ? color === 'Any' : color === name
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => {
+                              setColor(isAny ? 'Any' : name)
+                              setColorHex(hex)
+                            }}
+                            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                              isSelected
+                                ? 'border-orange-500 bg-orange-50 text-orange-700'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
+                            }`}
+                          >
+                            {!isAny && (
+                              <span
+                                className="h-3 w-3 rounded-full border border-slate-200 shrink-0"
+                                style={{ background: hex }}
+                              />
+                            )}
+                            {name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {colorsForMaterial.length === 0 && (
+                      <p className="mt-1.5 text-[11px] text-slate-400">
+                        No {MATERIAL_LABELS[material as FilamentMaterial] ?? material} filaments in stock — owner will choose.
+                      </p>
+                    )}
+                  </>
+                )
+              })()}
             </div>
-          </div>
+          )}
 
           {/* Notes */}
           <div>

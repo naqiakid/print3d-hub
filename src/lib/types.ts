@@ -20,6 +20,7 @@ export type RequestStatus =
   | 'accepted'
   | 'printing'
   | 'done'
+  | 'shipping'
   | 'collected'
   | 'declined'
   | 'cancelled'
@@ -177,7 +178,9 @@ export type CatalogItem = {
   owner_id: string
   name: string
   description: string
-  photo_url: string | null
+  photo_url: string | null      // legacy single photo (kept for back-compat)
+  photo_urls: string[]          // uploaded product photos
+  video_url: string | null      // YouTube / direct video link
   model_url: string | null
   stl_urls: string[]
   allow_custom_text: boolean
@@ -257,10 +260,17 @@ export const STATUS_LABELS: Record<RequestStatus, string> = {
   accepted: 'Accepted',
   printing: 'Printing',
   done: 'Ready for Pickup',
+  shipping: 'Shipped',
   collected: 'Collected',
   declined: 'Declined',
   cancelled: 'Cancelled',
   reviewed: 'Reviewed',
+}
+
+export function getStatusLabel(status: RequestStatus, fulfillment?: 'pickup' | 'delivery' | null): string {
+  if (status === 'done' && fulfillment === 'delivery') return 'Ready for Delivery'
+  if (status === 'collected' && fulfillment === 'delivery') return 'Delivered'
+  return STATUS_LABELS[status]
 }
 
 export const STATUS_COLORS: Record<RequestStatus, string> = {
@@ -269,6 +279,7 @@ export const STATUS_COLORS: Record<RequestStatus, string> = {
   accepted: 'bg-green-100 text-green-700',
   printing: 'bg-purple-100 text-purple-700',
   done: 'bg-teal-100 text-teal-700',
+  shipping: 'bg-blue-100 text-blue-700',
   collected: 'bg-slate-100 text-slate-600',
   declined: 'bg-red-100 text-red-700',
   cancelled: 'bg-slate-100 text-slate-500',

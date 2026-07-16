@@ -118,36 +118,38 @@ export default async function DashboardPage() {
       />
 
       {/* ── Header ── */}
-      <div className="mb-8 flex items-start justify-between gap-4">
+      <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{shop.name}</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-slate-900">{shop.name}</h1>
+            <span
+              className={`rounded-full px-3 py-1 text-sm font-medium ${
+                shop.available ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {shop.available ? 'Available' : 'Busy'}
+            </span>
+          </div>
           <p className="mt-0.5 text-sm text-slate-500">
             {printerRows.length} machine{printerRows.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span
-            className={`rounded-full px-3 py-1 text-sm font-medium ${
-              shop.available ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-            }`}
-          >
-            {shop.available ? 'Available' : 'Busy'}
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/dashboard/price-calculator"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition text-center flex-1 sm:flex-initial"
           >
             Price Calculator
           </Link>
           <Link
             href="/dashboard/equipment"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition text-center flex-1 sm:flex-initial"
           >
-            Equipment & Filaments
+            Equipment
           </Link>
           <Link
             href="/dashboard/listing"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition text-center flex-1 sm:flex-initial"
           >
             Edit listing
           </Link>
@@ -179,7 +181,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── Stats ── */}
-      <div className="mb-8 grid grid-cols-3 gap-4">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[
           { icon: Package, label: 'New requests', value: newCount, color: 'text-blue-600', bg: 'bg-blue-50' },
           { icon: Clock, label: 'In progress', value: activeCount, color: 'text-purple-600', bg: 'bg-purple-50' },
