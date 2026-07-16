@@ -336,10 +336,11 @@ export function getDirectDownloadUrl(url: string | null | undefined): string {
     return url.replace(/[?&]dl=0/g, '?raw=1').replace(/[?&]dl=1/g, '?raw=1')
   }
   
-  // Google Drive link conversion (extract ID and output docs.google.com direct download url)
+  // Google Drive link conversion (extract ID and route via CORS proxy)
   const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/)
   if (driveMatch && driveMatch[1]) {
-    return `https://docs.google.com/uc?export=download&id=${driveMatch[1]}`
+    const rawUrl = `https://docs.google.com/uc?export=download&id=${driveMatch[1]}`
+    return `/api/proxy-file?url=${encodeURIComponent(rawUrl)}`
   }
   
   return url
