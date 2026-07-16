@@ -594,6 +594,9 @@ export async function updateRequest(
     selected_addons: string[]
     declined_addons: string[]
     notes?: string
+    fulfillment?: 'pickup' | 'delivery'
+    delivery_address?: string | null
+    delivery_cost?: number | null
   },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient()
@@ -606,6 +609,9 @@ export async function updateRequest(
       selected_addons: data.selected_addons,
       declined_addons: data.declined_addons,
       ...(data.notes !== undefined ? { notes: data.notes } : {}),
+      ...(data.fulfillment !== undefined ? { fulfillment: data.fulfillment } : {}),
+      ...(data.delivery_address !== undefined ? { delivery_address: data.delivery_address } : {}),
+      ...(data.delivery_cost !== undefined ? { delivery_cost: data.delivery_cost } : {}),
       status: 'new',  // revert to new so owner re-reviews
     })
     .eq('id', requestId)

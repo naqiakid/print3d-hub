@@ -65,11 +65,11 @@ export default async function TrackPage({
 
   const { data: printerData } = await supabase
     .from('profiles')
-    .select('name, whatsapp, turnaround, pickup_address, materials')
+    .select('name, whatsapp, turnaround, pickup_address, materials, lat, lng, delivery_available, delivery_rate_per_km')
     .eq('id', request.owner_id)
     .maybeSingle()
 
-  const printer = printerData as Pick<Shop, 'name' | 'whatsapp' | 'turnaround' | 'pickup_address' | 'materials'> | null
+  const printer = printerData as Pick<Shop, 'name' | 'whatsapp' | 'turnaround' | 'pickup_address' | 'materials' | 'lat' | 'lng' | 'delivery_available' | 'delivery_rate_per_km'> | null
 
   type CatalogFlags = {
     allow_material_choice: boolean
@@ -513,21 +513,36 @@ export default async function TrackPage({
       )}
 
       {/* Revise request */}
-      {['new', 'quoted'].includes(request.status) && printer?.materials && (
-        <ReviseRequest
-          requestId={requestId}
-          currentMaterial={request.material}
-          currentColor={request.color}
-          currentColorHex={request.color_hex}
-          currentSelectedAddons={request.selected_addons ?? []}
-          currentDeclinedAddons={request.declined_addons ?? []}
-          availableMaterials={printer.materials as FilamentMaterial[]}
-          filaments={filaments}
-          status={request.status}
-          allowMaterialChange={catalogFlags ? catalogFlags.allow_material_choice : true}
-          allowColorChange={catalogFlags ? catalogFlags.allow_color_choice : true}
-        />
-      )}
+      {['new', 'quoted'].includes(request.status) && printer?.materials && (() => {
+        const qtyMatch = (request.notes ?? '').match(/Quantity: (\d+) copies/)
+        const parsedQuantity = qtyMatch ? parseInt(qtyMatch[1], 10) : 1
+        return (
+          <ReviseRequest
+            requestId={requestId}
+            currentMaterial={request.material}
+            currentColor={request.color}
+            currentColorHex={request.color_hex}
+            currentSelectedAddons={request.selected_addons ?? []}
+            currentDeclinedAddons={request.declined_addons ?? []}
+            availableMaterials={printer.materials as FilamentMaterial[]}
+            filaments={filaments}
+            status={request.status}
+            allowMaterialChange={catalogFlags ? catalogFlags.allow_material_choice : true}
+            allowColorChange={catalogFlags ? catalogFlags.allow_color_choice : true}
+            currentQuantity={parsedQuantity}
+            currentFulfillment={request.fulfillment ?? 'pickup'}
+            currentDeliveryAddress={request.delivery_address}
+            currentNotes={request.notes ?? ''}
+            printer={{
+              pickup_address: printer.pickup_address,
+              delivery_available: printer.delivery_available,
+              delivery_rate_per_km: printer.delivery_rate_per_km,
+              lat: printer.lat,
+              lng: printer.lng,
+            }}
+          />
+        )
+      })()}
 
       {/* Contact */}
       {printer?.whatsapp && (
