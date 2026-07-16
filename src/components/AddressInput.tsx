@@ -170,6 +170,8 @@ export default function AddressInput({
 
       <div className="relative">
         <textarea
+          id="deliveryAddress"
+          name="deliveryAddress"
           value={value}
           onChange={(e) => {
             onChange(e.target.value)
