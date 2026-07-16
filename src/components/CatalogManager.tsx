@@ -71,7 +71,6 @@ type FormState = {
   resize_min_pct: number
   resize_max_pct: number
   base_price: string
-  assembly_offsets: PartAssembly[]
 }
 
 const BLANK: FormState = {
@@ -96,7 +95,6 @@ const BLANK: FormState = {
   resize_min_pct: 80,
   resize_max_pct: 150,
   base_price: '',
-  assembly_offsets: [],
 }
 
 function itemToForm(item: CatalogItem): FormState {
@@ -126,7 +124,6 @@ function itemToForm(item: CatalogItem): FormState {
     resize_min_pct: item.resize_min_pct,
     resize_max_pct: item.resize_max_pct,
     base_price: item.base_price != null ? String(item.base_price) : '',
-    assembly_offsets: parseAssemblyMetadata(item.description),
   }
 }
 
@@ -194,7 +191,7 @@ export default function CatalogManager({
 
     const data = {
       name: form.name.trim(),
-      description: serializeAssemblyMetadata(form.description.trim(), form.assembly_offsets),
+      description: form.description.trim(),
       category: form.category.trim() || null,
       photo_url: (form.photo_urls[0] ?? form.photo_url.trim()) || null,
       photo_urls: form.photo_urls,
@@ -620,17 +617,7 @@ function CatalogForm({
   const [uploadError, setUploadError] = useState('')
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
   const [photoUploadError, setPhotoUploadError] = useState('')
-  const updateOffset = (idx: number, key: keyof PartAssembly, val: number) => {
-    const offsets = [...form.assembly_offsets]
-    while (offsets.length < form.stl_urls.length) {
-      offsets.push({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 })
-    }
-    offsets[idx] = {
-      ...offsets[idx],
-      [key]: val
-    }
-    set('assembly_offsets', offsets)
-  }
+
   async function handlePhotoFiles(files: FileList | File[] | null) {
     if (!files || files.length === 0) return
     const allowed = Array.from(files).filter((f) => /\.(jpe?g|png|webp|gif)$/i.test(f.name))
@@ -862,131 +849,13 @@ function CatalogForm({
           {uploading ? 'Uploading…' : 'Choose .stl / .3mf files'}
         </button>
         {uploadError && <p className="mt-1 text-[11px] text-red-500">{uploadError}</p>}
-      </div>
-
-      {/* ── 3D Assembly Editor ── */}
-      {form.stl_urls.length > 1 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-          <div>
-            <p className="text-xs font-semibold text-slate-700">🧩 3D Model Assembly Editor</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Drag sliders to visually align and arrange the parts so they fit together.</p>
-          </div>
-
-          {/* 3D Preview inside Catalog Manager Form */}
-          <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50" style={{ height: 260 }}>
-            <STLViewer
-              urls={form.stl_urls}
-              colors={(() => {
-                const hexes = form.color_hex.split('|')
-                while (hexes.length < form.stl_urls.length) hexes.push('#888888')
-                return hexes
-              })()}
-              assemblyOffsets={form.assembly_offsets}
-              className="h-full"
-            />
-          </div>
-
-          {/* Position & Rotation Sliders for each Part */}
-          <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
-            {form.stl_urls.map((url, i) => {
-              const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
-              const offset = form.assembly_offsets[i] || { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }
-              return (
-                <div key={url} className="rounded-xl border border-slate-100 bg-slate-55/40 p-3 space-y-2">
-                  <div className="flex items-center justify-between border-b border-slate-200/50 pb-1.5">
-                    <span className="text-[11px] font-bold text-slate-700 truncate max-w-[70%]">{filename}</span>
-                    <span className="text-[9px] bg-orange-100 text-orange-700 font-bold px-2 py-0.5 rounded-full">Part {i + 1}</span>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Position coordinates */}
-                    <div className="space-y-1">
-                      <p className="text-[9px] font-bold text-slate-450 uppercase tracking-wider mb-0.5">Position (mm)</p>
-                      
-                      {/* X Slider */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-bold text-slate-400 w-3 shrink-0">X</span>
-                        <input
-                          type="range" min="-150" max="150" step="1"
-                          value={offset.x}
-                          onChange={(e) => updateOffset(i, 'x', Number(e.target.value))}
-                          className="flex-1 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                        />
-                        <span className="text-[9px] font-mono text-slate-600 w-8 text-right shrink-0">{offset.x}</span>
-                      </div>
-
-                      {/* Y Slider */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-bold text-slate-400 w-3 shrink-0">Y</span>
-                        <input
-                          type="range" min="-150" max="150" step="1"
-                          value={offset.y}
-                          onChange={(e) => updateOffset(i, 'y', Number(e.target.value))}
-                          className="flex-1 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                        />
-                        <span className="text-[9px] font-mono text-slate-600 w-8 text-right shrink-0">{offset.y}</span>
-                      </div>
-
-                      {/* Z Slider */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-bold text-slate-400 w-3 shrink-0">Z</span>
-                        <input
-                          type="range" min="-150" max="150" step="1"
-                          value={offset.z}
-                          onChange={(e) => updateOffset(i, 'z', Number(e.target.value))}
-                          className="flex-1 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                        />
-                        <span className="text-[9px] font-mono text-slate-600 w-8 text-right shrink-0">{offset.z}</span>
-                      </div>
-                    </div>
-
-                    {/* Rotation coordinates */}
-                    <div className="space-y-1">
-                      <p className="text-[9px] font-bold text-slate-450 uppercase tracking-wider mb-0.5">Rotation (deg)</p>
-                      
-                      {/* Rx Slider */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-bold text-slate-400 w-4 shrink-0">Rx</span>
-                        <input
-                          type="range" min="-180" max="180" step="5"
-                          value={offset.rx}
-                          onChange={(e) => updateOffset(i, 'rx', Number(e.target.value))}
-                          className="flex-1 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                        />
-                        <span className="text-[9px] font-mono text-slate-600 w-8 text-right shrink-0">{offset.rx}°</span>
-                      </div>
-
-                      {/* Ry Slider */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-bold text-slate-400 w-4 shrink-0">Ry</span>
-                        <input
-                          type="range" min="-180" max="180" step="5"
-                          value={offset.ry}
-                          onChange={(e) => updateOffset(i, 'ry', Number(e.target.value))}
-                          className="flex-1 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                        />
-                        <span className="text-[9px] font-mono text-slate-600 w-8 text-right shrink-0">{offset.ry}°</span>
-                      </div>
-
-                      {/* Rz Slider */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-bold text-slate-400 w-4 shrink-0">Rz</span>
-                        <input
-                          type="range" min="-180" max="180" step="5"
-                          value={offset.rz}
-                          onChange={(e) => updateOffset(i, 'rz', Number(e.target.value))}
-                          className="flex-1 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                        />
-                        <span className="text-[9px] font-mono text-slate-600 w-8 text-right shrink-0">{offset.rz}°</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+        <div className="mt-3 rounded-xl bg-orange-50/50 border border-orange-100 p-3 space-y-1">
+          <p className="text-[11px] font-bold text-orange-700 flex items-center gap-1">💡 Tip for Multi-Part Assemblies</p>
+          <p className="text-[10px] text-slate-500 leading-relaxed">
+            Assemble and align your parts in your slicer (e.g., OrcaSlicer, Bambu Studio) or CAD tool first. In the <b>Objects</b> tab, right-click each part and select <b>Export as STL</b>. When you upload those separate STL files here, the 3D viewer will automatically assemble them correctly!
+          </p>
         </div>
-      )}
+      </div>
 
       {/* ── Material & Color ── */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
