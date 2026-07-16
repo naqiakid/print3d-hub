@@ -19,6 +19,8 @@ import {
   DEFAULT_WASTE_PERCENT,
 } from '@/lib/pricing'
 
+import AddressInput from './AddressInput'
+
 const STLViewer = lazy(() => import('./STLViewer'))
 
 const COLOR_PRESETS = [
@@ -583,6 +585,7 @@ export default function RequestForm({
   const [deliveryGeoLoading, setDeliveryGeoLoading] = useState(false)
   const [deliveryEstimate, setDeliveryEstimate]     = useState<{ km: number; fee: number } | null>(null)
   const [deliveryGeoError, setDeliveryGeoError]     = useState('')
+  const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [pending, setPending]         = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [selectedCaps, setSelectedCaps] = useState<Set<string>>(new Set())
@@ -659,6 +662,32 @@ export default function RequestForm({
     return () => { clearTimeout(timer); setOgLoading(false) }
   }, [modelUrl, modelMode])
 
+  const calculateDistanceAndFee = useCallback((cLat: number, cLng: number) => {
+    if (!printer.lat || !printer.lng) return
+    const printerLat = printer.lat
+    const printerLng = printer.lng
+    const R    = 6371
+    const dLat = (cLat - printerLat) * Math.PI / 180
+    const dLng = (cLng - printerLng) * Math.PI / 180
+    const a    = Math.sin(dLat / 2) ** 2 + Math.cos(printerLat * Math.PI / 180) * Math.cos(cLat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+    const straight = R * 2 * Math.asin(Math.sqrt(a))
+    const road  = straight * 1.3
+    const rate  = printer.delivery_rate_per_km ?? 1.00
+    const fee   = Math.ceil(road * rate * 10) / 10
+    setDeliveryEstimate({ km: Math.round(road * 10) / 10, fee })
+  }, [printer.lat, printer.lng, printer.delivery_rate_per_km])
+
+  const handleSelectCoords = (coords: { lat: number; lng: number } | null) => {
+    setSelectedCoords(coords)
+    if (coords) {
+      calculateDistanceAndFee(coords.lat, coords.lng)
+      setDeliveryGeoError('')
+      setDeliveryGeoLoading(false)
+    } else {
+      setDeliveryEstimate(null)
+    }
+  }
+
   // Geocode delivery address and estimate fee (debounced, Nominatim OSM)
   useEffect(() => {
     if (fulfillment !== 'delivery' || !deliveryAddress.trim() || !printer.lat || !printer.lng) {
@@ -666,6 +695,8 @@ export default function RequestForm({
       setDeliveryGeoError('')
       return
     }
+    if (selectedCoords) return
+
     const printerLat = printer.lat
     const printerLng = printer.lng
     setDeliveryGeoLoading(true)
@@ -680,15 +711,7 @@ export default function RequestForm({
         if (!data?.[0]) { setDeliveryGeoError('Address not found — try adding postcode or city'); setDeliveryGeoLoading(false); return }
         const cLat = parseFloat(data[0].lat)
         const cLng = parseFloat(data[0].lon)
-        const R    = 6371
-        const dLat = (cLat - printerLat) * Math.PI / 180
-        const dLng = (cLng - printerLng) * Math.PI / 180
-        const a    = Math.sin(dLat / 2) ** 2 + Math.cos(printerLat * Math.PI / 180) * Math.cos(cLat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
-        const straight = R * 2 * Math.asin(Math.sqrt(a))
-        const road  = straight * 1.3
-        const rate  = printer.delivery_rate_per_km ?? 1.00
-        const fee   = Math.ceil(road * rate * 10) / 10
-        setDeliveryEstimate({ km: Math.round(road * 10) / 10, fee })
+        calculateDistanceAndFee(cLat, cLng)
         setDeliveryGeoLoading(false)
       } catch {
         setDeliveryGeoError('Could not estimate distance')
@@ -697,7 +720,7 @@ export default function RequestForm({
     }, 800)
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deliveryAddress, fulfillment])
+  }, [deliveryAddress, fulfillment, selectedCoords, calculateDistanceAndFee])
 
   // Rebuild blob URLs whenever file list changes
   useEffect(() => {
@@ -1731,19 +1754,13 @@ export default function RequestForm({
             </div>
             {fulfillment === 'delivery' && (
               <div className="mt-3 space-y-2">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">
-                    Delivery address <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    required
-                    rows={2}
-                    placeholder="Full address including postcode and city"
-                    className={`${inputClass} resize-none`}
-                  />
-                </div>
+                <AddressInput
+                  value={deliveryAddress}
+                  onChange={setDeliveryAddress}
+                  onSelectCoords={handleSelectCoords}
+                  required
+                  className={inputClass}
+                />
                 {deliveryGeoLoading && (
                   <p className="text-xs text-slate-400">Estimating distance…</p>
                 )}

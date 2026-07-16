@@ -6,6 +6,7 @@ import type { CatalogItem, RequestPrinterView, PrintProfile, Filament, FilamentM
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { submitRequest } from '@/lib/actions'
 import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
+import AddressInput from './AddressInput'
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
@@ -314,8 +315,16 @@ export default function CatalogOrderForm({
             )}
           </div>
           {fulfillment === 'delivery' && (
-            <input value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)}
-              placeholder="Delivery address" className={`${inputClass} mt-2`} />
+            <div className="mt-2">
+              <AddressInput
+                value={deliveryAddress}
+                onChange={setDeliveryAddress}
+                onSelectCoords={() => {}}
+                placeholder="Delivery address"
+                required
+                className={inputClass}
+              />
+            </div>
           )}
         </div>
       )}
