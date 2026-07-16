@@ -617,7 +617,20 @@ function CatalogForm({
   const [uploadError, setUploadError] = useState('')
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
   const [photoUploadError, setPhotoUploadError] = useState('')
+  const [linkInput, setLinkInput] = useState('')
+  const [linkError, setLinkError] = useState('')
 
+  const handleAddLink = () => {
+    setLinkError('')
+    const trimmed = linkInput.trim()
+    if (!trimmed) return
+    if (!/^https?:\/\//i.test(trimmed)) {
+      setLinkError('Please enter a valid URL starting with http:// or https://')
+      return
+    }
+    set('stl_urls', [...form.stl_urls, trimmed])
+    setLinkInput('')
+  }
   async function handlePhotoFiles(files: FileList | File[] | null) {
     if (!files || files.length === 0) return
     const allowed = Array.from(files).filter((f) => /\.(jpe?g|png|webp|gif)$/i.test(f.name))
@@ -830,7 +843,14 @@ function CatalogForm({
         {form.stl_urls.length > 0 && (
           <div className="mb-2 space-y-1.5">
             {form.stl_urls.map((url, i) => {
-              const filename = url.split('/').pop()?.split('?')[0] ?? `File ${i + 1}`
+              let filename = url.split('/').pop()?.split('?')[0] ?? `File ${i + 1}`
+              if (url.includes('drive.google.com')) {
+                filename = `Google Drive File (${i + 1})`
+              } else if (url.includes('dropbox.com')) {
+                filename = `Dropbox File (${i + 1})`
+              } else {
+                filename = filename.replace(/^\d+-/, '') // clean date prefix
+              }
               return (
                 <div key={url} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
                   <FileBox className="h-3.5 w-3.5 shrink-0 text-orange-500" />
@@ -849,6 +869,26 @@ function CatalogForm({
           {uploading ? 'Uploading…' : 'Choose .stl / .3mf files'}
         </button>
         {uploadError && <p className="mt-1 text-[11px] text-red-500">{uploadError}</p>}
+        
+        {/* Paste link input */}
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="text"
+            value={linkInput}
+            onChange={(e) => setLinkInput(e.target.value)}
+            placeholder="Or paste Google Drive/Dropbox shared URL..."
+            className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition"
+          />
+          <button
+            type="button"
+            onClick={handleAddLink}
+            className="rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-700 transition"
+          >
+            Add Link
+          </button>
+        </div>
+        {linkError && <p className="mt-1 text-[11px] text-red-500">{linkError}</p>}
+
         <div className="mt-3 rounded-xl bg-orange-50/50 border border-orange-100 p-3 space-y-1">
           <p className="text-[11px] font-bold text-orange-700 flex items-center gap-1">💡 Tip for Multi-Part Assemblies</p>
           <p className="text-[10px] text-slate-500 leading-relaxed">
