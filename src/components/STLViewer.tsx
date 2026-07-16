@@ -7,7 +7,7 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
-import { PartAssembly } from '@/lib/types'
+import { PartAssembly, getDirectDownloadUrl } from '@/lib/types'
 
 type Props = {
   urls?: string[]
@@ -253,12 +253,13 @@ export default function STLViewer({
         onAllLoaded()
       }
 
+      const downloadUrl = getDirectDownloadUrl(url)
       if (ext === '3mf') {
-        new ThreeMFLoader().load(url, onGroupLoaded, undefined, onError)
+        new ThreeMFLoader().load(downloadUrl, onGroupLoaded, undefined, onError)
       } else if (ext === 'obj') {
-        new OBJLoader().load(url, onGroupLoaded, undefined, onError)
+        new OBJLoader().load(downloadUrl, onGroupLoaded, undefined, onError)
       } else {
-        new STLLoader().load(url, onGeometry, undefined, onError)
+        new STLLoader().load(downloadUrl, onGeometry, undefined, onError)
       }
     })
 

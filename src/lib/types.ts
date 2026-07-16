@@ -327,3 +327,20 @@ export function serializeAssemblyMetadata(description: string, metadata: PartAss
   const clean = cleanDescription(description)
   return `${clean}\n\n<!-- ASSEMBLY_METADATA: ${JSON.stringify(metadata)} -->`
 }
+
+export function getDirectDownloadUrl(url: string | null | undefined): string {
+  if (!url) return ''
+  
+  // Dropbox link conversion (change dl=0 to raw=1)
+  if (url.includes('dropbox.com')) {
+    return url.replace(/[?&]dl=0/g, '?raw=1').replace(/[?&]dl=1/g, '?raw=1')
+  }
+  
+  // Google Drive link conversion (extract ID and output docs.google.com direct download url)
+  const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+  if (driveMatch && driveMatch[1]) {
+    return `https://docs.google.com/uc?export=download&id=${driveMatch[1]}`
+  }
+  
+  return url
+}
