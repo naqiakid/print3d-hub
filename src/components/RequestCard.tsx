@@ -447,6 +447,8 @@ export default function RequestCard({ request, printer }: { request: PrintReques
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           draggable="false"
           onDragStart={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           {/* Backdrop */}
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setExpanded(false)} />
