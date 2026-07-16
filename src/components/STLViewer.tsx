@@ -213,20 +213,20 @@ export default function STLViewer({
 
       // ── 3MF / OBJ: loader returns Group ──────────────────────────
       function onGroupLoaded(obj: THREE.Group) {
+        const meshes: THREE.Mesh[] = []
+        obj.traverse((c) => { if (c instanceof THREE.Mesh) meshes.push(c) })
+
         const parts = partColorsRef.current[i]
         if (parts && parts.length > 0) {
-          // Apply a distinct colour to each top-level child (one per 3MF object)
-          obj.children.forEach((child, j) => {
-            const mat = makeMat(parts[j] || colorsRef.current[i] || '#cccccc')
-            child.traverse((c) => { if (c instanceof THREE.Mesh) c.material = mat })
+          meshes.forEach((mesh, j) => {
+            mesh.material = makeMat(parts[j] || colorsRef.current[i] || '#cccccc')
           })
         } else {
           // If this is a multi-part container (e.g. 3MF assembly) but has no custom part colors assigned directly,
           // make it inherit the colors of the other files loaded in the viewer!
-          obj.children.forEach((child, j) => {
+          meshes.forEach((mesh, j) => {
             const inheritedColor = colorsRef.current[j] || colorsRef.current[i] || '#cccccc'
-            const mat = makeMat(inheritedColor)
-            child.traverse((c) => { if (c instanceof THREE.Mesh) c.material = mat })
+            mesh.material = makeMat(inheritedColor)
           })
         }
 
@@ -258,12 +258,53 @@ export default function STLViewer({
       }
 
       const downloadUrl = getDirectDownloadUrl(url)
-      if (ext === '3mf') {
-        new ThreeMFLoader().load(downloadUrl, onGroupLoaded, undefined, onError)
-      } else if (ext === 'obj') {
-        new OBJLoader().load(downloadUrl, onGroupLoaded, undefined, onError)
+      const isGoogleOrDropbox = url.includes('drive.google.com') || url.includes('dropbox.com') || url.startsWith('/')
+
+      if (isGoogleOrDropbox) {
+        fetch(downloadUrl)
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP error ${res.status}`)
+            return res.arrayBuffer()
+          })
+          .then((buffer) => {
+            const view = new DataView(buffer)
+            // Check ZIP / 3MF magic bytes 'PK\x03\x04' (0x504B0304)
+            const isZip = buffer.byteLength >= 4 && view.getUint32(0, false) === 0x504B0304
+
+            if (isZip) {
+              const loader = new ThreeMFLoader()
+              const obj = loader.parse(buffer)
+              onGroupLoaded(obj)
+            } else {
+              try {
+                const loader = new STLLoader()
+                const geometry = loader.parse(buffer)
+                onGeometry(geometry)
+              } catch (stlErr) {
+                try {
+                  const loader = new OBJLoader()
+                  const decoder = new TextDecoder('utf-8')
+                  const text = decoder.decode(buffer)
+                  const obj = loader.parse(text)
+                  onGroupLoaded(obj)
+                } catch (objErr) {
+                  throw new Error('Unsupported 3D file format signature.')
+                }
+              }
+            }
+          })
+          .catch((err) => {
+            console.error("Loader error:", err)
+            onError()
+          })
       } else {
-        new STLLoader().load(downloadUrl, onGeometry, undefined, onError)
+        if (ext === '3mf') {
+          new ThreeMFLoader().load(downloadUrl, onGroupLoaded, undefined, onError)
+        } else if (ext === 'obj') {
+          new OBJLoader().load(downloadUrl, onGroupLoaded, undefined, onError)
+        } else {
+          new STLLoader().load(downloadUrl, onGeometry, undefined, onError)
+        }
       }
     })
 
@@ -327,30 +368,27 @@ export default function STLViewer({
       const parts    = (partColorsProp ?? [])[i]
       const objColor = (colorsProp ?? [])[i] || '#cccccc'
 
-      if (parts && parts.length > 0 && obj instanceof THREE.Group) {
-        obj.children.forEach((child, j) => {
-          const color = parts[j] || objColor
-          child.traverse((c) => {
-            if (c instanceof THREE.Mesh) {
-              const mat = c.material as THREE.MeshPhongMaterial
-              mat.color.set(new THREE.Color(color))
-              mat.needsUpdate = true
-            }
+      if (obj instanceof THREE.Group) {
+        const meshes: THREE.Mesh[] = []
+        obj.traverse((c) => { if (c instanceof THREE.Mesh) meshes.push(c) })
+
+        if (parts && parts.length > 0) {
+          meshes.forEach((mesh, j) => {
+            const color = parts[j] || objColor
+            const mat = mesh.material as THREE.MeshPhongMaterial
+            mat.color.set(new THREE.Color(color))
+            mat.needsUpdate = true
           })
-        })
-      } else if (obj instanceof THREE.Group) {
-        // If this is a group (e.g. 3MF assembly) but has no custom part colors assigned directly,
-        // make it inherit the colors of the other files loaded in the viewer!
-        obj.children.forEach((child, j) => {
-          const color = (colorsProp ?? [])[j] || objColor
-          child.traverse((c) => {
-            if (c instanceof THREE.Mesh) {
-              const mat = c.material as THREE.MeshPhongMaterial
-              mat.color.set(new THREE.Color(color))
-              mat.needsUpdate = true
-            }
+        } else {
+          // If this is a group (e.g. 3MF assembly) but has no custom part colors assigned directly,
+          // make it inherit the colors of the other files loaded in the viewer!
+          meshes.forEach((mesh, j) => {
+            const color = (colorsProp ?? [])[j] || objColor
+            const mat = mesh.material as THREE.MeshPhongMaterial
+            mat.color.set(new THREE.Color(color))
+            mat.needsUpdate = true
           })
-        })
+        }
       } else {
         obj.traverse((c) => {
           if (c instanceof THREE.Mesh) {
