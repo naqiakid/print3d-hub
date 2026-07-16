@@ -18,6 +18,7 @@ type Props = {
   meshMapping?: Record<number, number>
   file?: File
   highlightIndex?: number   // which slot to spotlight (-1 or undefined = all normal)
+  highlightMeshIndex?: number // which specific sub-mesh to spotlight inside a group
   className?: string
 }
 
@@ -30,6 +31,7 @@ export default function STLViewer({
   meshMapping,
   file,
   highlightIndex,
+  highlightMeshIndex,
   className,
 }: Props) {
   const mountRef    = useRef<HTMLDivElement>(null)
@@ -492,25 +494,37 @@ export default function STLViewer({
     const objects = objectsRef.current.filter(Boolean)
     if (objects.length === 0) return
 
-    const active = highlightIndex !== undefined && highlightIndex >= 0
+    const activeFile = highlightIndex !== undefined && highlightIndex >= 0
+    const activeMesh = highlightMeshIndex !== undefined && highlightMeshIndex >= 0
 
     objects.forEach((obj, i) => {
-      const applyToMesh = (m: THREE.Mesh) => {
-        const mat = m.material as THREE.MeshPhongMaterial
-        if (!active) {
+      if (obj instanceof THREE.Group) {
+        const meshes: THREE.Mesh[] = []
+        obj.traverse((c) => { if (c instanceof THREE.Mesh) meshes.push(c) })
+        
+        meshes.forEach((mesh, j) => {
+          const mat = mesh.material as THREE.MeshPhongMaterial
+          if (!activeFile && !activeMesh) {
+            mat.opacity = 1; mat.transparent = false; mat.emissive.set(0x000000)
+          } else if (activeMesh && j === highlightMeshIndex) {
+            mat.opacity = 1; mat.transparent = false; mat.emissive.set(0xff4500) // Glowing red-orange
+          } else if (activeFile && i === highlightIndex) {
+            mat.opacity = 1; mat.transparent = false; mat.emissive.set(0x555555)
+          } else {
+            mat.opacity = 0.15; mat.transparent = true; mat.emissive.set(0x000000)
+          }
+          mat.needsUpdate = true
+        })
+      } else if (obj instanceof THREE.Mesh) {
+        const mat = obj.material as THREE.MeshPhongMaterial
+        if (!activeFile && !activeMesh) {
           mat.opacity = 1; mat.transparent = false; mat.emissive.set(0x000000)
-        } else if (i === highlightIndex) {
+        } else if (activeFile && i === highlightIndex) {
           mat.opacity = 1; mat.transparent = false; mat.emissive.set(0x555555)
         } else {
-          mat.opacity = 0.12; mat.transparent = true; mat.emissive.set(0x000000)
+          mat.opacity = 0.15; mat.transparent = true; mat.emissive.set(0x000000)
         }
         mat.needsUpdate = true
-      }
-
-      if (obj instanceof THREE.Mesh) {
-        applyToMesh(obj)
-      } else {
-        obj.traverse((child) => { if (child instanceof THREE.Mesh) applyToMesh(child) })
       }
     })
 
@@ -518,7 +532,7 @@ export default function STLViewer({
     const s = sceneRef.current
     const c = cameraRef.current
     if (r && s && c) r.render(s, c)
-  }, [highlightIndex])
+  }, [highlightIndex, highlightMeshIndex])
 
   return (
     <div className={`relative overflow-hidden rounded-xl bg-slate-50 ${className ?? ''}`}>

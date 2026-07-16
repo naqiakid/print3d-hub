@@ -646,6 +646,7 @@ function CatalogForm({
   const previewUrl = form.stl_urls.find(url => isPreviewFile(url))
   const [previewMeshes, setPreviewMeshes] = useState<string[]>([])
   const [loadingMeshes, setLoadingMeshes] = useState(false)
+  const [hoveredMeshIdx, setHoveredMeshIdx] = useState<number | undefined>(undefined)
 
   useEffect(() => {
     if (!previewUrl) {
@@ -1168,6 +1169,17 @@ function CatalogForm({
                       </p>
                     </div>
 
+                    {previewUrl && !loadingMeshes && previewMeshes.length > 0 && (
+                      <div className="relative aspect-square w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-900 shadow-inner flex items-center justify-center" style={{ height: 260 }}>
+                        <STLViewer
+                          urls={[previewUrl]}
+                          colors={['#cccccc']}
+                          highlightMeshIndex={hoveredMeshIdx}
+                          className="h-full w-full"
+                        />
+                      </div>
+                    )}
+
                     {loadingMeshes ? (
                       <div className="flex items-center gap-2 py-2 text-xs text-slate-400">
                         <Loader2 className="h-3 w-3 animate-spin text-orange-500" />
@@ -1180,8 +1192,17 @@ function CatalogForm({
                         {previewMeshes.map((meshName, meshIdx) => {
                           const currentStlIdx = meshMapping[meshIdx] ?? ''
                           const printableParts = form.stl_urls.filter(url => !isPreviewFile(url))
+                          const isHovered = hoveredMeshIdx === meshIdx
                           return (
-                            <div key={meshIdx} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white p-2">
+                            <div key={meshIdx}
+                              onMouseEnter={() => setHoveredMeshIdx(meshIdx)}
+                              onMouseLeave={() => setHoveredMeshIdx(undefined)}
+                              className={`flex items-center justify-between gap-3 rounded-lg border p-2 transition-all duration-150 ${
+                                isHovered 
+                                  ? 'border-orange-400 bg-orange-50/30 shadow-sm scale-[1.01]' 
+                                  : 'border-slate-100 bg-white'
+                              }`}
+                            >
                               <div className="min-w-0 flex-1">
                                 <p className="text-[11px] font-medium text-slate-700 truncate">
                                   {meshIdx + 1}. <span className="font-mono text-[10px] text-orange-600 bg-orange-50/50 px-1 py-0.5 rounded border border-orange-100/50 font-bold">{meshName}</span>
