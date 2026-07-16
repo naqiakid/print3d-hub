@@ -202,8 +202,8 @@ export default function CatalogManager({
       material_prices: materialPricesNum,
       material: !form.allow_material_choice && form.material ? form.material : null,
       allow_color_choice: form.allow_color_choice,
-      color: !form.allow_color_choice && form.color.trim() ? form.color.trim() : null,
-      color_hex: !form.allow_color_choice && form.color.trim() ? form.color_hex : null,
+      color: form.color.trim() ? form.color.trim() : null,
+      color_hex: form.color.trim() ? form.color_hex : null,
       allow_resize: form.allow_resize,
       resize_min_pct: form.resize_min_pct,
       resize_max_pct: form.resize_max_pct,
@@ -921,7 +921,7 @@ function CatalogForm({
                 {/* allow_color_choice toggle */}
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" checked={form.allow_color_choice}
-                    onChange={(e) => { set('allow_color_choice', e.target.checked); if (e.target.checked) { set('color', ''); set('color_hex', '#888888') } }}
+                    onChange={(e) => { set('allow_color_choice', e.target.checked); if (e.target.checked && form.stl_urls.length <= 1) { set('color', ''); set('color_hex', '#888888') } }}
                     className="h-4 w-4 cursor-pointer accent-orange-500" />
                   <div>
                     <span className="text-sm font-medium text-slate-800">Let customer choose color</span>
@@ -929,8 +929,8 @@ function CatalogForm({
                   </div>
                 </label>
 
-                {/* Fixed color swatches (when color choice is OFF and material is selected) */}
-                {!form.allow_color_choice && form.material && (
+                {/* Single part: Fixed color swatches (when color choice is OFF and material is selected) */}
+                {form.stl_urls.length <= 1 && !form.allow_color_choice && form.material && (
                   <div>
                     <p className="mb-1.5 text-xs font-medium text-slate-600">Color</p>
                     {colorsForMaterial.length === 0 ? (
@@ -955,6 +955,66 @@ function CatalogForm({
                         })}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Multi-part color selection (regardless of allow_color_choice, to set defaults) */}
+                {form.stl_urls.length > 1 && form.material && (
+                  <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">Default Part Colors</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Assign default colors for each model file below.</p>
+                    </div>
+                    <div className="space-y-3">
+                      {form.stl_urls.map((url, i) => {
+                        const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
+                        const currentPartColor = (() => {
+                          const parts = form.color.split('|')
+                          return parts[i] || ''
+                        })()
+                        const currentPartColorHex = (() => {
+                          const parts = form.color_hex.split('|')
+                          return parts[i] || '#888888'
+                        })()
+                        return (
+                          <div key={url} className="space-y-1 border-b border-slate-100/50 pb-2 last:border-0 last:pb-0">
+                            <p className="text-[11px] font-semibold text-slate-600 truncate">{filename}</p>
+                            {colorsForMaterial.length === 0 ? (
+                              <p className="text-[10px] text-slate-400">No filaments in stock.</p>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {colorsForMaterial.map((f) => {
+                                  const selected = currentPartColor === f.color && currentPartColorHex === f.color_hex
+                                  return (
+                                    <button key={f.id} type="button"
+                                      onClick={() => {
+                                        const colors = form.color.split('|')
+                                        const hexes = form.color_hex.split('|')
+                                        while (colors.length < form.stl_urls.length) {
+                                          colors.push('')
+                                          hexes.push('#888888')
+                                        }
+                                        colors[i] = f.color
+                                        hexes[i] = f.color_hex
+                                        set('color', colors.slice(0, form.stl_urls.length).join('|'))
+                                        set('color_hex', hexes.slice(0, form.stl_urls.length).join('|'))
+                                      }}
+                                      className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition ${
+                                        selected
+                                          ? 'border-orange-500 bg-orange-50 text-orange-700 font-semibold shadow-sm'
+                                          : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200'
+                                      }`}>
+                                      <span className="h-1.5 w-1.5 rounded-full border border-slate-350 shrink-0" style={{ background: f.color_hex }} />
+                                      {f.color}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
               </div>

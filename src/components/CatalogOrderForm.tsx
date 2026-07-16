@@ -43,6 +43,24 @@ export default function CatalogOrderForm({
   // For fixed-color items (allow_color_choice=false), use the owner's configured color instead of defaulting to "Any"
   const [color, setColor] = useState(item.allow_color_choice ? 'Any' : (item.color ?? 'Any'))
   const [colorHex, setColorHex] = useState(item.allow_color_choice ? '#888888' : (item.color_hex ?? '#888888'))
+
+  const [partColors, setPartColors] = useState<string[]>(() => {
+    const defaultVal = item.color ? item.color.split('|') : []
+    const initialColors = [...defaultVal]
+    while (initialColors.length < (item.stl_urls?.length ?? 0)) {
+      initialColors.push('Any')
+    }
+    return initialColors
+  })
+
+  const [partColorHexes, setPartColorHexes] = useState<string[]>(() => {
+    const defaultVal = item.color_hex ? item.color_hex.split('|') : []
+    const initialHexes = [...defaultVal]
+    while (initialHexes.length < (item.stl_urls?.length ?? 0)) {
+      initialHexes.push('#888888')
+    }
+    return initialHexes
+  })
   const [scalePct, setScalePct] = useState(100)
   const availableMaterials = (
     item.allow_material_choice && item.available_materials.length > 0
@@ -106,6 +124,13 @@ export default function CatalogOrderForm({
 
     // Build notes from customisations
     const parts: string[] = []
+    if (item.stl_urls && item.stl_urls.length > 1) {
+      parts.push('Part Colors:')
+      item.stl_urls.forEach((url, i) => {
+        const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
+        parts.push(`- ${filename}: ${partColors[i] || 'Any'}`)
+      })
+    }
     if (item.allow_custom_text && customText.trim())
       parts.push(`${item.text_prompt}: "${customText.trim()}"`)
     if (item.allow_resize && scalePct !== 100)
@@ -129,8 +154,8 @@ export default function CatalogOrderForm({
       description:     `Catalog order: ${item.name}`,
       print_type:      ['abs', 'nylon', 'pc'].includes(material) ? 'strong' : 'everyday',
       material,
-      color,
-      color_hex:       colorHex,
+      color:           item.stl_urls.length > 1 ? partColors.join('|') : color,
+      color_hex:       item.stl_urls.length > 1 ? partColorHexes.join('|') : colorHex,
       supports:        false,
       size:            'medium',
       quality:         'basic',
@@ -182,23 +207,83 @@ export default function CatalogOrderForm({
       {item.allow_color_choice && (
         <div>
           <h3 className="mb-1 text-sm font-semibold text-slate-700">Color</h3>
-          <p className="mb-2 text-xs text-slate-400">Choose from what&apos;s in stock, or leave it to the owner.</p>
-          <div className="flex flex-wrap gap-2">
-            {filamentColors.map(({ id, name: n, hex }) => (
-              <button key={id} type="button"
-                onClick={() => { setColor(n === 'Any / Owner decides' ? 'Any' : n); setColorHex(hex) }}
-                className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                  (n === 'Any / Owner decides' ? color === 'Any' : color === n)
-                    ? 'border-orange-500 bg-orange-50 text-orange-700'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
-                }`}>
-                {n !== 'Any / Owner decides' && (
-                  <span className="h-3 w-3 rounded-full border border-slate-200 shrink-0" style={{ background: hex }} />
-                )}
-                {n}
-              </button>
-            ))}
-          </div>
+          {item.stl_urls.length <= 1 ? (
+            <>
+              <p className="mb-2 text-xs text-slate-400">Choose from what&apos;s in stock, or leave it to the owner.</p>
+              <div className="flex flex-wrap gap-2">
+                {filamentColors.map(({ id, name: n, hex }) => (
+                  <button key={id} type="button"
+                    onClick={() => { setColor(n === 'Any / Owner decides' ? 'Any' : n); setColorHex(hex) }}
+                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                      (n === 'Any / Owner decides' ? color === 'Any' : color === n)
+                        ? 'border-orange-500 bg-orange-50 text-orange-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
+                    }`}>
+                    {n !== 'Any / Owner decides' && (
+                      <span className="h-3 w-3 rounded-full border border-slate-200 shrink-0" style={{ background: hex }} />
+                    )}
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
+              <p className="text-xs text-slate-400">This product has multiple parts. Select colors for each part below:</p>
+              <div className="space-y-3">
+                {item.stl_urls.map((url, i) => {
+                  const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
+                  const currentPartColor = partColors[i] || 'Any'
+                  return (
+                    <div key={url} className="space-y-1.5 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-700 truncate max-w-[65%]">{filename}</span>
+                        {(() => {
+                          const ownerParts = item.color ? item.color.split('|') : []
+                          const ownerPartHex = item.color_hex ? item.color_hex.split('|') : []
+                          const ownerDef = ownerParts[i]
+                          if (ownerDef && ownerDef !== 'Any') {
+                            return (
+                              <span className="text-[10px] text-slate-400 italic flex items-center gap-1">
+                                Default: <span className="h-1.5 w-1.5 rounded-full border border-slate-250 shrink-0" style={{ background: ownerPartHex[i] || '#888' }} /> {ownerDef}
+                              </span>
+                            )
+                          }
+                          return null
+                        })()}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {filamentColors.map(({ id, name: n, hex }) => {
+                          const selected = (n === 'Any / Owner decides' ? currentPartColor === 'Any' : currentPartColor === n)
+                          return (
+                            <button key={id} type="button"
+                              onClick={() => {
+                                const newColors = [...partColors]
+                                const newHexes = [...partColorHexes]
+                                newColors[i] = (n === 'Any / Owner decides' ? 'Any' : n)
+                                newHexes[i] = hex
+                                setPartColors(newColors)
+                                setPartColorHexes(newHexes)
+                              }}
+                              className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition ${
+                                selected
+                                  ? 'border-orange-500 bg-orange-50 text-orange-700 font-semibold'
+                                  : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200'
+                              }`}>
+                              {n !== 'Any / Owner decides' && (
+                                <span className="h-1.5 w-1.5 rounded-full border border-slate-350 shrink-0" style={{ background: hex }} />
+                              )}
+                              {n === 'Any / Owner decides' ? 'Owner Decides' : n}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -439,6 +439,41 @@ export default async function TrackPage({
             <span className="text-slate-400">Material</span>
             <span className="ml-2 font-medium text-slate-900">{MATERIAL_LABELS[request.material]}</span>
           </div>
+          {request.color && request.color !== 'Any' && (
+            (() => {
+              if (request.color.includes('|')) {
+                const colors = request.color.split('|')
+                const hexes = (request.color_hex || '').split('|')
+                return (
+                  <div className="col-span-2 mt-1 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 space-y-1.5 w-full">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Chosen Part Colors:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                      {(request.stl_urls && request.stl_urls.length > 0 ? request.stl_urls : []).map((url, i) => {
+                        const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
+                        const partColor = colors[i] || 'Any'
+                        const partHex = hexes[i] || '#888888'
+                        return (
+                          <div key={url} className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-slate-400 truncate max-w-[60%]">{filename}:</span>
+                            <span className="h-2 w-2 rounded-full border border-slate-200 shrink-0" style={{ background: partHex }} />
+                            <span className="font-medium text-slate-700">{partColor === 'Any' ? 'Owner Decides' : partColor}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              } else {
+                return (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Color</span>
+                    <span className="h-2.5 w-2.5 rounded-full border border-slate-200 shadow-sm shrink-0" style={{ background: request.color_hex || '#888' }} />
+                    <span className="font-medium text-slate-900">{request.color}</span>
+                  </div>
+                )
+              }
+            })()
+          )}
           <div>
             <span className="text-slate-400">Quality</span>
             <span className="ml-2 font-medium text-slate-900">{QUALITY_LABELS[request.quality]}</span>

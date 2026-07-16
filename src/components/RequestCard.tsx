@@ -523,12 +523,14 @@ export default function RequestCard({ request, printer, onCardDragStart }: { req
             while (fileNames.length < stlUrls.length) {
               fileNames.push(stlUrls[fileNames.length].split('/').pop() ?? '')
             }
+            const requestHexes = request.color_hex ? request.color_hex.split('|') : []
             const colorsByFile = stlUrls.map((_, idx) => {
               const sorted = prefs
                 .filter((p) => p.part_number === idx + 1)
                 .sort((a, b) => (a.part_index ?? 1) - (b.part_index ?? 1))
+              const chosenHex = requestHexes[idx] && requestHexes[idx] !== '#888888' ? requestHexes[idx] : null
               return {
-                color: sorted[0]?.color_hex || defaultColorHex || '#cccccc',
+                color: sorted[0]?.color_hex || chosenHex || '#cccccc',
                 parts: sorted.length > 1 ? sorted.map((p) => p.color_hex || '#cccccc') : [] as string[],
               }
             })
@@ -590,10 +592,38 @@ export default function RequestCard({ request, printer, onCardDragStart }: { req
                     <span className="text-slate-400">Material</span>
                     <span className="font-medium text-slate-900">{MATERIAL_LABELS[request.material]}</span>
                     {request.color && request.color !== 'Any' && (
-                      <>
-                        <span className="h-3.5 w-3.5 rounded-full border border-slate-200 shadow-sm" style={{ background: request.color_hex || '#888' }} />
-                        <span className="text-slate-500">{request.color}</span>
-                      </>
+                      (() => {
+                        if (request.color.includes('|')) {
+                          const colors = request.color.split('|')
+                          const hexes = (request.color_hex || '').split('|')
+                          return (
+                            <div className="col-span-2 mt-2 rounded-xl border border-slate-100 bg-slate-50/50 p-3 space-y-2 w-full">
+                              <p className="text-xs font-semibold text-slate-600">Part Colors:</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                {(request.stl_urls && request.stl_urls.length > 0 ? request.stl_urls : []).map((url, i) => {
+                                  const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
+                                  const partColor = colors[i] || 'Any'
+                                  const partHex = hexes[i] || '#888888'
+                                  return (
+                                    <div key={url} className="flex items-center gap-1.5 min-w-0">
+                                      <span className="text-slate-400 truncate max-w-[60%]">{filename}:</span>
+                                      <span className="h-2.5 w-2.5 rounded-full border border-slate-250 shrink-0" style={{ background: partHex }} />
+                                      <span className="font-medium text-slate-700">{partColor === 'Any' ? 'Owner Decides' : partColor}</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        } else {
+                          return (
+                            <>
+                              <span className="h-3.5 w-3.5 rounded-full border border-slate-200 shadow-sm" style={{ background: request.color_hex || '#888' }} />
+                              <span className="text-slate-500">{request.color}</span>
+                            </>
+                          )
+                        }
+                      })()
                     )}
                   </div>
                   {(() => {
