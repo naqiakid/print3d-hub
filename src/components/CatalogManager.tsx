@@ -6,7 +6,7 @@ import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, 
 
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView, PartAssembly } from '@/lib/types'
-import { MATERIAL_LABELS, parseAssemblyMetadata, cleanDescription, serializeAssemblyMetadata } from '@/lib/types'
+import { MATERIAL_LABELS, parseAssemblyMetadata, cleanDescription, serializeAssemblyMetadata, isPreviewFile } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 import { getPresetById } from '@/lib/printer-models'
@@ -872,8 +872,11 @@ function CatalogForm({
         {form.stl_urls.length > 0 && (
           <div className="mb-2 space-y-1.5">
             {form.stl_urls.map((url, i) => {
+              const isPreview = isPreviewFile(url)
               let filename = url.split('/').pop()?.split('?')[0] ?? `File ${i + 1}`
-              if (url.includes('drive.google.com')) {
+              if (isPreview) {
+                filename = 'Assembled Model (Preview)'
+              } else if (url.includes('drive.google.com')) {
                 filename = `Google Drive File (${i + 1})`
               } else if (url.includes('dropbox.com')) {
                 filename = `Dropbox File (${i + 1})`
@@ -884,6 +887,9 @@ function CatalogForm({
                 <div key={url} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
                   <FileBox className="h-3.5 w-3.5 shrink-0 text-orange-500" />
                   <span className="flex-1 truncate text-xs text-slate-600">{filename}</span>
+                  {isPreview && (
+                    <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[9px] font-bold text-orange-700">Preview</span>
+                  )}
                   <button type="button" onClick={() => set('stl_urls', form.stl_urls.filter((_, idx) => idx !== i))}
                     className="text-slate-300 hover:text-red-400 transition"><X className="h-3.5 w-3.5" /></button>
                 </div>
@@ -1045,7 +1051,9 @@ function CatalogForm({
                     </div>
                     <div className="space-y-3">
                       {form.stl_urls.map((url, i) => {
-                        const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
+                        if (isPreviewFile(url)) return null
+                        const printableIndex = form.stl_urls.filter((u, idx) => idx < i && !isPreviewFile(u)).length
+                        const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${printableIndex + 1}`
                         const currentPartColor = (() => {
                           const parts = form.color.split('|')
                           return parts[i] || 'Any'
@@ -1056,7 +1064,7 @@ function CatalogForm({
                         })()
                         return (
                           <div key={url} className="space-y-1 border-b border-slate-100/50 pb-2 last:border-0 last:pb-0">
-                            <p className="text-[11px] font-semibold text-slate-600 truncate">{filename}</p>
+                            <p className="text-[11px] font-semibold text-slate-650 truncate">{filename}</p>
                             <div className="flex flex-wrap gap-1">
                               {/* Add 'Any' option first */}
                               {[{ color: 'Any', color_hex: '#888888' }, ...defaultColorsList].map((f, idx) => {

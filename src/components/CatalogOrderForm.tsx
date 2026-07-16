@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { CatalogItem, RequestPrinterView, PrintProfile, Filament, FilamentMaterial } from '@/lib/types'
-import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, cleanDescription } from '@/lib/types'
+import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, cleanDescription, isPreviewFile } from '@/lib/types'
 import { submitRequest } from '@/lib/actions'
 import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
 import AddressInput from './AddressInput'
@@ -48,22 +48,24 @@ export default function CatalogOrderForm({
   const [color, setColor] = useState(item.allow_color_choice ? 'Any' : (item.color ?? 'Any'))
   const [colorHex, setColorHex] = useState(item.allow_color_choice ? '#888888' : (item.color_hex ?? '#888888'))
 
+  const printableParts = item.stl_urls?.filter((url) => !isPreviewFile(url)) ?? []
+
   const [partColors, setPartColors] = useState<string[]>(() => {
     const defaultVal = item.color ? item.color.split('|') : []
     const initialColors = [...defaultVal]
-    while (initialColors.length < (item.stl_urls?.length ?? 0)) {
+    while (initialColors.length < printableParts.length) {
       initialColors.push('Any')
     }
-    return initialColors
+    return initialColors.slice(0, printableParts.length)
   })
 
   const [partColorHexes, setPartColorHexes] = useState<string[]>(() => {
     const defaultVal = item.color_hex ? item.color_hex.split('|') : []
     const initialHexes = [...defaultVal]
-    while (initialHexes.length < (item.stl_urls?.length ?? 0)) {
+    while (initialHexes.length < printableParts.length) {
       initialHexes.push('#888888')
     }
-    return initialHexes
+    return initialHexes.slice(0, printableParts.length)
   })
   const [scalePct, setScalePct] = useState(100)
   const availableMaterials = (
@@ -128,9 +130,9 @@ export default function CatalogOrderForm({
 
     // Build notes from customisations
     const parts: string[] = []
-    if (item.stl_urls && item.stl_urls.length > 1) {
+    if (printableParts.length > 1) {
       parts.push('Part Colors:')
-      item.stl_urls.forEach((url, i) => {
+      printableParts.forEach((url, i) => {
         const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
         parts.push(`- ${filename}: ${partColors[i] || 'Any'}`)
       })
@@ -158,8 +160,8 @@ export default function CatalogOrderForm({
       description:     `Catalog order: ${item.name}${item.description ? `\n\n${item.description}` : ''}`,
       print_type:      ['abs', 'nylon', 'pc'].includes(material) ? 'strong' : 'everyday',
       material,
-      color:           item.stl_urls.length > 1 ? partColors.join('|') : color,
-      color_hex:       item.stl_urls.length > 1 ? partColorHexes.join('|') : colorHex,
+      color:           printableParts.length > 1 ? partColors.join('|') : color,
+      color_hex:       printableParts.length > 1 ? partColorHexes.join('|') : colorHex,
       supports:        false,
       size:            'medium',
       quality:         'basic',
@@ -169,7 +171,7 @@ export default function CatalogOrderForm({
       model_title:     item.name,
       model_image:     item.photo_url ?? null,
       stl_url:         null,
-      stl_urls:        [],
+      stl_urls:        printableParts,
       weight_g:        null,
       print_hours:     null,
       profile_id:      profiles.find((p) => p.is_default)?.id ?? profiles[0]?.id ?? null,
@@ -202,7 +204,11 @@ export default function CatalogOrderForm({
           videoUrl={item.video_url ?? null}
           stlUrls={item.stl_urls ?? []}
           name={item.name}
-          colors={item.stl_urls.length > 1 ? partColorHexes : [colorHex]}
+          colors={item.stl_urls.map((url) => {
+            const idx = printableParts.indexOf(url)
+            if (idx !== -1) return partColorHexes[idx]
+            return '#ffffff' // preview file fallback color
+          })}
           assemblyOffsets={parseAssemblyMetadata(item.description)}
         />
         <div className="p-5">
@@ -272,7 +278,7 @@ export default function CatalogOrderForm({
       {item.allow_color_choice && (
         <div>
           <h3 className="mb-1 text-sm font-semibold text-slate-700">Color</h3>
-          {item.stl_urls.length <= 1 ? (
+          {printableParts.length <= 1 ? (
             <>
               <p className="mb-2 text-xs text-slate-400">Choose from what&apos;s in stock, or leave it to the owner.</p>
               <div className="flex flex-wrap gap-2">
@@ -297,8 +303,10 @@ export default function CatalogOrderForm({
               <p className="text-xs text-slate-400">This product has multiple parts. Select colors for each part below:</p>
               <div className="space-y-3">
                 {item.stl_urls.map((url, i) => {
-                  const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
-                  const currentPartColor = partColors[i] || 'Any'
+                  if (isPreviewFile(url)) return null
+                  const printableIndex = printableParts.indexOf(url)
+                  const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${printableIndex + 1}`
+                  const currentPartColor = partColors[printableIndex] || 'Any'
                   return (
                     <div key={url} className="space-y-1.5 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
                       <div className="flex items-center justify-between">
@@ -325,8 +333,8 @@ export default function CatalogOrderForm({
                               onClick={() => {
                                 const newColors = [...partColors]
                                 const newHexes = [...partColorHexes]
-                                newColors[i] = (n === 'Any / Owner decides' ? 'Any' : n)
-                                newHexes[i] = hex
+                                newColors[printableIndex] = (n === 'Any / Owner decides' ? 'Any' : n)
+                                newHexes[printableIndex] = hex
                                 setPartColors(newColors)
                                 setPartColorHexes(newHexes)
                               }}

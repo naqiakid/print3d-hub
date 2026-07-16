@@ -345,3 +345,14 @@ export function getDirectDownloadUrl(url: string | null | undefined): string {
   
   return url
 }
+
+export function isPreviewFile(url: string | null | undefined): boolean {
+  if (!url) return false
+  const lower = url.toLowerCase()
+  return (
+    lower.includes('drive.google.com') ||
+    lower.includes('dropbox.com') ||
+    lower.endsWith('.3mf') ||
+    lower.includes('.3mf')
+  )
+}
