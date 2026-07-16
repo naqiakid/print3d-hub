@@ -363,55 +363,71 @@ export default function RequestCard({ request, printer }: { request: PrintReques
         className="flex w-full items-center gap-4 px-5 py-4 text-left hover:bg-slate-50 transition"
       >
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-semibold text-slate-900 truncate">{request.customer_name}</span>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[request.status]}`}>
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span className="font-bold text-slate-900 truncate">{request.customer_name}</span>
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${STATUS_COLORS[request.status]}`}>
               {getStatusLabel(request.status, request.fulfillment)}
             </span>
           </div>
-          {/* Key job info — what the owner needs at a glance */}
-          <div className="flex flex-wrap items-center gap-1.5 mb-1">
-            {/* Material + color */}
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+          
+          {/* Tag / Chip row */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+            {/* Request Type Tag */}
+            {(() => {
+              const isCatalog = !!request.catalog_item_id
+              const hasStl = !!(request.stl_url || request.stl_urls?.length > 0 || request.file_url)
+              return isCatalog ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+                  🛍️ Shop Order
+                </span>
+              ) : hasStl ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 border border-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-600">
+                  ⚙️ Custom STL
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-600">
+                  🔗 Reference
+                </span>
+              )
+            })()}
+
+            {/* Fulfillment Mode Tag */}
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+              request.fulfillment === 'delivery'
+                ? 'bg-blue-50 border-blue-100 text-blue-600'
+                : 'bg-slate-50 border-slate-200 text-slate-600'
+            }`}>
+              {request.fulfillment === 'delivery' ? '🚚 Delivery' : '🏠 Pickup'}
+            </span>
+
+            {/* Material + Color Tag */}
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
               {request.color && request.color !== 'Any' && (
-                <span className="h-2.5 w-2.5 rounded-full border border-slate-300 shrink-0" style={{ background: request.color_hex || '#888' }} />
+                <span className="h-2 w-2 rounded-full border border-slate-300 shrink-0" style={{ background: request.color_hex || '#888' }} />
               )}
               {MATERIAL_LABELS[request.material] ?? request.material}
               {request.color && request.color !== 'Any' ? ` · ${request.color}` : ''}
             </span>
-            {/* Quality tier */}
-            {request.quality && (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                {request.quality === 'advanced' ? 'Advanced' : 'Basic'}
-              </span>
-            )}
-            {/* Supports */}
-            {(request.supports || request.selected_addons?.includes('supports')) && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Supports</span>
-            )}
-            {(request.declined_addons ?? []).includes('supports') && (
-              <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-500">✗ No supports</span>
-            )}
-            {/* Other key options */}
-            {(request.selected_addons ?? []).filter((a) => ['ironing', 'fuzzy_skin', 'color_change', 'pause_insert', 'text_on_surface'].includes(a)).map((a) => (
-              <span key={a} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                {a === 'ironing' ? 'Ironing' : a === 'fuzzy_skin' ? 'Fuzzy skin' : a === 'color_change' ? 'Multi-color' : a === 'pause_insert' ? 'Inserts' : 'Surface text'}
-              </span>
-            ))}
           </div>
-          <p className="text-xs text-slate-400 truncate">{request.description}</p>
+
+          <p className="text-xs text-slate-500 font-medium truncate">
+            {request.model_title || request.description || 'No description provided'}
+          </p>
         </div>
-        <div className="shrink-0 text-right text-xs">
-          <div className={`flex items-center gap-1 mb-1 ${isUrgent ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
-            <Calendar className="h-3.5 w-3.5" />
-            {isUrgent && daysUntilDeadline <= 0
-              ? 'Overdue!'
-              : isUrgent
-              ? `${daysUntilDeadline}d left`
-              : `Due ${new Date(request.deadline).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })}`}
+        
+        <div className="shrink-0 text-right text-xs space-y-1">
+          <div className={`flex items-center gap-1 justify-end font-semibold ${isUrgent ? 'text-red-500' : 'text-slate-500'}`}>
+            <Calendar className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              {isUrgent && daysUntilDeadline <= 0
+                ? 'Overdue!'
+                : `Due ${new Date(request.deadline).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+            </span>
           </div>
           {request.quoted_price && (
-            <div className="font-semibold text-slate-900">RM{request.quoted_price}</div>
+            <div className="text-sm font-bold text-slate-800">
+              RM {request.quoted_price.toFixed(2)}
+            </div>
           )}
         </div>
         <span className="text-slate-300 text-xs">{expanded ? '▲' : '▼'}</span>
