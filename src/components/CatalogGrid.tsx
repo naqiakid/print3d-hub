@@ -4,13 +4,28 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Package } from 'lucide-react'
 import type { CatalogItem, Filament } from '@/lib/types'
+import { cleanDescription } from '@/lib/types'
 
 function isInStock(item: CatalogItem, filaments: Filament[]): boolean {
   if (item.allow_material_choice) {
-    if (item.available_materials.length === 0) return true
+    if (!item.available_materials || item.available_materials.length === 0) return true
     return item.available_materials.some((m) => filaments.some((f) => f.material === m))
   }
   if (!item.material) return true
+
+  // If customer can choose colors, we only need at least one filament of the required material in stock
+  if (item.allow_color_choice) {
+    return filaments.some((f) => f.material === item.material)
+  }
+
+  // If there are multiple default colors (pipe-separated)
+  if (item.color_hex && item.color_hex.includes('|')) {
+    const requiredColors = item.color_hex.split('|').filter(Boolean)
+    return requiredColors.every((color) => 
+      filaments.some((f) => f.material === item.material && f.color_hex === color)
+    )
+  }
+
   return filaments.some(
     (f) => f.material === item.material && (!item.color_hex || f.color_hex === item.color_hex),
   )
@@ -103,7 +118,7 @@ export default function CatalogGrid({
                   )}
                 </div>
                 {item.description && (
-                  <p className="mb-3 text-xs text-slate-500 line-clamp-2">{item.description}</p>
+                  <p className="mb-3 text-xs text-slate-500 line-clamp-2">{cleanDescription(item.description)}</p>
                 )}
                 {badges.length > 0 && (
                   <div className="mb-3 flex flex-wrap gap-1">

@@ -30,7 +30,7 @@ export default async function DashboardPage() {
 
   if (!printerRows || printerRows.length === 0) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <h1 className="mb-2 text-2xl font-bold text-slate-900">Welcome to your dashboard</h1>
         <p className="mb-8 text-slate-500">You haven&apos;t listed your printer yet.</p>
         <Link
@@ -109,7 +109,7 @@ export default async function DashboardPage() {
   ]
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <OnboardingChecklist
         hasFilaments={(filamentCount ?? 0) > 0}
         isAvailable={shop.available}

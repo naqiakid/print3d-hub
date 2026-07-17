@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import type { CatalogItem, RequestPrinterView, PrintProfile, Filament, FilamentMaterial } from '@/lib/types'
-import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, parseMeshMapping, cleanDescription, isPreviewFile } from '@/lib/types'
+import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, parseMeshMapping, parseAllowedFilaments, parseTextMeshIndex, cleanDescription, isPreviewFile } from '@/lib/types'
 import { submitRequest } from '@/lib/actions'
 import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
 import AddressInput from './AddressInput'
@@ -42,32 +42,67 @@ export default function CatalogOrderForm({
 }) {
   const router = useRouter()
 
-  // Customisation state
-  const [customText, setCustomText] = useState('')
-  // For fixed-color items (allow_color_choice=false), use the owner's configured color instead of defaulting to "Any"
-  const [color, setColor] = useState(item.allow_color_choice ? 'Any' : (item.color ?? 'Any'))
-  const [colorHex, setColorHex] = useState(item.allow_color_choice ? '#888888' : (item.color_hex ?? '#888888'))
+  // Order details
+  const [quantity, setQuantity] = useState(1)
+  const [scalePct, setScalePct] = useState(100)
+  const [notes, setNotes] = useState('')
+  const [deadlineType, setDeadlineType] = useState<'asap' | 'anytime' | 'date'>('anytime')
+  const [deadlineDate, setDeadlineDate] = useState('')
 
   const printableParts = item.stl_urls?.filter((url) => !isPreviewFile(url)) ?? []
 
-  const [partColors, setPartColors] = useState<string[]>(() => {
-    const defaultVal = item.color ? item.color.split('|') : []
-    const initialColors = [...defaultVal]
-    while (initialColors.length < printableParts.length) {
-      initialColors.push('Any')
-    }
-    return initialColors.slice(0, printableParts.length)
-  })
+  // UnitConfig interface for copy-by-copy customisation
+  interface UnitConfig {
+    customText: string
+    color: string
+    colorHex: string
+    partColors: string[]
+    partColorHexes: string[]
+  }
 
-  const [partColorHexes, setPartColorHexes] = useState<string[]>(() => {
-    const defaultVal = item.color_hex ? item.color_hex.split('|') : []
-    const initialHexes = [...defaultVal]
-    while (initialHexes.length < printableParts.length) {
-      initialHexes.push('#888888')
-    }
-    return initialHexes.slice(0, printableParts.length)
-  })
-  const [scalePct, setScalePct] = useState(100)
+  // Initialize units config array
+  const [unitsConfig, setUnitsConfig] = useState<UnitConfig[]>([])
+  const [activeUnitIdx, setActiveUnitIdx] = useState(0)
+
+  useEffect(() => {
+    setUnitsConfig((prev) => {
+      const next = [...prev]
+      while (next.length < quantity) {
+        const defaultValColor = item.color ? item.color.split('|') : []
+        const defaultValColorHex = item.color_hex ? item.color_hex.split('|') : []
+        
+        const initialPartColors = [...defaultValColor]
+        while (initialPartColors.length < printableParts.length) {
+          initialPartColors.push('Any')
+        }
+        const initialPartColorHexes = [...defaultValColorHex]
+        while (initialPartColorHexes.length < printableParts.length) {
+          initialPartColorHexes.push('#888888')
+        }
+
+        next.push({
+          customText: '',
+          color: item.allow_color_choice ? 'Any' : (item.color ?? 'Any'),
+          colorHex: item.allow_color_choice ? '#888888' : (item.color_hex ?? '#888888'),
+          partColors: initialPartColors.slice(0, printableParts.length),
+          partColorHexes: initialPartColorHexes.slice(0, printableParts.length),
+        })
+      }
+      if (next.length > quantity) {
+        next.length = quantity
+      }
+      return next
+    })
+    setActiveUnitIdx((prev) => (prev >= quantity ? 0 : prev))
+  }, [quantity, item, printableParts.length])
+
+  // Backward-compatible compatibility getters mapping to active unit
+  const customText = unitsConfig[activeUnitIdx]?.customText ?? ''
+  const color = unitsConfig[activeUnitIdx]?.color ?? 'Any'
+  const colorHex = unitsConfig[activeUnitIdx]?.colorHex ?? '#888888'
+  const partColors = unitsConfig[activeUnitIdx]?.partColors ?? []
+  const partColorHexes = unitsConfig[activeUnitIdx]?.partColorHexes ?? []
+
   const availableMaterials = (
     item.allow_material_choice && item.available_materials.length > 0
       ? item.available_materials
@@ -78,12 +113,6 @@ export default function CatalogOrderForm({
   const [material, setMaterial] = useState<FilamentMaterial>(
     availableMaterials[0] ?? 'pla',
   )
-
-  // Order details
-  const [quantity, setQuantity] = useState(1)
-  const [notes, setNotes] = useState('')
-  const [deadlineType, setDeadlineType] = useState<'asap' | 'anytime' | 'date'>('anytime')
-  const [deadlineDate, setDeadlineDate] = useState('')
 
   // Contact
   const [name, setName] = useState('')
@@ -99,7 +128,15 @@ export default function CatalogOrderForm({
 
   // Color options — prefer actual filament stock for the selected material, fall back to presets.
   // Keyed by filament id (not color name) since two different materials can share a color name.
-  const filamentsForMaterial = filaments.filter((f) => f.material === material)
+  const allowedFilaments = parseAllowedFilaments(item.description)
+  const filamentsForMaterial = filaments.filter((f) => {
+    const matchesMaterial = f.material === material
+    if (!matchesMaterial) return false
+    if (allowedFilaments.length > 0) {
+      return allowedFilaments.includes(f.id)
+    }
+    return true
+  })
   const filamentColors: { id: string; name: string; hex: string }[] = filamentsForMaterial.length > 0
     ? [
         { id: '__any__', name: 'Any / Owner decides', hex: '#888888' },
@@ -111,7 +148,7 @@ export default function CatalogOrderForm({
     name.trim() &&
     email.trim() &&
     isValidMyPhoneDigits(phone.replace(/^\+?60/, '')) &&
-    (!item.allow_custom_text || customText.trim()) &&
+    (!item.allow_custom_text || unitsConfig.every(uc => uc.customText.trim().length > 0)) &&
     (fulfillment !== 'delivery' || deliveryAddress.trim().length > 0)
   )
 
@@ -130,26 +167,50 @@ export default function CatalogOrderForm({
 
     // Build notes from customisations
     const parts: string[] = []
-    if (printableParts.length > 1) {
-      parts.push('Part Colors:')
-      printableParts.forEach((url, i) => {
-        const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
-        parts.push(`- ${filename}: ${partColors[i] || 'Any'}`)
+    if (quantity === 1) {
+      const config = unitsConfig[0]
+      if (config) {
+        if (printableParts.length > 1) {
+          parts.push('Part Colors:')
+          printableParts.forEach((url, i) => {
+            const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
+            parts.push(`- ${filename}: ${config.partColors[i] || 'Any'}`)
+          })
+        } else if (item.allow_color_choice) {
+          parts.push(`Color: ${config.color}`)
+        }
+        if (item.allow_custom_text && config.customText.trim()) {
+          parts.push(`${item.text_prompt}: "${config.customText.trim()}"`)
+        }
+      }
+    } else {
+      parts.push('Item Customisations (Multiple Copies):')
+      unitsConfig.forEach((config, idx) => {
+        parts.push(`\nCopy #${idx + 1}:`)
+        if (printableParts.length > 1) {
+          printableParts.forEach((url, i) => {
+            const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
+            parts.push(`  - ${filename}: ${config.partColors[i] || 'Any'}`)
+          })
+        } else if (item.allow_color_choice) {
+          parts.push(`  - Color: ${config.color}`)
+        }
+        if (item.allow_custom_text && config.customText.trim()) {
+          parts.push(`  - ${item.text_prompt}: "${config.customText.trim()}"`)
+        }
       })
     }
-    if (item.allow_custom_text && customText.trim())
-      parts.push(`${item.text_prompt}: "${customText.trim()}"`)
     if (item.allow_resize && scalePct !== 100)
-      parts.push(`Scale: ${scalePct}%`)
+      parts.push(`\nScale: ${scalePct}%`)
     if (quantity > 1)
-      parts.push(`Quantity: ${quantity} copies`)
+      parts.push(`\nQuantity: ${quantity} copies`)
     if (notes.trim())
-      parts.push(notes.trim())
+      parts.push(`\nCustomer Notes:\n${notes.trim()}`)
     if (deadlineType === 'asap')
-      parts.push('ASAP — rush order.')
+      parts.push('\nASAP — rush order.')
 
     const selectedAddons: string[] = []
-    if (item.allow_custom_text && customText.trim())
+    if (item.allow_custom_text && unitsConfig.some(u => u.customText.trim()))
       selectedAddons.push('text_on_surface')
 
     const result = await submitRequest({
@@ -211,6 +272,8 @@ export default function CatalogOrderForm({
           })}
           assemblyOffsets={parseAssemblyMetadata(item.description)}
           meshMapping={parseMeshMapping(item.description)}
+          textMeshIndex={parseTextMeshIndex(item.description)}
+          customText={customText}
         />
         <div className="p-5">
           <div className="flex items-start justify-between gap-3">
@@ -257,6 +320,40 @@ export default function CatalogOrderForm({
 
       <form onSubmit={handleSubmit} className="space-y-6">
 
+      {/* Copy selector tabs for quantity > 1 (only show if customization is possible) */}
+      {quantity > 1 && (item.allow_custom_text || item.allow_color_choice) && (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-3.5 space-y-2">
+          <p className="text-xs font-bold text-slate-700">🎨 Customize each copy separately:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {Array.from({ length: quantity }).map((_, idx) => {
+              const config = unitsConfig[idx]
+              const hasName = config?.customText?.trim()
+              const hasColor = !!(config && config.color !== 'Any')
+              const label = hasName ? `Copy #${idx + 1} (${config.customText})` : `Copy #${idx + 1}`
+              
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setActiveUnitIdx(idx)}
+                  className={`relative flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
+                    activeUnitIdx === idx
+                      ? 'border-orange-500 bg-orange-500 text-white shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
+                  }`}
+                >
+                  {hasColor && activeUnitIdx !== idx && config && (
+                    <span className="h-2 w-2 rounded-full border border-slate-200 shrink-0" style={{ background: config.colorHex || '#888888' }} />
+                  )}
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-1">Select a copy tab above to customize its colors/text and see it in the 3D preview.</p>
+        </div>
+      )}
+
       {/* ── Customisations ────────────────────────────────────── */}
 
       {item.allow_custom_text && (
@@ -267,7 +364,14 @@ export default function CatalogOrderForm({
           <p className="mb-2 text-xs text-slate-400">This text will be engraved or embossed on the print.</p>
           <input
             value={customText}
-            onChange={(e) => setCustomText(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value
+              setUnitsConfig((prev) => {
+                const next = [...prev]
+                if (next[activeUnitIdx]) next[activeUnitIdx].customText = val
+                return next
+              })
+            }}
             placeholder={`e.g. "Ahmad", "ACME Corp", "Love"`}
             maxLength={40}
             className={inputClass}
@@ -285,7 +389,19 @@ export default function CatalogOrderForm({
               <div className="flex flex-wrap gap-2">
                 {filamentColors.map(({ id, name: n, hex }) => (
                   <button key={id} type="button"
-                    onClick={() => { setColor(n === 'Any / Owner decides' ? 'Any' : n); setColorHex(hex) }}
+                    onClick={() => {
+                      const selectedColorName = n === 'Any / Owner decides' ? 'Any' : n
+                      setUnitsConfig((prev) => {
+                        const next = [...prev]
+                        if (next[activeUnitIdx]) {
+                          next[activeUnitIdx].color = selectedColorName
+                          next[activeUnitIdx].colorHex = hex
+                          next[activeUnitIdx].partColors = [selectedColorName]
+                          next[activeUnitIdx].partColorHexes = [hex]
+                        }
+                        return next
+                      })
+                    }}
                     className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                       (n === 'Any / Owner decides' ? color === 'Any' : color === n)
                         ? 'border-orange-500 bg-orange-50 text-orange-700'
@@ -332,12 +448,18 @@ export default function CatalogOrderForm({
                           return (
                             <button key={id} type="button"
                               onClick={() => {
-                                const newColors = [...partColors]
-                                const newHexes = [...partColorHexes]
-                                newColors[printableIndex] = (n === 'Any / Owner decides' ? 'Any' : n)
-                                newHexes[printableIndex] = hex
-                                setPartColors(newColors)
-                                setPartColorHexes(newHexes)
+                                setUnitsConfig((prev) => {
+                                  const next = [...prev]
+                                  if (next[activeUnitIdx]) {
+                                    const newColors = [...next[activeUnitIdx].partColors]
+                                    const newHexes = [...next[activeUnitIdx].partColorHexes]
+                                    newColors[printableIndex] = (n === 'Any / Owner decides' ? 'Any' : n)
+                                    newHexes[printableIndex] = hex
+                                    next[activeUnitIdx].partColors = newColors
+                                    next[activeUnitIdx].partColorHexes = newHexes
+                                  }
+                                  return next
+                                })
                               }}
                               className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition ${
                                 selected
@@ -388,7 +510,19 @@ export default function CatalogOrderForm({
           <h3 className="mb-1 text-sm font-semibold text-slate-700">Material</h3>
           <div className="space-y-2">
             {availableMaterials.map((mat) => (
-              <button key={mat} type="button" onClick={() => { setMaterial(mat); setColor('Any'); setColorHex('#888888') }}
+              <button key={mat} type="button" onClick={() => {
+                setMaterial(mat)
+                setUnitsConfig((prev) => {
+                  const next = [...prev]
+                  if (next[activeUnitIdx]) {
+                    next[activeUnitIdx].color = 'Any'
+                    next[activeUnitIdx].colorHex = '#888888'
+                    next[activeUnitIdx].partColors = next[activeUnitIdx].partColors.map(() => 'Any')
+                    next[activeUnitIdx].partColorHexes = next[activeUnitIdx].partColorHexes.map(() => '#888888')
+                  }
+                  return next
+                })
+              }}
                 className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${material === mat ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'}`}>
                 <p className={`text-sm font-medium ${material === mat ? 'text-orange-700' : 'text-slate-800'}`}>
                   {MATERIAL_LABELS[mat]}
@@ -411,6 +545,11 @@ export default function CatalogOrderForm({
           <button type="button" onClick={() => setQuantity(Math.min(20, quantity + 1))}
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:border-orange-300 transition text-lg font-medium">+</button>
         </div>
+        {(item.allow_custom_text || item.allow_color_choice) && (
+          <p className="text-[11px] text-orange-600 font-medium mt-1.5 flex items-center gap-1">
+            ✨ Pro-tip: Order more than 1 copy to customize colors and engraving text for each copy separately!
+          </p>
+        )}
       </div>
 
       <div>

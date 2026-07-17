@@ -11,6 +11,7 @@ import GcodeViewer from '@/components/GcodeViewerWrapper'
 import ReviseRequest from '@/components/ReviseRequest'
 import ReviewForm from '@/components/ReviewForm'
 import ReceiptActions from '@/components/ReceiptActions'
+import TrackingSummary from '@/components/TrackingSummary'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://print3d-hub.vercel.app'
 
@@ -85,7 +86,7 @@ export default async function TrackPage({
     request.catalog_item_id
       ? supabase
           .from('catalog_items')
-          .select('allow_material_choice, allow_color_choice, allow_custom_text, allow_resize')
+          .select('allow_material_choice, allow_color_choice, allow_custom_text, allow_resize, stl_urls, description')
           .eq('id', request.catalog_item_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -281,34 +282,7 @@ export default async function TrackPage({
             </div>
           )}
 
-          {/* ── STL preview (no G-code yet) ── */}
-          {(request.stl_urls?.length > 0 || request.stl_url) && !hasGcode && (
-            <div>
-              {(request.plate_filaments?.length ?? 0) > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {request.plate_filaments.map((pf, i) => (
-                    <span
-                      key={i}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm"
-                    >
-                      <span className="h-3 w-3 rounded-full border border-slate-200" style={{ background: pf.color_hex || '#888' }} />
-                      {request.plate_filaments.length > 1 && `Plate ${i + 1} · `}
-                      {MATERIAL_LABELS[pf.material]}{pf.color && ` · ${pf.color}`}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <STLViewer
-                urls={request.stl_urls?.length > 0 ? request.stl_urls : [request.stl_url!]}
-                colors={
-                  (request.plate_filaments?.length ?? 0) > 0
-                    ? request.plate_filaments.map((pf) => pf.color_hex || '#888888')
-                    : ['#e0e0e0']
-                }
-                className="h-64 w-full"
-              />
-            </div>
-          )}
+
 
           {/* ── G-code plate viewers ── */}
           {hasGcode && (
@@ -431,127 +405,12 @@ export default async function TrackPage({
       )}
 
       {/* Order summary */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-slate-700">Order summary</h2>
-        <p className="text-sm text-slate-600">{cleanDescription(request.description)}</p>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-          <div>
-            <span className="text-slate-400">Material</span>
-            <span className="ml-2 font-medium text-slate-900">{MATERIAL_LABELS[request.material]}</span>
-          </div>
-          {request.color && request.color !== 'Any' && (
-            (() => {
-              if (request.color.includes('|')) {
-                const colors = request.color.split('|')
-                const hexes = (request.color_hex || '').split('|')
-                return (
-                  <div className="col-span-2 mt-1 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 space-y-1.5 w-full">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Chosen Part Colors:</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-                      {(request.stl_urls && request.stl_urls.length > 0 ? request.stl_urls : []).map((url, i) => {
-                        const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
-                        const partColor = colors[i] || 'Any'
-                        const partHex = hexes[i] || '#888888'
-                        return (
-                          <div key={url} className="flex items-center gap-1.5 min-w-0">
-                            <span className="text-slate-400 truncate max-w-[60%]">{filename}:</span>
-                            <span className="h-2 w-2 rounded-full border border-slate-200 shrink-0" style={{ background: partHex }} />
-                            <span className="font-medium text-slate-700">{partColor === 'Any' ? 'Owner Decides' : partColor}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              } else {
-                return (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-400">Color</span>
-                    <span className="h-2.5 w-2.5 rounded-full border border-slate-200 shadow-sm shrink-0" style={{ background: request.color_hex || '#888' }} />
-                    <span className="font-medium text-slate-900">{request.color}</span>
-                  </div>
-                )
-              }
-            })()
-          )}
-          <div>
-            <span className="text-slate-400">Quality</span>
-            <span className="ml-2 font-medium text-slate-900">{QUALITY_LABELS[request.quality]}</span>
-          </div>
-          {(() => {
-            const m = request.notes?.match(/^\[(\d+\.?\d*)×(\d+\.?\d*)×(\d+\.?\d*)mm\]/)
-            if (!m) return null
-            return (
-              <div>
-                <span className="text-slate-400">Size</span>
-                <span className="ml-2 font-medium text-slate-900">{m[1]} × {m[2]} × {m[3]} mm</span>
-              </div>
-            )
-          })()}
-          <div>
-            <span className="text-slate-400">Deadline</span>
-            <span className="ml-2 font-medium text-slate-900">
-              {new Date(request.deadline).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })}
-            </span>
-          </div>
-          <div className="col-span-2">
-            <span className="text-slate-400">Fulfillment</span>
-            <span className="ml-2 font-medium text-slate-900">
-              {request.fulfillment === 'delivery'
-                ? `🚚 Delivery${request.delivery_address ? ` — ${request.delivery_address}` : ''}`
-                : `🏠 Pickup${printer?.pickup_address ? ` — ${printer.pickup_address}` : ''}`}
-            </span>
-          </div>
-          {request.weight_g && (
-            <div>
-              <span className="text-slate-400">Weight</span>
-              <span className="ml-2 font-medium text-slate-900">~{request.weight_g}g</span>
-            </div>
-          )}
-          {request.print_hours && (
-            <div>
-              <span className="text-slate-400">Print time</span>
-              <span className="ml-2 font-medium text-slate-900">~{request.print_hours}h</span>
-            </div>
-          )}
-        </div>
+      <TrackingSummary
+        request={request}
+        pickupAddress={printer?.pickup_address ?? null}
+        catalogItemStlUrls={catalogResult?.data?.stl_urls ?? null}
+      />
 
-        {/* STL file links */}
-        {(request.stl_urls?.length > 0 || request.stl_url) && (
-          <div className="border-t border-slate-100 pt-2 flex flex-wrap gap-3">
-            {(request.stl_urls?.length > 0 ? request.stl_urls : [request.stl_url!]).map((url, i) => (
-              <Link
-                key={url}
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-medium text-orange-500 hover:text-orange-600"
-              >
-                {request.stl_urls?.length > 1 ? `File ${i + 1}` : 'View STL'} ↗
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {/* Notes */}
-        {cleanNotes && (
-          <p className="text-xs text-slate-500 border-t border-slate-100 pt-2">
-            Notes: {cleanNotes}
-          </p>
-        )}
-        {insertText && (
-          <div className="rounded-lg border border-yellow-100 bg-yellow-50 px-3 py-2 text-xs">
-            <span className="font-medium text-yellow-700">⏸ Embedded inserts:</span>{' '}
-            <span className="text-yellow-900">{insertText}</span>
-          </div>
-        )}
-        {surfaceText && (
-          <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs">
-            <span className="font-medium text-indigo-700">✏️ Surface text:</span>{' '}
-            <span className="text-indigo-900">"{surfaceText}"</span>
-          </div>
-        )}
-      </div>
 
       {/* Confirm Receipt (delivery orders in shipping status) */}
       {request.status === 'shipping' && isDelivery && (

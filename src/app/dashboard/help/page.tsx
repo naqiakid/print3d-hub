@@ -68,7 +68,7 @@ export default async function HelpPage() {
   if (!user) redirect('/login')
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
       <Link
         href="/dashboard"
         className="mb-8 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
@@ -81,9 +81,9 @@ export default async function HelpPage() {
         A quick walkthrough of everything on your dashboard.
       </p>
 
-      <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {SECTIONS.map((section) => (
-          <div key={section.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div key={section.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col justify-start">
             <h2 className="mb-3 text-lg font-semibold text-slate-900">{section.title}</h2>
             <ul className="space-y-2">
               {section.body.map((line, i) => (

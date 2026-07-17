@@ -331,15 +331,46 @@ export function parseMeshMapping(description: string | null | undefined): Record
   return {}
 }
 
+export function parseAllowedFilaments(description: string | null | undefined): string[] {
+  if (!description) return []
+  const match = description.match(/<!-- ALLOWED_FILAMENTS: (.*?) -->/)
+  if (match) {
+    try {
+      return JSON.parse(match[1])
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+export function parseTextMeshIndex(description: string | null | undefined): number | null {
+  if (!description) return null
+  const match = description.match(/<!-- TEXT_MESH_INDEX: (.*?) -->/)
+  if (match) {
+    const parsed = parseInt(match[1], 10)
+    return isNaN(parsed) ? null : parsed
+  }
+  return null
+}
+
 export function cleanDescription(description: string | null | undefined): string {
   if (!description) return ''
   return description
     .replace(/\s*<!-- ASSEMBLY_METADATA: .*? -->/g, '')
     .replace(/\s*<!-- MESH_MAPPING: .*? -->/g, '')
+    .replace(/\s*<!-- ALLOWED_FILAMENTS: .*? -->/g, '')
+    .replace(/\s*<!-- TEXT_MESH_INDEX: .*? -->/g, '')
     .trim()
 }
 
-export function serializeAssemblyMetadata(description: string, metadata: PartAssembly[], meshMapping?: Record<number, number>): string {
+export function serializeAssemblyMetadata(
+  description: string,
+  metadata: PartAssembly[],
+  meshMapping?: Record<number, number>,
+  allowedFilaments?: string[],
+  textMeshIndex?: number | null
+): string {
   const clean = cleanDescription(description)
   let result = clean
   if (metadata && metadata.length > 0) {
@@ -347,6 +378,12 @@ export function serializeAssemblyMetadata(description: string, metadata: PartAss
   }
   if (meshMapping && Object.keys(meshMapping).length > 0) {
     result += `\n\n<!-- MESH_MAPPING: ${JSON.stringify(meshMapping)} -->`
+  }
+  if (allowedFilaments && allowedFilaments.length > 0) {
+    result += `\n\n<!-- ALLOWED_FILAMENTS: ${JSON.stringify(allowedFilaments)} -->`
+  }
+  if (textMeshIndex !== undefined && textMeshIndex !== null) {
+    result += `\n\n<!-- TEXT_MESH_INDEX: ${textMeshIndex} -->`
   }
   return result
 }
@@ -372,10 +409,51 @@ export function getDirectDownloadUrl(url: string | null | undefined): string {
 export function isPreviewFile(url: string | null | undefined): boolean {
   if (!url) return false
   const lower = url.toLowerCase()
+
+  // Explicit override flags in URL hash or query params
+  if (lower.includes('#part') || lower.includes('?part') || lower.includes('&part')) {
+    return false
+  }
+  if (lower.includes('#preview') || lower.includes('?preview') || lower.includes('&preview')) {
+    return true
+  }
+
+  // Filename contains preview/assemble keywords
+  if (lower.includes('preview') || lower.includes('assemble') || lower.includes('assembly')) {
+    return true
+  }
+
+  // Google Drive and Dropbox links default to preview files if they don't have .stl anywhere
+  if (lower.includes('drive.google.com') || lower.includes('dropbox.com')) {
+    if (lower.includes('.stl')) return false
+    return true
+  }
+
   return (
-    lower.includes('drive.google.com') ||
-    lower.includes('dropbox.com') ||
     lower.endsWith('.3mf') ||
     lower.includes('.3mf')
   )
+}
+
+export interface RotationOffset {
+  rx: number
+  ry: number
+  rz: number
+}
+
+export function parseUrlRotation(url: string | null | undefined): RotationOffset {
+  const result = { rx: 0, ry: 0, rz: 0 }
+  if (!url) return result
+  const hash = url.split('#')[1]
+  if (!hash) return result
+
+  const params = new URLSearchParams(hash)
+  const rx = parseFloat(params.get('rx') || '0')
+  const ry = parseFloat(params.get('ry') || '0')
+  const rz = parseFloat(params.get('rz') || '0')
+
+  result.rx = isNaN(rx) ? 0 : rx
+  result.ry = isNaN(ry) ? 0 : ry
+  result.rz = isNaN(rz) ? 0 : rz
+  return result
 }

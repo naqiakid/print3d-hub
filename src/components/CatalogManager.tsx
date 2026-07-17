@@ -2,17 +2,15 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, ChevronUp, Image as ImageIcon, Video } from 'lucide-react'
+import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, ChevronUp, Image as ImageIcon, Video, ArrowLeft } from 'lucide-react'
 
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView, PartAssembly } from '@/lib/types'
-import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl } from '@/lib/types'
+import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 import { getPresetById } from '@/lib/printer-models'
 import { parseGcodeFile } from '@/lib/parse-gcode'
-import * as THREE from 'three'
-import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js'
 import {
   DEFAULT_ELECTRICITY_RATE,
   DEFAULT_MARKUP_PERCENT,
@@ -25,7 +23,28 @@ const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
 
 const selectClass =
-  'rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 focus:border-orange-400 focus:outline-none'
+  'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
+
+function updateUrlRotation(url: string, axis: 'rx' | 'ry' | 'rz', angle: number): string {
+  const [base, hash] = url.split('#')
+  const isPart = hash?.includes('part')
+  const isPreview = hash?.includes('preview')
+  
+  let cleanHash = hash || ''
+  cleanHash = cleanHash.replace(/preview/g, '').replace(/part/g, '').replace(/^&+|&+$/g, '').replace(/&&+/g, '&')
+  
+  const params = new URLSearchParams(cleanHash)
+  params.set(axis, String(angle))
+  
+  const parts: string[] = []
+  if (isPreview) parts.push('preview')
+  else if (isPart) parts.push('part')
+  
+  const paramsStr = params.toString()
+  if (paramsStr) parts.push(paramsStr)
+  
+  return `${base}#${parts.join('&')}`
+}
 
 // ── G-code calculator types ───────────────────────────────────────────────────
 
@@ -157,11 +176,12 @@ export default function CatalogManager({
   const [editing, setEditing] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(BLANK)
   const [editingMeshMapping, setEditingMeshMapping] = useState<Record<number, number>>({})
+  const [editingTextMeshIndex, setEditingTextMeshIndex] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
 
-  function openNew() { setForm(BLANK); setEditing('new'); setEditingMeshMapping({}); setError('') }
-  function openEdit(item: CatalogItem) { setForm(itemToForm(item)); setEditing(item.id); setEditingMeshMapping(parseMeshMapping(item.description)); setError('') }
+  function openNew() { setForm(BLANK); setEditing('new'); setEditingMeshMapping({}); setEditingTextMeshIndex(null); setError('') }
+  function openEdit(item: CatalogItem) { setForm(itemToForm(item)); setEditing(item.id); setEditingMeshMapping(parseMeshMapping(item.description)); setEditingTextMeshIndex(parseTextMeshIndex(item.description)); setError('') }
   function closeForm() { setEditing(null); setError('') }
 
   function set<K extends keyof FormState>(key: K, val: FormState[K]) {
@@ -212,7 +232,9 @@ export default function CatalogManager({
     const finalDescription = serializeAssemblyMetadata(
       form.description.trim(),
       assemblyOffsets,
-      editingMeshMapping
+      editingMeshMapping,
+      undefined,
+      editingTextMeshIndex
     )
 
     const data = {
@@ -332,37 +354,60 @@ export default function CatalogManager({
                   </button>
                 </div>
               </div>
-              {item.description && <p className="mt-1 text-xs text-slate-500 line-clamp-2">{item.description}</p>}
+              {item.description && <p className="mt-1 text-xs text-slate-500 line-clamp-2">{cleanDescription(item.description)}</p>}
               <div className="mt-2 flex flex-wrap gap-1">
                 {item.allow_custom_text && <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[11px] font-medium text-orange-600">Custom text</span>}
                 {item.allow_resize && <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[11px] font-medium text-orange-600">Resize</span>}
               </div>
             </div>
           </div>
-
-          {editing === item.id && (
-            <div className="border-t border-slate-100 bg-slate-50 px-4 py-5 space-y-4">
-              <CatalogForm
-                form={form} set={set}
-                toggleAvailableMaterial={toggleAvailableMaterial}
-                setMaterialPrice={setMaterialPrice}
-                filaments={filaments}
-                printer={printer}
-                meshMapping={editingMeshMapping}
-                setMeshMapping={setEditingMeshMapping}
-                onSave={handleSave} onCancel={closeForm}
-                isPending={isPending} error={error}
-              />
-            </div>
-          )}
         </div>
+    )
+  }
+
+  if (editing !== null) {
+    const isNew = editing === 'new'
+    const title = isNew ? 'Add Product' : `Edit Product: ${form.name || 'Product Details'}`
+
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={closeForm}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-700 transition"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back to Products
+          </button>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 md:p-6 space-y-6 animate-slide-up">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+            <p className="text-xs text-slate-400 mt-1">Configure your product's pricing, 3D model orientation, text engraving, and color settings.</p>
+          </div>
+          
+          <CatalogForm
+            form={form} set={set}
+            toggleAvailableMaterial={toggleAvailableMaterial}
+            setMaterialPrice={setMaterialPrice}
+            filaments={filaments}
+            printer={printer}
+            meshMapping={editingMeshMapping}
+            setMeshMapping={setEditingMeshMapping}
+            textMeshIndex={editingTextMeshIndex}
+            setTextMeshIndex={setEditingTextMeshIndex}
+            onSave={handleSave} onCancel={closeForm}
+            isPending={isPending} error={error}
+          />
+        </div>
+      </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      {items.length === 0 && editing !== 'new' && (
-        <div className="rounded-2xl border-2 border-dashed border-slate-200 py-14 text-center">
+      {items.length === 0 && (
+        <div className="rounded-2xl border-2 border-dashed border-slate-200 py-14 text-center animate-fade-in">
           <Package className="mx-auto mb-3 h-10 w-10 text-slate-300" />
           <p className="text-sm font-medium text-slate-600">No products yet</p>
           <p className="mt-1 text-xs text-slate-400">Add your best prints so customers can order them directly.</p>
@@ -376,29 +421,11 @@ export default function CatalogManager({
               {category}
             </p>
           )}
-          {groupItems.map((item) => renderItem(item))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {groupItems.map((item) => renderItem(item))}
+          </div>
         </div>
       ))}
-
-      {editing === 'new' && (
-        <div className="rounded-2xl border border-orange-200 bg-white p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-slate-800">New product</p>
-            <button type="button" onClick={closeForm} className="text-slate-400 hover:text-slate-700"><X className="h-4 w-4" /></button>
-          </div>
-          <CatalogForm
-            form={form} set={set}
-            toggleAvailableMaterial={toggleAvailableMaterial}
-            setMaterialPrice={setMaterialPrice}
-            filaments={filaments}
-            printer={printer}
-            meshMapping={editingMeshMapping}
-            setMeshMapping={setEditingMeshMapping}
-            onSave={handleSave} onCancel={closeForm}
-            isPending={isPending} error={error}
-          />
-        </div>
-      )}
 
       {editing === null && (
         <button type="button" onClick={openNew}
@@ -628,7 +655,9 @@ function GcodeCalculator({
 
 function CatalogForm({
   form, set, toggleAvailableMaterial, setMaterialPrice,
-  filaments, printer, meshMapping, setMeshMapping, onSave, onCancel, isPending, error,
+  filaments, printer, meshMapping, setMeshMapping,
+  textMeshIndex, setTextMeshIndex,
+  onSave, onCancel, isPending, error,
 }: {
   form: FormState
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void
@@ -638,6 +667,8 @@ function CatalogForm({
   printer: RequestPrinterView
   meshMapping: Record<number, number>
   setMeshMapping: React.Dispatch<React.SetStateAction<Record<number, number>>>
+  textMeshIndex: number | null
+  setTextMeshIndex: React.Dispatch<React.SetStateAction<number | null>>
   onSave: () => void
   onCancel: () => void
   isPending: boolean
@@ -645,40 +676,10 @@ function CatalogForm({
 }) {
   const previewUrl = form.stl_urls.find(url => isPreviewFile(url))
   const [previewMeshes, setPreviewMeshes] = useState<string[]>([])
-  const [loadingMeshes, setLoadingMeshes] = useState(false)
   const [hoveredMeshIdx, setHoveredMeshIdx] = useState<number | undefined>(undefined)
-
+  
   useEffect(() => {
-    if (!previewUrl) {
-      setPreviewMeshes([])
-      return
-    }
-
-    setLoadingMeshes(true)
-    const downloadUrl = getDirectDownloadUrl(previewUrl)
-    
-    fetch(downloadUrl)
-      .then(res => {
-        if (!res.ok) throw new Error()
-        return res.arrayBuffer()
-      })
-      .then(buffer => {
-        const loader = new ThreeMFLoader()
-        const obj = loader.parse(buffer)
-        const meshes: string[] = []
-        obj.traverse(c => {
-          if (c instanceof THREE.Mesh) {
-            meshes.push(c.name || `Mesh ${meshes.length + 1}`)
-          }
-        })
-        setPreviewMeshes(meshes)
-        setLoadingMeshes(false)
-      })
-      .catch((err) => {
-        console.error("Scanner error:", err)
-        setPreviewMeshes([])
-        setLoadingMeshes(false)
-      })
+    setPreviewMeshes([])
   }, [previewUrl])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
@@ -775,8 +776,238 @@ function CatalogForm({
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  const render3DUpload = () => {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">3D model files for preview (optional)</label>
+          <p className="mb-2 text-[11px] text-slate-400">Upload .stl or .3mf files — customers can spin and view the model before ordering.</p>
+        </div>
+        {form.stl_urls.length > 0 && (
+          <div className="mb-2 space-y-1.5">
+            {form.stl_urls.map((url, i) => {
+              const isPreview = isPreviewFile(url)
+              const rot = parseUrlRotation(url)
+              let filename = url.split('/').pop()?.split('?')[0].split('#')[0] ?? `File ${i + 1}`
+              if (url.includes('drive.google.com')) {
+                filename = `Google Drive File (${i + 1})`
+              } else if (url.includes('dropbox.com')) {
+                filename = `Dropbox File (${i + 1})`
+              } else {
+                filename = filename.replace(/^\d+-/, '') // clean date prefix
+              }
+              return (
+                <div key={url} className="flex flex-col gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <FileBox className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                    <span className="flex-1 truncate text-xs text-slate-600 font-medium">{filename}</span>
+                    {isPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextUrls = [...form.stl_urls]
+                          const cleanUrl = url.replace(/#part/g, '').replace(/#preview/g, '')
+                          nextUrls[i] = cleanUrl + '#part'
+                          set('stl_urls', nextUrls)
+                        }}
+                        className="rounded bg-orange-100 hover:bg-orange-200 px-1.5 py-0.5 text-[9px] font-bold text-orange-700 transition"
+                        title="Click to mark as Printable Part"
+                      >
+                        Preview
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextUrls = [...form.stl_urls]
+                          const cleanUrl = url.replace(/#part/g, '').replace(/#preview/g, '')
+                          nextUrls[i] = cleanUrl + '#preview'
+                          set('stl_urls', nextUrls)
+                        }}
+                        className="rounded bg-slate-100 hover:bg-slate-200 px-1.5 py-0.5 text-[9px] font-bold text-slate-655 transition"
+                        title="Click to mark as Assembled Preview"
+                      >
+                        Printable Part
+                      </button>
+                    )}
+                    <button type="button" onClick={() => set('stl_urls', form.stl_urls.filter((_, idx) => idx !== i))}
+                      className="text-slate-300 hover:text-red-400 transition"><X className="h-3.5 w-3.5" /></button>
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-1.5 text-[10px]">
+                    <span className="font-semibold text-slate-400">Rotate preview:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextUrls = [...form.stl_urls]
+                        const nextVal = (rot.rx + 90) % 360
+                        nextUrls[i] = updateUrlRotation(url, 'rx', nextVal)
+                        set('stl_urls', nextUrls)
+                      }}
+                      className="rounded bg-slate-50 border border-slate-200 px-2 py-0.5 font-mono font-medium text-slate-650 hover:border-orange-200 hover:bg-orange-50/20 transition active:scale-95"
+                      title="Rotate 90 degrees around X-axis"
+                    >
+                      X: {rot.rx}°
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextUrls = [...form.stl_urls]
+                        const nextVal = (rot.ry + 90) % 360
+                        nextUrls[i] = updateUrlRotation(url, 'ry', nextVal)
+                        set('stl_urls', nextUrls)
+                      }}
+                      className="rounded bg-slate-50 border border-slate-200 px-2 py-0.5 font-mono font-medium text-slate-650 hover:border-orange-200 hover:bg-orange-50/20 transition active:scale-95"
+                      title="Rotate 90 degrees around Y-axis"
+                    >
+                      Y: {rot.ry}°
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextUrls = [...form.stl_urls]
+                        const nextVal = (rot.rz + 90) % 360
+                        nextUrls[i] = updateUrlRotation(url, 'rz', nextVal)
+                        set('stl_urls', nextUrls)
+                      }}
+                      className="rounded bg-slate-50 border border-slate-200 px-2 py-0.5 font-mono font-medium text-slate-605 hover:border-orange-200 hover:bg-orange-50/20 transition active:scale-95"
+                      title="Rotate 90 degrees around Z-axis"
+                    >
+                      Z: {rot.rz}°
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <input ref={fileInputRef} type="file" accept=".stl,.3mf" multiple className="hidden" onChange={(e) => handleStlFiles(e.target.files)} />
+        <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-2.5 text-xs font-medium text-slate-500 hover:border-orange-400 hover:text-orange-600 disabled:opacity-50 transition w-full justify-center">
+          <Upload className="h-3.5 w-3.5" />
+          {uploading ? 'Uploading…' : 'Choose .stl / .3mf files'}
+        </button>
+        {uploadError && <p className="mt-1 text-[11px] text-red-500">{uploadError}</p>}
+        
+        {/* Paste link input */}
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="text"
+            value={linkInput}
+            onChange={(e) => setLinkInput(e.target.value)}
+            placeholder="Or paste Google Drive/Dropbox shared URL..."
+            className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition"
+          />
+          <button
+            type="button"
+            onClick={handleAddLink}
+            className="rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-700 transition"
+          >
+            Add Link
+          </button>
+        </div>
+        {linkError && <p className="mt-1 text-[11px] text-red-500">{linkError}</p>}
+
+        <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200/60 p-3.5 space-y-2">
+          <p className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+            🧩 Configuring Multi-Part 3D Previews
+          </p>
+          <div className="space-y-2 text-[10px] text-slate-600 leading-relaxed text-left">
+            <div className="flex gap-2">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700 font-bold text-[9px]">1</span>
+              <div>
+                <strong className="text-slate-800 font-semibold">Upload individual printable parts:</strong> Upload separate <code>.stl</code> files for each part (e.g., <code>partA.slate</code>, <code>partB.stl</code>). This is required for printing, custom color selection, and auto-pricing.
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700 font-bold text-[9px]">2</span>
+              <div>
+                <strong className="text-slate-800 font-semibold">Upload assembled preview model:</strong> Upload a single <code>.3mf</code> file showing how all parts fit together. Include <code>preview</code> or <code>assemble</code> in the name.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderMeshMapping = () => {
+    if (!previewUrl) return null
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm animate-fade-in">
+        <div>
+          <p className="text-xs font-semibold text-slate-700">🧩 Assembled Preview Mesh Mapping</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">
+            Link each mesh in the 3MF preview to the correct printable part.
+          </p>
+        </div>
+
+
+
+        {previewMeshes.length === 0 ? (
+          <div className="flex items-center gap-2 py-2 text-xs text-slate-400">
+            <Loader2 className="h-3 w-3 animate-spin text-orange-500" />
+            <span>Scanning model parts inside 3D viewer…</span>
+          </div>
+        ) : (
+          <div className="grid gap-2 max-h-[300px] overflow-y-auto pr-1">
+            {previewMeshes.map((meshName, meshIdx) => {
+              const currentStlIdx = meshMapping[meshIdx] ?? ''
+              const printableParts = form.stl_urls.filter(url => !isPreviewFile(url))
+              const isHovered = hoveredMeshIdx === meshIdx
+              return (
+                <div key={meshIdx}
+                  onMouseEnter={() => setHoveredMeshIdx(meshIdx)}
+                  onMouseLeave={() => setHoveredMeshIdx(undefined)}
+                  className={`flex items-center justify-between gap-3 rounded-lg border p-2 transition-all duration-150 ${
+                    isHovered 
+                      ? 'border-orange-400 bg-orange-50/30 shadow-sm scale-[1.01]' 
+                      : 'border-slate-100 bg-white'
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-medium text-slate-700 truncate">
+                      {meshIdx + 1}. <span className="font-mono text-[10px] text-orange-600 bg-orange-50/50 px-1 py-0.5 rounded border border-orange-100/50 font-bold">{meshName}</span>
+                    </p>
+                  </div>
+                  <select
+                    value={currentStlIdx}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? undefined : parseInt(e.target.value)
+                      setMeshMapping(prev => {
+                        const next = { ...prev }
+                        if (val === undefined) {
+                          delete next[meshIdx]
+                        } else {
+                          next[meshIdx] = val
+                        }
+                        return next
+                      })
+                    }}
+                    className="rounded bg-slate-50 border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-655 focus:border-orange-500 focus:outline-none transition min-w-[120px] max-w-[150px]"
+                  >
+                    <option value="">-- Match (Auto) --</option>
+                    {printableParts.map((url, printableIdx) => {
+                      const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${printableIdx + 1}`
+                      return (
+                        <option key={printableIdx} value={printableIdx}>
+                          {filename}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <>
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-fade-in">
+      <div className="lg:col-span-7 space-y-5">
       {/* Name + price — the only two fields required to list a product */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
@@ -921,91 +1152,7 @@ function CatalogForm({
           placeholder="https://www.makerworld.com/..." className={inputClass} />
       </div>
 
-      {/* 3D model upload */}
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">3D model files for preview (optional)</label>
-        <p className="mb-2 text-[11px] text-slate-400">Upload .stl or .3mf files — customers can spin and view the model before ordering.</p>
-        {form.stl_urls.length > 0 && (
-          <div className="mb-2 space-y-1.5">
-            {form.stl_urls.map((url, i) => {
-              const isPreview = isPreviewFile(url)
-              let filename = url.split('/').pop()?.split('?')[0] ?? `File ${i + 1}`
-              if (isPreview) {
-                filename = 'Assembled Model (Preview)'
-              } else if (url.includes('drive.google.com')) {
-                filename = `Google Drive File (${i + 1})`
-              } else if (url.includes('dropbox.com')) {
-                filename = `Dropbox File (${i + 1})`
-              } else {
-                filename = filename.replace(/^\d+-/, '') // clean date prefix
-              }
-              return (
-                <div key={url} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                  <FileBox className="h-3.5 w-3.5 shrink-0 text-orange-500" />
-                  <span className="flex-1 truncate text-xs text-slate-600">{filename}</span>
-                  {isPreview && (
-                    <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[9px] font-bold text-orange-700">Preview</span>
-                  )}
-                  <button type="button" onClick={() => set('stl_urls', form.stl_urls.filter((_, idx) => idx !== i))}
-                    className="text-slate-300 hover:text-red-400 transition"><X className="h-3.5 w-3.5" /></button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-        <input ref={fileInputRef} type="file" accept=".stl,.3mf" multiple className="hidden" onChange={(e) => handleStlFiles(e.target.files)} />
-        <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-2.5 text-xs font-medium text-slate-500 hover:border-orange-400 hover:text-orange-600 disabled:opacity-50 transition">
-          <Upload className="h-3.5 w-3.5" />
-          {uploading ? 'Uploading…' : 'Choose .stl / .3mf files'}
-        </button>
-        {uploadError && <p className="mt-1 text-[11px] text-red-500">{uploadError}</p>}
-        
-        {/* Paste link input */}
-        <div className="mt-3 flex items-center gap-2">
-          <input
-            type="text"
-            value={linkInput}
-            onChange={(e) => setLinkInput(e.target.value)}
-            placeholder="Or paste Google Drive/Dropbox shared URL..."
-            className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition"
-          />
-          <button
-            type="button"
-            onClick={handleAddLink}
-            className="rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-700 transition"
-          >
-            Add Link
-          </button>
-        </div>
-        {linkError && <p className="mt-1 text-[11px] text-red-500">{linkError}</p>}
-
-        <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200/60 p-3.5 space-y-2">
-          <p className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
-            🧩 Configuring Multi-Part 3D Previews
-          </p>
-          <div className="space-y-2 text-[10px] text-slate-600 leading-relaxed">
-            <div className="flex gap-2">
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700 font-bold text-[9px]">1</span>
-              <div>
-                <strong className="text-slate-800 font-semibold">Upload individual printable parts:</strong> Upload separate <code>.stl</code> files for each part (e.g., <code>partA.stl</code>, <code>partB.stl</code>). This is required for printing, custom color selection, and auto-pricing.
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700 font-bold text-[9px]">2</span>
-              <div>
-                <strong className="text-slate-800 font-semibold">Upload assembled preview model:</strong> Upload a single <code>.3mf</code> file showing how all parts fit together. Include <code>preview</code> or <code>assemble</code> in the file name (e.g., <code>pokeball_preview.3mf</code>) to mark it as a preview-only model (not for printing).
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-700 font-bold text-[9px]">3</span>
-              <div>
-                <strong className="text-slate-800 font-semibold">Map meshes to parts:</strong> Scroll down to the <b>🧩 Assembled Preview Mesh Mapping</b> section below. Hover over each row to see the mesh highlight inside the 3D window, then link it to the corresponding printable STL file.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* 3D model upload section moved to right column */}
 
       {/* ── Material & Color ── */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
@@ -1178,88 +1325,7 @@ function CatalogForm({
                   </div>
                 )}
 
-                {/* Assembled Preview Mesh Mapping (only if there is an assembled preview file) */}
-                {previewUrl && (
-                  <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-3">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-700">🧩 Assembled Preview Mesh Mapping</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
-                        Link each mesh in the 3MF preview to the correct printable part so colors show accurately.
-                      </p>
-                    </div>
-
-                    {previewUrl && !loadingMeshes && previewMeshes.length > 0 && (
-                      <div className="relative aspect-square w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-900 shadow-inner flex items-center justify-center" style={{ height: 260 }}>
-                        <STLViewer
-                          urls={[previewUrl]}
-                          colors={['#cccccc']}
-                          highlightMeshIndex={hoveredMeshIdx}
-                          className="h-full w-full"
-                        />
-                      </div>
-                    )}
-
-                    {loadingMeshes ? (
-                      <div className="flex items-center gap-2 py-2 text-xs text-slate-400">
-                        <Loader2 className="h-3 w-3 animate-spin text-orange-500" />
-                        <span>Scanning preview model meshes…</span>
-                      </div>
-                    ) : previewMeshes.length === 0 ? (
-                      <p className="py-2 text-[11px] italic text-slate-400">No meshes detected or unable to scan the preview model.</p>
-                    ) : (
-                      <div className="grid gap-2">
-                        {previewMeshes.map((meshName, meshIdx) => {
-                          const currentStlIdx = meshMapping[meshIdx] ?? ''
-                          const printableParts = form.stl_urls.filter(url => !isPreviewFile(url))
-                          const isHovered = hoveredMeshIdx === meshIdx
-                          return (
-                            <div key={meshIdx}
-                              onMouseEnter={() => setHoveredMeshIdx(meshIdx)}
-                              onMouseLeave={() => setHoveredMeshIdx(undefined)}
-                              className={`flex items-center justify-between gap-3 rounded-lg border p-2 transition-all duration-150 ${
-                                isHovered 
-                                  ? 'border-orange-400 bg-orange-50/30 shadow-sm scale-[1.01]' 
-                                  : 'border-slate-100 bg-white'
-                              }`}
-                            >
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[11px] font-medium text-slate-700 truncate">
-                                  {meshIdx + 1}. <span className="font-mono text-[10px] text-orange-600 bg-orange-50/50 px-1 py-0.5 rounded border border-orange-100/50 font-bold">{meshName}</span>
-                                </p>
-                              </div>
-                              <select
-                                value={currentStlIdx}
-                                onChange={(e) => {
-                                  const val = e.target.value === '' ? undefined : parseInt(e.target.value)
-                                  setMeshMapping(prev => {
-                                    const next = { ...prev }
-                                    if (val === undefined) {
-                                      delete next[meshIdx]
-                                    } else {
-                                      next[meshIdx] = val
-                                    }
-                                    return next
-                                  })
-                                }}
-                                className="rounded bg-slate-50 border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-650 focus:border-orange-500 focus:outline-none transition min-w-[120px] max-w-[180px]"
-                              >
-                                <option value="">-- Match by Name (Auto) --</option>
-                                {printableParts.map((url, printableIdx) => {
-                                  const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${printableIdx + 1}`
-                                  return (
-                                    <option key={printableIdx} value={printableIdx}>
-                                      {filename}
-                                    </option>
-                                  )
-                                })}
-                              </select>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* Mesh mapping moved to right column */}
               </div>
             )}
           </>
@@ -1279,10 +1345,70 @@ function CatalogForm({
               <span className="text-sm font-medium text-slate-800">Text engraving / embossing</span>
               <p className="text-xs text-slate-400">Customer types a name, word, or message to be added to the surface.</p>
               {form.allow_custom_text && (
-                <div className="mt-2">
-                  <label className="mb-1 block text-xs font-medium text-slate-600">Label shown to customer</label>
-                  <input value={form.text_prompt} onChange={(e) => set('text_prompt', e.target.value)}
-                    placeholder="e.g. Name to engrave, Custom message…" className={inputClass} />
+                <div className="mt-2 space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-600">Label shown to customer</label>
+                    <input value={form.text_prompt} onChange={(e) => set('text_prompt', e.target.value)}
+                      placeholder="e.g. Name to engrave, Custom message…" className={inputClass} />
+                  </div>
+                  {form.stl_urls.length > 0 && (
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600">🎯 Text Engraving Target Part</label>
+                      {(() => {
+                        const previewUrls = form.stl_urls.filter(url => isPreviewFile(url))
+                        const printableParts = form.stl_urls.filter(url => !isPreviewFile(url))
+                        const hasPreview = previewUrls.length > 0
+                        
+                        if (hasPreview && previewMeshes.length > 0) {
+                          return (
+                            <select
+                              value={textMeshIndex ?? ''}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? null : parseInt(e.target.value, 10)
+                                setTextMeshIndex(val)
+                              }}
+                              className={inputClass}
+                            >
+                              <option value="">Automatic (first mesh or matching name)</option>
+                              {previewMeshes.map((meshName, idx) => (
+                                <option key={idx} value={idx}>
+                                  Assembled Mesh: {meshName}
+                                </option>
+                              ))}
+                            </select>
+                          )
+                        } else if (printableParts.length > 1) {
+                          return (
+                            <select
+                              value={textMeshIndex ?? ''}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? null : parseInt(e.target.value, 10)
+                                setTextMeshIndex(val)
+                              }}
+                              className={inputClass}
+                            >
+                              <option value="">Automatic (first part or matching name)</option>
+                              {printableParts.map((url, idx) => {
+                                const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${idx + 1}`
+                                return (
+                                  <option key={idx} value={idx}>
+                                    Printable Part: {filename}
+                                  </option>
+                                )
+                              })}
+                            </select>
+                          )
+                        } else {
+                          const partName = printableParts[0]?.split('/').pop()?.replace(/^\d+-/, '') || 'Single model part'
+                          return (
+                            <p className="text-xs text-slate-400 bg-slate-50 border border-slate-100 p-2 rounded-xl">
+                              Automatically assigned to: <strong>{partName}</strong>
+                            </p>
+                          )
+                        }
+                      })()}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1329,6 +1455,42 @@ function CatalogForm({
           {isPending ? 'Saving…' : 'Save product'}
         </button>
       </div>
-    </>
+      </div>
+
+      {/* ── Right Column: 3D Preview, File list, Mesh Mapping ── */}
+      <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-6 h-fit">
+        {form.stl_urls.length > 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
+            <p className="text-xs font-semibold text-slate-700">Live 3D Preview</p>
+            <div className="relative aspect-square w-full rounded-xl overflow-hidden border border-slate-100 bg-slate-900 shadow-inner flex items-center justify-center animate-fade-in" style={{ height: 280 }}>
+              {(() => {
+                const viewerColors = form.stl_urls.map(url => isPreviewFile(url) ? '#cccccc' : '#f97316')
+                return (
+                  <STLViewer
+                    urls={form.stl_urls}
+                    colors={viewerColors}
+                    highlightMeshIndex={hoveredMeshIdx}
+                    textMeshIndex={textMeshIndex}
+                    customText={form.allow_custom_text ? (form.text_prompt.trim() || 'TEXT') : undefined}
+                    onMeshNamesLoaded={setPreviewMeshes}
+                    className="h-full w-full"
+                  />
+                )
+              })()}
+            </div>
+            <p className="text-[10px] text-slate-400 text-center">Interactive preview: Drag to spin, scroll to zoom.</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border-2 border-dashed border-slate-200 p-8 text-center bg-slate-50/50">
+            <FileBox className="mx-auto mb-3 h-8 w-8 text-slate-350" />
+            <p className="text-xs font-semibold text-slate-700">No 3D files uploaded</p>
+            <p className="mt-1 text-[10px] text-slate-400 max-w-[240px] mx-auto">Upload .stl or .3mf files below or paste a Google Drive link to see the 3D preview here.</p>
+          </div>
+        )}
+
+        {renderMeshMapping()}
+        {render3DUpload()}
+      </div>
+    </div>
   )
 }

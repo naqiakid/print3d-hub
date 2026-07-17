@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import type { Shop, Printer, CatalogItem, PrintProfile, Filament, RequestPrinterView } from '@/lib/types'
-import CatalogOrderForm from '@/components/CatalogOrderForm'
+import CatalogOrderForm from '@/components/CatalogOrderFormWrapper'
 import STLViewer from '@/components/STLViewerWrapper'
 import ProductMediaGallery from '@/components/ProductMediaGallery'
 

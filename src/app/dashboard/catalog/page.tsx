@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import type { Shop, Printer, CatalogItem, Filament, RequestPrinterView } from '@/lib/types'
-import CatalogManager from '@/components/CatalogManager'
+import CatalogManager from '@/components/CatalogManagerWrapper'
 
 export default async function CatalogPage() {
   const supabase = await createClient()
@@ -60,7 +60,7 @@ export default async function CatalogPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-8">
         <Link
           href="/dashboard"

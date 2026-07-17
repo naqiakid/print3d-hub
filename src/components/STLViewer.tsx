@@ -7,7 +7,7 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
-import { PartAssembly, getDirectDownloadUrl, isPreviewFile } from '@/lib/types'
+import { PartAssembly, getDirectDownloadUrl, isPreviewFile, parseUrlRotation } from '@/lib/types'
 
 type Props = {
   urls?: string[]
@@ -16,10 +16,223 @@ type Props = {
   partColors?: string[][]   // per-URL array of per-part colours (for multi-object 3MF)
   assemblyOffsets?: PartAssembly[]
   meshMapping?: Record<number, number>
+  textMeshIndex?: number | null
   file?: File
   highlightIndex?: number   // which slot to spotlight (-1 or undefined = all normal)
   highlightMeshIndex?: number // which specific sub-mesh to spotlight inside a group
+  customText?: string         // customer's custom text input to display on text meshes
   className?: string
+  onMeshNamesLoaded?: (names: string[]) => void
+}
+
+function setMaterialColor(material: THREE.Material | THREE.Material[], color: string | THREE.Color) {
+  if (!material) return
+  const col = typeof color === 'string' ? new THREE.Color(color) : color
+  if (Array.isArray(material)) {
+    material.forEach((m) => {
+      if (m && 'color' in m) {
+        (m as any).color.set(col)
+        m.needsUpdate = true
+      }
+    })
+  } else {
+    if (material && 'color' in material) {
+      (material as any).color.set(col)
+      material.needsUpdate = true
+    }
+  }
+}
+
+function applyHighlightToMaterial(
+  material: THREE.Material | THREE.Material[],
+  opacity: number,
+  transparent: boolean,
+  emissiveHex: number
+) {
+  if (!material) return
+  if (Array.isArray(material)) {
+    material.forEach((m) => {
+      if (m) {
+        m.opacity = opacity
+        m.transparent = transparent
+        if ('emissive' in m) {
+          (m as any).emissive.set(emissiveHex)
+        }
+        m.needsUpdate = true
+      }
+    })
+  } else {
+    material.opacity = opacity
+    material.transparent = transparent
+    if ('emissive' in material) {
+      (material as any).emissive.set(emissiveHex)
+    }
+    material.needsUpdate = true
+  }
+}
+
+function applyBumpTextureToMaterial(
+  material: THREE.Material | THREE.Material[],
+  texture: THREE.CanvasTexture | null
+) {
+  if (!material) return
+  if (Array.isArray(material)) {
+    material.forEach((m) => {
+      const mat = m as THREE.MeshPhongMaterial
+      if (mat) {
+        if (mat.bumpMap && mat.bumpMap !== texture) mat.bumpMap.dispose()
+        mat.bumpMap = texture
+        mat.bumpScale = 0.8
+        mat.needsUpdate = true
+      }
+    })
+  } else {
+    const mat = material as THREE.MeshPhongMaterial
+    if (mat) {
+      if (mat.bumpMap && mat.bumpMap !== texture) mat.bumpMap.dispose()
+      mat.bumpMap = texture
+      mat.bumpScale = 0.8
+      mat.needsUpdate = true
+    }
+  }
+}
+
+
+const STL_WORKER_CODE = `
+self.onmessage = function(e) {
+  const { buffer } = e.data;
+  try {
+    const view = new DataView(buffer);
+    
+    // Determine if it is binary or ASCII using exact mathematical byte length check
+    let isBinary = false;
+    if (buffer.byteLength >= 84) {
+      const faceCount = view.getUint32(80, true);
+      if (84 + faceCount * 50 === buffer.byteLength) {
+        isBinary = true;
+      }
+    }
+
+    if (isBinary) {
+      const faceCount = view.getUint32(80, true);
+      const positions = new Float32Array(faceCount * 9);
+      const normals = new Float32Array(faceCount * 9);
+      
+      let offset = 84;
+      let pIdx = 0;
+      
+      for (let i = 0; i < faceCount; i++) {
+        if (offset + 50 > buffer.byteLength) break;
+        
+        // Normal
+        const nx = view.getFloat32(offset, true);
+        const ny = view.getFloat32(offset + 4, true);
+        const nz = view.getFloat32(offset + 8, true);
+        offset += 12;
+        
+        // Vertices
+        const v1x = view.getFloat32(offset, true);
+        const v1y = view.getFloat32(offset + 4, true);
+        const v1z = view.getFloat32(offset + 8, true);
+        offset += 12;
+        
+        const v2x = view.getFloat32(offset, true);
+        const v2y = view.getFloat32(offset + 4, true);
+        const v2z = view.getFloat32(offset + 8, true);
+        offset += 12;
+        
+        const v3x = view.getFloat32(offset, true);
+        const v3y = view.getFloat32(offset + 4, true);
+        const v3z = view.getFloat32(offset + 8, true);
+        offset += 12;
+        
+        offset += 2; // attribute byte count
+        
+        positions[pIdx] = v1x; positions[pIdx + 1] = v1y; positions[pIdx + 2] = v1z;
+        positions[pIdx + 3] = v2x; positions[pIdx + 4] = v2y; positions[pIdx + 5] = v2z;
+        positions[pIdx + 6] = v3x; positions[pIdx + 7] = v3y; positions[pIdx + 8] = v3z;
+        
+        normals[pIdx] = nx; normals[pIdx + 1] = ny; normals[pIdx + 2] = nz;
+        normals[pIdx + 3] = nx; normals[pIdx + 4] = ny; normals[pIdx + 5] = nz;
+        normals[pIdx + 6] = nx; normals[pIdx + 7] = ny; normals[pIdx + 8] = nz;
+        
+        pIdx += 9;
+      }
+      
+      self.postMessage({ success: true, positions, normals }, [positions.buffer, normals.buffer]);
+    } else {
+      const decoder = new TextDecoder('utf-8');
+      const text = decoder.decode(buffer);
+      
+      const lines = text.split('\n');
+      const positionsList = [];
+      const normalsList = [];
+      
+      let currentNormal = [0, 0, 0];
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        if (line.startsWith('facet normal')) {
+          const parts = line.split(/[ \t]+/);
+          const nx = parseFloat(parts[2]) || 0;
+          const ny = parseFloat(parts[3]) || 0;
+          const nz = parseFloat(parts[4]) || 0;
+          currentNormal = [nx, ny, nz];
+        } else if (line.startsWith('vertex')) {
+          const parts = line.split(/[ \t]+/);
+          const vx = parseFloat(parts[1]) || 0;
+          const vy = parseFloat(parts[2]) || 0;
+          const vz = parseFloat(parts[3]) || 0;
+          positionsList.push(vx, vy, vz);
+          normalsList.push(currentNormal[0], currentNormal[1], currentNormal[2]);
+        }
+      }
+      
+      const positions = new Float32Array(positionsList);
+      const normals = new Float32Array(normalsList);
+      self.postMessage({ success: true, positions, normals }, [positions.buffer, normals.buffer]);
+    }
+  } catch (err) {
+    self.postMessage({ success: false, error: err.message });
+  }
+};
+`
+
+function parseStlWithWorker(buffer: ArrayBuffer): Promise<THREE.BufferGeometry> {
+  return new Promise((resolve, reject) => {
+    try {
+      const blob = new Blob([STL_WORKER_CODE], { type: 'application/javascript' })
+      const workerUrl = URL.createObjectURL(blob)
+      const worker = new Worker(workerUrl)
+
+      worker.onmessage = (e) => {
+        const { success, positions, normals, error } = e.data
+        worker.terminate()
+        URL.revokeObjectURL(workerUrl)
+
+        if (success) {
+          const geometry = new THREE.BufferGeometry()
+          geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+          geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+          resolve(geometry)
+        } else {
+          reject(new Error(error || 'Worker parsing failed'))
+        }
+      }
+
+      worker.onerror = (err) => {
+        worker.terminate()
+        URL.revokeObjectURL(workerUrl)
+        reject(err)
+      }
+
+      worker.postMessage({ buffer })
+    } catch (err) {
+      reject(err)
+    }
+  })
 }
 
 export default function STLViewer({
@@ -29,10 +242,13 @@ export default function STLViewer({
   partColors: partColorsProp,
   assemblyOffsets,
   meshMapping,
+  textMeshIndex,
   file,
   highlightIndex,
   highlightMeshIndex,
+  customText,
   className,
+  onMeshNamesLoaded,
 }: Props) {
   const mountRef    = useRef<HTMLDivElement>(null)
   const objectsRef  = useRef<THREE.Object3D[]>([])
@@ -61,7 +277,15 @@ export default function STLViewer({
   colorsRef.current     = colorsProp     ?? []
   partColorsRef.current = partColorsProp ?? []
 
-  // ── Scene setup (re-runs only when URLs / file names change) ────
+  const customTextRef = useRef<string>('')
+  customTextRef.current = customText ?? ''
+
+  const textMeshIndexRef = useRef<number | null | undefined>(null)
+  textMeshIndexRef.current = textMeshIndex
+
+  const baseUrlsKey = (urlsProp ?? []).map(url => url.split('#')[0]).join(',')
+
+  // ── Scene setup (re-runs only when base URLs or file names change) ────
   useEffect(() => {
     const mount = mountRef.current
     objectsRef.current = []
@@ -101,6 +325,12 @@ export default function STLViewer({
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(w, h)
+    renderer.domElement.style.position = 'absolute'
+    renderer.domElement.style.top = '0'
+    renderer.domElement.style.left = '0'
+    renderer.domElement.style.width = '100%'
+    renderer.domElement.style.height = '100%'
+    mount.style.position = 'relative'
     mount.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
@@ -131,6 +361,64 @@ export default function STLViewer({
         transparent: false,
         opacity:     1,
       })
+    }
+
+    function createBumpTexture(text: string, engraved = false): THREE.CanvasTexture {
+      const canvas = document.createElement('canvas')
+      canvas.width = 1024
+      canvas.height = 256
+      const ctx = canvas.getContext('2d')!
+
+      ctx.fillStyle = '#808080'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      if (text) {
+        ctx.fillStyle = engraved ? '#000000' : '#ffffff'
+        ctx.font = 'bold 120px sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
+        ctx.shadowBlur = 4
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2)
+      }
+
+      const texture = new THREE.CanvasTexture(canvas)
+      texture.wrapS = THREE.RepeatWrapping
+      texture.wrapT = THREE.RepeatWrapping
+      texture.needsUpdate = true
+      return texture
+    }
+
+    function applyTextToMesh(mesh: THREE.Mesh, text: string) {
+      const material = mesh.material
+      if (!material) return
+      if (Array.isArray(material)) {
+        material.forEach((m) => {
+          const mat = m as THREE.MeshPhongMaterial
+          if (mat) {
+            if (mat.bumpMap) mat.bumpMap.dispose()
+            if (text) {
+              mat.bumpMap = createBumpTexture(text)
+              mat.bumpScale = 0.8
+            } else {
+              mat.bumpMap = null
+            }
+            mat.needsUpdate = true
+          }
+        })
+      } else {
+        const mat = material as THREE.MeshPhongMaterial
+        if (mat) {
+          if (mat.bumpMap) mat.bumpMap.dispose()
+          if (text) {
+            mat.bumpMap = createBumpTexture(text)
+            mat.bumpScale = 0.8
+          } else {
+            mat.bumpMap = null
+          }
+          mat.needsUpdate = true
+        }
+      }
     }
 
     function onAllLoaded() {
@@ -179,6 +467,23 @@ export default function STLViewer({
 
       scene.add(group)
       renderer.render(scene, camera)
+
+      if (onMeshNamesLoaded && isAssembled) {
+        const names: string[] = []
+        objectsRef.current.forEach((obj) => {
+          if (obj instanceof THREE.Mesh) {
+            names.push(obj.name || `Mesh ${names.length + 1}`)
+          } else {
+            obj.traverse((c) => {
+              if (c instanceof THREE.Mesh) {
+                names.push(c.name || `Mesh ${names.length + 1}`)
+              }
+            })
+          }
+        })
+        onMeshNamesLoaded(names)
+      }
+
       setLoading(false)
     }
 
@@ -190,19 +495,56 @@ export default function STLViewer({
       }
     }
 
-    urls.forEach((url, i) => {
+    (urls ?? []).forEach((urlWithHash, i) => {
+      const url = urlWithHash.split('#')[0]
       const name = fileNames[i] ?? url
-      const ext  = name.split('.').pop()?.toLowerCase() ?? 'stl'
+      let ext = 'stl'
+      const cleanName = name.toLowerCase()
+      if (cleanName.includes('.3mf')) {
+        ext = '3mf'
+      } else if (cleanName.includes('.obj')) {
+        ext = 'obj'
+      } else if (cleanName.includes('.stl')) {
+        ext = 'stl'
+      } else if (isPreviewFile(urlWithHash)) {
+        ext = '3mf'
+      } else {
+        ext = 'stl'
+      }
 
       // ── STL: loader returns BufferGeometry ────────────────────────
       function onGeometry(geometry: THREE.BufferGeometry) {
         geometry.computeVertexNormals()
+
+        // Generate planar UV coordinates if missing (STL files have no UVs by default)
+        if (!geometry.attributes.uv) {
+          geometry.computeBoundingBox()
+          const box = geometry.boundingBox!
+          const size = new THREE.Vector3()
+          box.getSize(size)
+
+          const posAttr = geometry.attributes.position
+          const count = posAttr.count
+          const uvs = new Float32Array(count * 2)
+
+          for (let idx = 0; idx < count; idx++) {
+            const x = posAttr.getX(idx)
+            const y = posAttr.getY(idx)
+            const u = size.x > 0 ? (x - box.min.x) / size.x : 0.5
+            const v = size.y > 0 ? (y - box.min.y) / size.y : 0.5
+            uvs[idx * 2] = u
+            uvs[idx * 2 + 1] = v
+          }
+          geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+        }
+
         const mesh = new THREE.Mesh(geometry, makeMat(colorsRef.current[i] || '#cccccc'))
         mesh.userData.index = i
 
         geometry.computeBoundingBox()
         const centre = new THREE.Vector3()
         geometry.boundingBox!.getCenter(centre)
+        mesh.userData.originalCentre = centre.clone()
         
         // Center the part first if in exploded view OR if custom assembly offsets exist
         const shouldCenter = !isAssembled || !!(assemblyOffsets && assemblyOffsets[i])
@@ -210,15 +552,30 @@ export default function STLViewer({
           geometry.translate(-centre.x, -centre.y, -centre.z)
         }
 
+        // Apply URL-specific rotation first
+        const urlRot = parseUrlRotation(urlWithHash)
+        mesh.rotation.set(
+          THREE.MathUtils.degToRad(urlRot.rx),
+          THREE.MathUtils.degToRad(urlRot.ry),
+          THREE.MathUtils.degToRad(urlRot.rz)
+        )
+
         // Apply custom position and rotation offsets
         if (isAssembled && assemblyOffsets && assemblyOffsets[i]) {
           const offset = assemblyOffsets[i]
           mesh.position.set(offset.x, offset.y, offset.z)
-          mesh.rotation.set(
-            THREE.MathUtils.degToRad(offset.rx ?? 0),
-            THREE.MathUtils.degToRad(offset.ry ?? 0),
-            THREE.MathUtils.degToRad(offset.rz ?? 0)
-          )
+          mesh.rotation.x += THREE.MathUtils.degToRad(offset.rx ?? 0)
+          mesh.rotation.y += THREE.MathUtils.degToRad(offset.ry ?? 0)
+          mesh.rotation.z += THREE.MathUtils.degToRad(offset.rz ?? 0)
+        }
+
+        mesh.name = name
+        const isTextMesh =
+          textMeshIndexRef.current !== undefined && textMeshIndexRef.current !== null
+            ? i === textMeshIndexRef.current
+            : name.toLowerCase().includes('text') || printableUrls.length === 1
+        if (isTextMesh && customTextRef.current) {
+          applyTextToMesh(mesh, customTextRef.current)
         }
 
         group.add(mesh)
@@ -275,8 +632,19 @@ export default function STLViewer({
           })
         }
 
+        meshes.forEach((mesh, j) => {
+          const isTextMesh =
+            textMeshIndexRef.current !== undefined && textMeshIndexRef.current !== null
+              ? j === textMeshIndexRef.current
+              : (mesh.name || '').toLowerCase().includes('text') || name.toLowerCase().includes('text') || meshes.length === 1
+          if (isTextMesh && customTextRef.current) {
+            applyTextToMesh(mesh, customTextRef.current)
+          }
+        })
+
         const box    = new THREE.Box3().setFromObject(obj)
         const centre = box.getCenter(new THREE.Vector3())
+        obj.userData.originalCentre = centre.clone()
         
         // Center the part first if in exploded view OR if custom assembly offsets exist
         const shouldCenter = !isAssembled || !!(assemblyOffsets && assemblyOffsets[i])
@@ -284,15 +652,21 @@ export default function STLViewer({
           obj.position.sub(centre)
         }
 
+        // Apply URL-specific rotation first
+        const urlRot = parseUrlRotation(urlWithHash)
+        obj.rotation.set(
+          THREE.MathUtils.degToRad(urlRot.rx),
+          THREE.MathUtils.degToRad(urlRot.ry),
+          THREE.MathUtils.degToRad(urlRot.rz)
+        )
+
         // Apply custom position and rotation offsets
         if (isAssembled && assemblyOffsets && assemblyOffsets[i]) {
           const offset = assemblyOffsets[i]
           obj.position.set(offset.x, offset.y, offset.z)
-          obj.rotation.set(
-            THREE.MathUtils.degToRad(offset.rx ?? 0),
-            THREE.MathUtils.degToRad(offset.ry ?? 0),
-            THREE.MathUtils.degToRad(offset.rz ?? 0)
-          )
+          obj.rotation.x += THREE.MathUtils.degToRad(offset.rx ?? 0)
+          obj.rotation.y += THREE.MathUtils.degToRad(offset.ry ?? 0)
+          obj.rotation.z += THREE.MathUtils.degToRad(offset.rz ?? 0)
         }
 
         obj.userData.index = i
@@ -305,27 +679,43 @@ export default function STLViewer({
       const downloadUrl = getDirectDownloadUrl(url)
       const isGoogleOrDropbox = url.includes('drive.google.com') || url.includes('dropbox.com') || url.startsWith('/')
 
-      if (isGoogleOrDropbox) {
+      if (ext === 'stl') {
         fetch(downloadUrl)
           .then((res) => {
             if (!res.ok) throw new Error(`HTTP error ${res.status}`)
             return res.arrayBuffer()
           })
           .then((buffer) => {
-            const view = new DataView(buffer)
-            // Check ZIP / 3MF magic bytes 'PK\x03\x04' (0x504B0304)
-            const isZip = buffer.byteLength >= 4 && view.getUint32(0, false) === 0x504B0304
-
-            if (isZip) {
-              const loader = new ThreeMFLoader()
-              const obj = loader.parse(buffer)
-              onGroupLoaded(obj)
-            } else {
-              try {
+            return parseStlWithWorker(buffer)
+              .then(onGeometry)
+              .catch((err) => {
+                console.warn("Web Worker parsing failed, falling back to main thread:", err)
                 const loader = new STLLoader()
                 const geometry = loader.parse(buffer)
                 onGeometry(geometry)
-              } catch (stlErr) {
+              })
+          })
+          .catch((err) => {
+            console.error("Loader error:", err)
+            onError()
+          })
+      } else {
+        if (isGoogleOrDropbox) {
+          fetch(downloadUrl)
+            .then((res) => {
+              if (!res.ok) throw new Error(`HTTP error ${res.status}`)
+              return res.arrayBuffer()
+            })
+            .then((buffer) => {
+              const view = new DataView(buffer)
+              // Check ZIP / 3MF magic bytes 'PK\x03\x04' (0x504B0304)
+              const isZip = buffer.byteLength >= 4 && view.getUint32(0, false) === 0x504B0304
+
+              if (isZip) {
+                const loader = new ThreeMFLoader()
+                const obj = loader.parse(buffer)
+                onGroupLoaded(obj)
+              } else {
                 try {
                   const loader = new OBJLoader()
                   const decoder = new TextDecoder('utf-8')
@@ -336,19 +726,19 @@ export default function STLViewer({
                   throw new Error('Unsupported 3D file format signature.')
                 }
               }
-            }
-          })
-          .catch((err) => {
-            console.error("Loader error:", err)
-            onError()
-          })
-      } else {
-        if (ext === '3mf') {
-          new ThreeMFLoader().load(downloadUrl, onGroupLoaded, undefined, onError)
-        } else if (ext === 'obj') {
-          new OBJLoader().load(downloadUrl, onGroupLoaded, undefined, onError)
+            })
+            .catch((err) => {
+              console.error("Loader error:", err)
+              onError()
+            })
         } else {
-          new STLLoader().load(downloadUrl, onGeometry, undefined, onError)
+          if (ext === '3mf') {
+            new ThreeMFLoader().load(downloadUrl, onGroupLoaded, undefined, onError)
+          } else if (ext === 'obj') {
+            new OBJLoader().load(downloadUrl, onGroupLoaded, undefined, onError)
+          } else {
+            new STLLoader().load(downloadUrl, onGeometry, undefined, onError)
+          }
         }
       }
     })
@@ -380,10 +770,18 @@ export default function STLViewer({
 
     controls.addEventListener('change', onControlsChange)
 
+    let lastW = 0
+    let lastH = 0
     const ro = new ResizeObserver(() => {
-      camera.aspect = mount.clientWidth / mount.clientHeight
+      const w = mount.clientWidth
+      const h = mount.clientHeight
+      if (w === 0 || h === 0 || (w === lastW && h === lastH)) return
+      lastW = w
+      lastH = h
+
+      camera.aspect = w / h
       camera.updateProjectionMatrix()
-      renderer.setSize(mount.clientWidth, mount.clientHeight)
+      renderer.setSize(w, h, false)
       controls.update()
       renderer.render(scene, camera)
     })
@@ -402,7 +800,65 @@ export default function STLViewer({
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
-  }, [file, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(','), subTab, JSON.stringify(assemblyOffsets), JSON.stringify(meshMapping)])
+  }, [file, baseUrlsKey, (fileNamesProp ?? []).join(','), subTab])
+
+  // ── Live position and rotation updates (no scene rebuild) ────────
+  useEffect(() => {
+    const objects = objectsRef.current
+    if (!objects || objects.length === 0) return
+
+    objects.forEach((obj, i) => {
+      if (!obj) return
+      const url = (urlsProp ?? [])[i]
+      if (!url) return
+
+      const urlRot = parseUrlRotation(url)
+      let rx = THREE.MathUtils.degToRad(urlRot.rx)
+      let ry = THREE.MathUtils.degToRad(urlRot.ry)
+      let rz = THREE.MathUtils.degToRad(urlRot.rz)
+
+      let px = 0
+      let py = 0
+      let pz = 0
+
+      if (isAssembled && assemblyOffsets && assemblyOffsets[i]) {
+        const offset = assemblyOffsets[i]
+        px = offset.x
+        py = offset.y
+        pz = offset.z
+        rx += THREE.MathUtils.degToRad(offset.rx ?? 0)
+        ry += THREE.MathUtils.degToRad(offset.ry ?? 0)
+        rz += THREE.MathUtils.degToRad(offset.rz ?? 0)
+      }
+
+      obj.rotation.set(rx, ry, rz)
+
+      const shouldCenter = !isAssembled || !!(assemblyOffsets && assemblyOffsets[i])
+      if (obj instanceof THREE.Group) {
+        const originalCentre = obj.userData.originalCentre as THREE.Vector3
+        if (shouldCenter && originalCentre) {
+          obj.position.set(px - originalCentre.x, py - originalCentre.y, pz - originalCentre.z)
+        } else {
+          obj.position.set(px, py, pz)
+        }
+      } else {
+        if (shouldCenter) {
+          obj.position.set(px, py, pz)
+        } else {
+          obj.position.set(0, 0, 0)
+        }
+      }
+    })
+
+    const r = rendererRef.current
+    const s = sceneRef.current
+    const c = cameraRef.current
+    if (r && s && c) r.render(s, c)
+  }, [
+    (urlsProp ?? []).join(','),
+    JSON.stringify(assemblyOffsets),
+    isAssembled,
+  ])
 
   // ── Live colour updates (no scene rebuild) ───────────────────────
   useEffect(() => {
@@ -420,9 +876,7 @@ export default function STLViewer({
         if (parts && parts.length > 0) {
           meshes.forEach((mesh, j) => {
             const color = parts[j] || objColor
-            const mat = mesh.material as THREE.MeshPhongMaterial
-            mat.color.set(new THREE.Color(color))
-            mat.needsUpdate = true
+            setMaterialColor(mesh.material, color)
           })
         } else {
           // If this is a group (e.g. 3MF assembly) but has no custom part colors assigned directly,
@@ -462,17 +916,13 @@ export default function STLViewer({
             }
 
             const color = matchedColor || (colorsProp ?? [])[j] || objColor
-            const mat = mesh.material as THREE.MeshPhongMaterial
-            mat.color.set(new THREE.Color(color))
-            mat.needsUpdate = true
+            setMaterialColor(mesh.material, color)
           })
         }
       } else {
         obj.traverse((c) => {
           if (c instanceof THREE.Mesh) {
-            const mat = c.material as THREE.MeshPhongMaterial
-            mat.color.set(new THREE.Color(objColor))
-            mat.needsUpdate = true
+            setMaterialColor(c.material, objColor)
           }
         })
       }
@@ -503,28 +953,26 @@ export default function STLViewer({
         obj.traverse((c) => { if (c instanceof THREE.Mesh) meshes.push(c) })
         
         meshes.forEach((mesh, j) => {
-          const mat = mesh.material as THREE.MeshPhongMaterial
           if (!activeFile && !activeMesh) {
-            mat.opacity = 1; mat.transparent = false; mat.emissive.set(0x000000)
+            applyHighlightToMaterial(mesh.material, 1, false, 0x000000)
           } else if (activeMesh && j === highlightMeshIndex) {
-            mat.opacity = 1; mat.transparent = false; mat.emissive.set(0xff4500) // Glowing red-orange
+            applyHighlightToMaterial(mesh.material, 1, false, 0xff4500)
           } else if (activeFile && i === highlightIndex) {
-            mat.opacity = 1; mat.transparent = false; mat.emissive.set(0x555555)
+            applyHighlightToMaterial(mesh.material, 1, false, 0x555555)
           } else {
-            mat.opacity = 0.15; mat.transparent = true; mat.emissive.set(0x000000)
+            applyHighlightToMaterial(mesh.material, 0.15, true, 0x000000)
           }
-          mat.needsUpdate = true
         })
       } else if (obj instanceof THREE.Mesh) {
-        const mat = obj.material as THREE.MeshPhongMaterial
         if (!activeFile && !activeMesh) {
-          mat.opacity = 1; mat.transparent = false; mat.emissive.set(0x000000)
+          applyHighlightToMaterial(obj.material, 1, false, 0x000000)
+        } else if (activeMesh && meshMapping && meshMapping[highlightMeshIndex] === i) {
+          applyHighlightToMaterial(obj.material, 1, false, 0xff4500) // Mapped part glows red-orange!
         } else if (activeFile && i === highlightIndex) {
-          mat.opacity = 1; mat.transparent = false; mat.emissive.set(0x555555)
+          applyHighlightToMaterial(obj.material, 1, false, 0x555555)
         } else {
-          mat.opacity = 0.15; mat.transparent = true; mat.emissive.set(0x000000)
+          applyHighlightToMaterial(obj.material, 0.15, true, 0x000000)
         }
-        mat.needsUpdate = true
       }
     })
 
@@ -532,7 +980,95 @@ export default function STLViewer({
     const s = sceneRef.current
     const c = cameraRef.current
     if (r && s && c) r.render(s, c)
-  }, [highlightIndex, highlightMeshIndex])
+  }, [highlightIndex, highlightMeshIndex, meshMapping])
+
+  // ── Live custom text updates (no scene rebuild) ──────────────────
+  useEffect(() => {
+    const objects = objectsRef.current.filter(Boolean)
+    if (objects.length === 0) return
+
+    objects.forEach((obj, i) => {
+      const name = (fileNamesProp ?? [])[i] ?? (urlsProp ?? [])[i] ?? ''
+      
+      if (obj instanceof THREE.Group) {
+        const meshes: THREE.Mesh[] = []
+        obj.traverse((c) => { if (c instanceof THREE.Mesh) meshes.push(c) })
+
+        meshes.forEach((c, j) => {
+          const isTextMesh =
+            textMeshIndex !== undefined && textMeshIndex !== null
+              ? j === textMeshIndex
+              : (c.name || '').toLowerCase().includes('text') || name.toLowerCase().includes('text') || meshes.length === 1
+
+          if (isTextMesh) {
+            if (customText) {
+              const canvas = document.createElement('canvas')
+              canvas.width = 1024
+              canvas.height = 256
+              const ctx = canvas.getContext('2d')!
+              ctx.fillStyle = '#808080'
+              ctx.fillRect(0, 0, canvas.width, canvas.height)
+              ctx.fillStyle = '#ffffff'
+              ctx.font = 'bold 120px sans-serif'
+              ctx.textAlign = 'center'
+              ctx.textBaseline = 'middle'
+              ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
+              ctx.shadowBlur = 4
+              ctx.fillText(customText, canvas.width / 2, canvas.height / 2)
+              
+              const texture = new THREE.CanvasTexture(canvas)
+              texture.wrapS = THREE.RepeatWrapping
+              texture.wrapT = THREE.RepeatWrapping
+              texture.needsUpdate = true
+              applyBumpTextureToMaterial(c.material, texture)
+            } else {
+              applyBumpTextureToMaterial(c.material, null)
+            }
+          } else {
+            applyBumpTextureToMaterial(c.material, null)
+          }
+        })
+      } else if (obj instanceof THREE.Mesh) {
+        const isTextMesh =
+          textMeshIndex !== undefined && textMeshIndex !== null
+            ? i === textMeshIndex
+            : (obj.name || '').toLowerCase().includes('text') || name.toLowerCase().includes('text') || printableUrls.length === 1
+        
+        if (isTextMesh) {
+          if (customText) {
+            const canvas = document.createElement('canvas')
+            canvas.width = 1024
+            canvas.height = 256
+            const ctx = canvas.getContext('2d')!
+            ctx.fillStyle = '#808080'
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+            ctx.fillStyle = '#ffffff'
+            ctx.font = 'bold 120px sans-serif'
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
+            ctx.shadowBlur = 4
+            ctx.fillText(customText, canvas.width / 2, canvas.height / 2)
+            
+            const texture = new THREE.CanvasTexture(canvas)
+            texture.wrapS = THREE.RepeatWrapping
+            texture.wrapT = THREE.RepeatWrapping
+            texture.needsUpdate = true
+            applyBumpTextureToMaterial(obj.material, texture)
+          } else {
+            applyBumpTextureToMaterial(obj.material, null)
+          }
+        } else {
+          applyBumpTextureToMaterial(obj.material, null)
+        }
+      }
+    })
+
+    const r = rendererRef.current
+    const s = sceneRef.current
+    const c = cameraRef.current
+    if (r && s && c) r.render(s, c)
+  }, [customText, textMeshIndex, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(',')])
 
   return (
     <div className={`relative overflow-hidden rounded-xl bg-slate-50 ${className ?? ''}`}>

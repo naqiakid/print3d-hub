@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import type { Shop, Printer, Filament, RequestPrinterView } from '@/lib/types'
-import PriceCalculator from '@/components/PriceCalculator'
+import PriceCalculator from '@/components/PriceCalculatorWrapper'
 
 export default async function PriceCalculatorPage() {
   const supabase = await createClient()
@@ -50,7 +50,7 @@ export default async function PriceCalculatorPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-8">
         <Link
           href="/dashboard"

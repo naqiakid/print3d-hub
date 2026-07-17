@@ -3,7 +3,7 @@
 import { useState, lazy, Suspense } from 'react'
 import Link from 'next/link'
 import { Locate, MapPin, Package, Sliders, ShoppingBag } from 'lucide-react'
-import type { CatalogItem } from '@/lib/types'
+import { cleanDescription, type CatalogItem } from '@/lib/types'
 import { haversineKm, fmtDist } from '@/lib/geo'
 
 const ProductMap = lazy(() => import('./ProductMap'))
@@ -281,7 +281,7 @@ function ProductCard({
 
         {item.description && (
           <p className="mt-2 flex-1 text-xs text-slate-500 line-clamp-2 leading-relaxed">
-            {item.description}
+            {cleanDescription(item.description)}
           </p>
         )}
 

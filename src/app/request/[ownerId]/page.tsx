@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { Shop, Printer, PrintProfile, Filament, RequestPrinterView } from '@/lib/types'
 import { PRINTER_MODELS } from '@/lib/printer-models'
-import RequestForm from '@/components/RequestForm'
+import RequestForm from '@/components/RequestFormWrapper'
 
 export default async function RequestPage({
   params,
