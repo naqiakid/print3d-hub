@@ -100,6 +100,25 @@ export default async function CatalogOrderPage({
 
   return (
     <div className="mx-auto max-w-xl px-4 py-10 sm:px-6">
+      {/* Product Structured Data for Google SEO */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Product",
+            "name": item.name,
+            "image": item.photo_urls?.[0] || item.photo_url || '',
+            "description": item.description ? item.description.replace(/<!--[\s\S]*?-->/g, '').trim().slice(0, 150) : '',
+            "offers": {
+              "@type": "Offer",
+              "price": item.base_price || 0,
+              "priceCurrency": "MYR",
+              "availability": "https://schema.org/InStock"
+            }
+          })
+        }}
+      />
       <Link
         href={`/printers/${ownerId}`}
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 transition"

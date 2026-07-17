@@ -143,6 +143,29 @@ export default async function ShopDetailPage({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+      {/* Local Business Structured Data for Google SEO */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "LocalBusiness",
+            "name": shop.name,
+            "image": shop.sample_photos?.[0] || preset?.image_url || '',
+            "priceRange": shop.price_min === 0 && shop.price_max === 0 ? "Quote on request" : `RM${shop.price_min} - RM${shop.price_max}`,
+            "address": {
+              "@type": "PostalAddress",
+              "streetAddress": shop.pickup_address || '',
+              "addressCountry": "MY"
+            },
+            "aggregateRating": {
+              "@type": "AggregateRating",
+              "ratingValue": shop.rating || 5,
+              "reviewCount": shop.review_count || 1
+            }
+          })
+        }}
+      />
       <Link
         href="/printers"
         className="mb-8 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 transition"
