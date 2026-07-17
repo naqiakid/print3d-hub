@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
@@ -37,6 +38,28 @@ const BRAND_GRADIENT: Record<string, [string, string]> = {
 }
 const DEFAULT_GRADIENT: [string, string] = ['#0f172a', '#1e293b']
 
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}): Promise<Metadata> {
+  const { id } = await params
+  const supabase = await createClient()
+  const { data } = await supabase.from('profiles').select('name, turnaround').eq('id', id).maybeSingle()
+  
+  if (!data) return { title: 'Maker Hub Profile' }
+  
+  return {
+    title: `${data.name} | Local 3D Printing Service`,
+    description: `Order custom 3D prints from ${data.name} locally. Active 3D printer hub offering fast ${data.turnaround} turnaround.`,
+    openGraph: {
+      title: `${data.name} | Local 3D Printing Service`,
+      description: `Order custom 3D prints from ${data.name} locally. Active 3D printer hub offering fast ${data.turnaround} turnaround.`,
+      type: 'website',
+    }
+  }
+}
 
 export default async function ShopDetailPage({
   params,

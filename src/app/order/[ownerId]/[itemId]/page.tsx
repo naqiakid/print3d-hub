@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
@@ -6,6 +7,30 @@ import type { Shop, Printer, CatalogItem, PrintProfile, Filament, RequestPrinter
 import CatalogOrderForm from '@/components/CatalogOrderFormWrapper'
 import STLViewer from '@/components/STLViewerWrapper'
 import ProductMediaGallery from '@/components/ProductMediaGallery'
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ ownerId: string; itemId: string }>
+}): Promise<Metadata> {
+  const { itemId } = await params
+  const supabase = await createClient()
+  const { data: item } = await supabase.from('catalog_items').select('name, description').eq('id', itemId).maybeSingle()
+  
+  if (!item) return { title: 'Order Custom 3D Print' }
+  
+  const cleanDesc = item.description ? item.description.replace(/<!--[\s\S]*?-->/g, '').trim().slice(0, 150) : ''
+  
+  return {
+    title: `Order ${item.name} | Custom 3D Printed`,
+    description: cleanDesc || `Customise and order ${item.name} from a local 3D printer owner near you.`,
+    openGraph: {
+      title: `Order ${item.name} | Custom 3D Printed`,
+      description: cleanDesc || `Customise and order ${item.name} from a local 3D printer owner near you.`,
+      type: 'website',
+    }
+  }
+}
 
 export default async function CatalogOrderPage({
   params,

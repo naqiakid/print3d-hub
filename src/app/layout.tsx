@@ -7,9 +7,38 @@ const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Print3DHub — Get Anything 3D Printed Near You',
+  title: {
+    default: 'Print3D Hub | Get Anything 3D Printed Near You',
+    template: '%s | Print3D Hub'
+  },
   description:
-    'Find local 3D printing services in your area. No printer needed, no technical knowledge required. Browse, request, and pick up.',
+    'Find local 3D printing services in your area. No printer needed. Browse ready-made designs, customize colors or names, and pick up locally.',
+  keywords: [
+    '3d printing',
+    'local 3d printing',
+    '3d print service',
+    'custom 3d prints',
+    'stl printing',
+    '3mf assembly',
+    '3d printer hub',
+    'pla printing',
+    'petg printing',
+    'local makers',
+    'rapid prototyping'
+  ],
+  openGraph: {
+    type: 'website',
+    locale: 'en_MY',
+    url: 'https://print3d-hub.vercel.app',
+    siteName: 'Print3D Hub',
+    title: 'Print3D Hub | Local 3D Printing Service Near You',
+    description: 'Find local 3D printing services in your area. Browse ready-made designs, customize colors or names, and pick up locally.',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Print3D Hub | Local 3D Printing Service Near You',
+    description: 'Find local 3D printing services in your area. Browse ready-made designs, customize colors or names, and pick up locally.',
+  }
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
