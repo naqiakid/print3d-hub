@@ -6,7 +6,7 @@ import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, 
 
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView, PartAssembly } from '@/lib/types'
-import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation } from '@/lib/types'
+import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation, COLOR_PRESETS } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 import { getPresetById } from '@/lib/printer-models'
@@ -65,19 +65,6 @@ function fmtHours(h: number | null | undefined): string {
 }
 
 // ── Form state ────────────────────────────────────────────────────────────────
-
-const COLOR_PRESETS = [
-  { name: 'Black',   hex: '#1a1a1a' },
-  { name: 'White',   hex: '#f5f5f5' },
-  { name: 'Grey',    hex: '#6b7280' },
-  { name: 'Natural', hex: '#d4b896' },
-  { name: 'Red',     hex: '#dc2626' },
-  { name: 'Blue',    hex: '#2563eb' },
-  { name: 'Green',   hex: '#16a34a' },
-  { name: 'Yellow',  hex: '#ca8a04' },
-  { name: 'Orange',  hex: '#ea580c' },
-  { name: 'Purple',  hex: '#7c3aed' },
-]
 
 const CATEGORY_PRESETS = ['Home Decor', 'Keychains', 'Figurines', 'Organizers', 'Gifts & Toys', 'Tools & Parts']
 

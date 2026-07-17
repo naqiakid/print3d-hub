@@ -457,3 +457,55 @@ export function parseUrlRotation(url: string | null | undefined): RotationOffset
   result.rz = isNaN(rz) ? 0 : rz
   return result
 }
+
+export const COLOR_PRESETS = [
+  { name: 'Black',   hex: '#1a1a1a' },
+  { name: 'White',   hex: '#f5f5f5' },
+  { name: 'Grey',    hex: '#6b7280' },
+  { name: 'Natural', hex: '#d4b896' },
+  { name: 'Red',     hex: '#dc2626' },
+  { name: 'Blue',    hex: '#2563eb' },
+  { name: 'Green',   hex: '#16a34a' },
+  { name: 'Yellow',  hex: '#ca8a04' },
+  { name: 'Orange',  hex: '#ea580c' },
+  { name: 'Purple',  hex: '#7c3aed' },
+]
+
+export function getColorHexByName(colorName: string): string {
+  const clean = colorName.trim().toLowerCase()
+  if (clean === 'any' || clean === 'owner decides') return '#888888'
+  
+  if (clean.includes('white')) return '#ffffff'
+  if (clean.includes('black')) return '#1a1a1a'
+  if (clean.includes('grey') || clean.includes('gray')) return '#6b7280'
+  if (clean.includes('red')) return '#dc2626'
+  if (clean.includes('orange')) return '#f97316'
+  if (clean.includes('yellow')) return '#eab308'
+  if (clean.includes('green')) return '#22c55e'
+  if (clean.includes('blue')) return '#3b82f6'
+  if (clean.includes('purple')) return '#a855f7'
+  if (clean.includes('pink')) return '#ec4899'
+  if (clean.includes('gold')) return '#ffd700'
+  if (clean.includes('silver')) return '#c0c0c0'
+  if (clean.includes('bronze')) return '#cd7f32'
+  if (clean.includes('copper')) return '#b87333'
+  
+  const colorMap: Record<string, string> = {
+    amber: '#f59e0b',
+    lime: '#84cc16',
+    emerald: '#10b981',
+    teal: '#14b8a6',
+    cyan: '#06b6d4',
+    sky: '#0ea5e9',
+    indigo: '#6366f1',
+    violet: '#8b5cf6',
+    fuchsia: '#d946ef',
+    rose: '#f43f5e',
+    slate: '#64748b',
+    zinc: '#71717a',
+    neutral: '#737373',
+    stone: '#78716c',
+    brown: '#78350f',
+  }
+  return colorMap[clean] || '#888888'
+}

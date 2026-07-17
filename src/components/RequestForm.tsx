@@ -6,7 +6,7 @@ import {
   Link2, FileUp, ExternalLink, Download, HelpCircle, Camera, ChevronDown,
 } from 'lucide-react'
 import type { RequestPrinterView, PrintProfile, PrintQuality, PrintSize, Filament, FilamentMaterial } from '@/lib/types'
-import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
+import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, COLOR_PRESETS } from '@/lib/types'
 import { submitRequest, sliceSTL } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -23,19 +23,6 @@ import AddressInput from './AddressInput'
 import PhoneInput, { isValidMyPhoneDigits } from './PhoneInput'
 
 const STLViewer = lazy(() => import('./STLViewer'))
-
-const COLOR_PRESETS = [
-  { name: 'Black',    hex: '#1a1a1a' },
-  { name: 'White',    hex: '#f5f5f5' },
-  { name: 'Grey',     hex: '#6b7280' },
-  { name: 'Natural',  hex: '#d4b896' },
-  { name: 'Red',      hex: '#dc2626' },
-  { name: 'Blue',     hex: '#2563eb' },
-  { name: 'Green',    hex: '#16a34a' },
-  { name: 'Yellow',   hex: '#ca8a04' },
-  { name: 'Orange',   hex: '#ea580c' },
-  { name: 'Purple',   hex: '#7c3aed' },
-]
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
