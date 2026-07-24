@@ -6,7 +6,7 @@ import {
   ChevronRight, Printer as PrinterIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import type { Shop, Printer, Filament, PrintProfile, CatalogItem, Review } from '@/lib/types'
+import type { Shop, Printer, Filament, PrintProfile, CatalogItem, Review, RequestPrinterView } from '@/lib/types'
 import {
   PRINT_TYPE_LABELS,
   PRINT_TYPE_DESCRIPTIONS,
@@ -17,6 +17,49 @@ import { PRINTER_MODELS } from '@/lib/printer-models'
 import PrinterDeviceImage from '@/components/PrinterDeviceImage'
 import { bedLabel } from '@/lib/equipment'
 import CatalogGrid from '@/components/CatalogGrid'
+import MakerDistanceBadge from '@/components/MakerDistanceBadge'
+import ShareShopButton from '@/components/ShareShopButton'
+import PublicPriceCalculator from '@/components/PublicPriceCalculator'
+
+function SpoolVisualPublic({ hex, name }: { hex: string; name: string }) {
+  const isLight = hex.toLowerCase() === '#ffffff' || hex.toLowerCase() === '#fff' || hex.toLowerCase() === '#f5f5f5'
+  return (
+    <div className="relative h-7 w-7 shrink-0 flex items-center justify-center">
+      {/* concentric outer spool rings */}
+      <svg className="absolute inset-0 h-full w-full -rotate-90">
+        <circle
+          cx="14"
+          cy="14"
+          r="11"
+          fill="none"
+          stroke="#f1f5f9"
+          strokeWidth="2"
+        />
+        <circle
+          cx="14"
+          cy="14"
+          r="11"
+          fill="none"
+          stroke="#cbd5e1"
+          strokeWidth="2"
+          strokeDasharray="69.1"
+          strokeDashoffset="18"
+          strokeLinecap="round"
+          className="opacity-60"
+        />
+      </svg>
+      {/* Center spool color core */}
+      <span
+        className={`h-4.5 w-4.5 rounded-full border border-slate-200 shadow-inner ${
+          isLight ? 'shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)]' : ''
+        }`}
+        style={{ background: hex }}
+        title={name}
+      />
+    </div>
+  )
+}
+
 
 // Match a saved printer_model string to a preset
 function findPreset(printerModel: string) {
@@ -141,6 +184,17 @@ export default async function ShopDetailPage({
   // Union of bed types across all machines
   const bedTypes = [...new Set(printers.flatMap((p) => p.bed_type ?? []))]
 
+  const requestPrinter: RequestPrinterView = {
+    ...shop,
+    printer_model: heroPrinter?.printer_model ?? 'Standard Printer',
+    printer_model_id: heroPrinter?.printer_model_id ?? null,
+    filament_costs: heroPrinter?.filament_costs ?? {},
+    power_watts: heroPrinter?.power_watts ?? 350,
+    machine_rate_per_hour: heroPrinter?.machine_rate_per_hour ?? 1.5,
+    bed_type: heroPrinter?.bed_type ?? [],
+    grams_per_roll: heroPrinter?.grams_per_roll ?? 1000,
+  }
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
       {/* Local Business Structured Data for Google SEO */}
@@ -232,6 +286,17 @@ export default async function ShopDetailPage({
                   {shop.rating} <span className="text-white/40 font-normal text-xs">({shop.review_count})</span>
                 </p>
               </div>
+              {(shop.lat != null && shop.lng != null) && (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-white/50 text-xs">📍</span>
+                    <p className="text-xs text-white/40 uppercase tracking-wide">Location</p>
+                  </div>
+                  <div className="pt-0.5">
+                    <MakerDistanceBadge makerLat={shop.lat} makerLng={shop.lng} />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-white/10 pt-5">
@@ -243,7 +308,9 @@ export default async function ShopDetailPage({
                     : `RM${shop.price_min}–RM${shop.price_max}`}
                 </p>
               </div>
-              <div>
+              <div className="flex items-center gap-3">
+                <ShareShopButton shopName={shop.name} />
+                
                 {shop.available ? (
                   <Link
                     href={`/request/${shop.id}`}
@@ -332,18 +399,20 @@ export default async function ShopDetailPage({
                   <p className="mb-2.5 text-xs text-slate-500">{MATERIAL_DESCRIPTIONS[mat]}</p>
 
                   {colors.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2.5">
                       {colors.map((f) => (
                         <div
                           key={f.id}
-                          className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm"
-                          title={`${f.brand} — ${f.color}`}
+                          className="flex items-center gap-2 rounded-xl border border-slate-150 bg-slate-50/30 pl-2 pr-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-300"
+                          title={`${f.brand || 'Generic'} — ${f.color}`}
                         >
-                          <span
-                            className="h-3.5 w-3.5 shrink-0 rounded-full border border-slate-200 shadow-inner"
-                            style={{ background: f.color_hex }}
-                          />
-                          {f.color}
+                          <SpoolVisualPublic hex={f.color_hex} name={f.color} />
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-800 leading-none">{f.color}</p>
+                            {f.brand && (
+                              <p className="text-[9px] text-slate-400 font-medium mt-0.5 leading-none">{f.brand}</p>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -484,6 +553,10 @@ export default async function ShopDetailPage({
 
             <p className="mt-3 text-center text-xs text-slate-400">No account needed</p>
           </div>
+
+          {shop.available && (
+            <PublicPriceCalculator printer={requestPrinter} filaments={filaments} />
+          )}
 
           {/* Quick specs */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3 text-sm">
