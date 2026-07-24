@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from './supabase/server'
 import type { RequestStatus, PrintType, FilamentMaterial, PrintSize, FilamentCosts } from './types'
-import { calculatePriceRange } from './pricing'
+import { calculatePriceRange, calculateEstimate } from './pricing'
+import { parseGcodeStats } from './types'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://print3d-hub.vercel.app'
 
@@ -513,29 +514,69 @@ export async function submitRequest(data: {
   custom_infill?: number | null
   custom_wall_count?: number | null
   quantity?: number
+  scale_pct?: number | null
 }): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
 
   // Strip optional columns that may not exist yet if migrations haven't run
-  const { color_preferences, fulfillment, delivery_address, declined_addons, catalog_item_id, custom_infill, custom_wall_count, quantity, ...baseData } = data
+  const { color_preferences, fulfillment, delivery_address, declined_addons, catalog_item_id, custom_infill, custom_wall_count, quantity, scale_pct, ...baseData } = data
 
   // Catalog orders are pre-priced — the price was already fixed when the owner
   // listed the item, so the customer isn't waiting on a manual quote. Look the
   // real price up server-side (never trust a client-supplied price) so the
   // owner's dashboard can skip straight to Accept/Decline.
-  let catalogPricing: { quoted_price: number } | Record<string, never> = {}
+  let catalogPricing: { quoted_price: number; status?: RequestStatus } | Record<string, never> = {}
   if (catalog_item_id) {
     const { data: item } = await supabase
       .from('catalog_items')
-      .select('base_price, material_prices, allow_material_choice')
+      .select('base_price, material_prices, allow_material_choice, description, owner_id')
       .eq('id', catalog_item_id)
       .maybeSingle()
-    const unitPrice = item
-      ? (item.allow_material_choice ? item.material_prices?.[data.material] : null) ?? item.base_price ?? 0
-      : 0
-    if (unitPrice > 0) {
-      const qty = quantity && quantity > 0 ? quantity : 1
-      catalogPricing = { quoted_price: Math.round(unitPrice * qty * 100) / 100 }
+
+    if (item) {
+      const gcodeStats = parseGcodeStats(item.description)
+      const scaleMultiplier = Math.pow((scale_pct ?? 100) / 100, 3)
+      let unitPrice = 0
+
+      if (gcodeStats) {
+        // Auto-pricing calculation based on G-code stats + maker settings
+        const [{ data: printer }, { data: filaments }] = await Promise.all([
+          supabase.from('printers').select('power_watts, machine_rate_per_hour, markup_percent, waste_percent').eq('owner_id', item.owner_id).order('created_at', { ascending: true }).limit(1).maybeSingle(),
+          supabase.from('filaments').select('cost_per_kg').eq('owner_id', item.owner_id).eq('material', data.material).eq('in_stock', true).order('created_at', { ascending: true }).limit(1).maybeSingle(),
+        ])
+
+        const costPerKg = filaments?.cost_per_kg ?? 55
+        const currentWeight = gcodeStats.weight_g * scaleMultiplier
+        const currentHours = gcodeStats.hours * ((scale_pct ?? 100) / 100)
+
+        const est = calculateEstimate({
+          size: 'medium',
+          quality: 'basic',
+          material: data.material as FilamentMaterial,
+          power_watts: printer?.power_watts ?? 350,
+          cost_per_kg: costPerKg,
+          machine_rate_per_hour: printer?.machine_rate_per_hour ?? 1.5,
+          known_weight_g: currentWeight,
+          known_hours: currentHours,
+          markup_percent: printer?.markup_percent ?? 30,
+          waste_percent: printer?.waste_percent ?? 8,
+        })
+        unitPrice = est.suggested_price
+      } else {
+        const baseMatPrice = (item.allow_material_choice && item.material_prices?.[data.material])
+          ? Number(item.material_prices[data.material])
+          : null
+        unitPrice = baseMatPrice !== null ? baseMatPrice : (item.base_price ?? 0)
+        unitPrice = unitPrice * scaleMultiplier
+      }
+
+      if (unitPrice > 0) {
+        const qty = quantity && quantity > 0 ? quantity : 1
+        catalogPricing = {
+          quoted_price: Math.round(unitPrice * qty * 100) / 100,
+          status: 'quoted' // Automatically transition status to pre-quoted
+        }
+      }
     }
   }
 

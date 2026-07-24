@@ -6,7 +6,7 @@ import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, 
 
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView, PartAssembly } from '@/lib/types'
-import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation, COLOR_PRESETS } from '@/lib/types'
+import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation, COLOR_PRESETS, parseGcodeStats, serializeGcodeStats } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 import { getPresetById } from '@/lib/printer-models'
@@ -92,6 +92,9 @@ type FormState = {
   resize_min_pct: number
   resize_max_pct: number
   base_price: string
+  // G-code baseline stats (serialized to description comments)
+  weight_g: number | null
+  print_hours: number | null
 }
 
 const BLANK: FormState = {
@@ -116,6 +119,8 @@ const BLANK: FormState = {
   resize_min_pct: 80,
   resize_max_pct: 150,
   base_price: '',
+  weight_g: null,
+  print_hours: null,
 }
 
 function itemToForm(item: CatalogItem): FormState {
@@ -123,6 +128,7 @@ function itemToForm(item: CatalogItem): FormState {
   for (const [mat, price] of Object.entries(item.material_prices ?? {})) {
     prices[mat] = String(price)
   }
+  const stats = parseGcodeStats(item.description)
   return {
     name: item.name,
     description: cleanDescription(item.description),
@@ -145,6 +151,8 @@ function itemToForm(item: CatalogItem): FormState {
     resize_min_pct: item.resize_min_pct,
     resize_max_pct: item.resize_max_pct,
     base_price: item.base_price != null ? String(item.base_price) : '',
+    weight_g: stats?.weight_g ?? null,
+    print_hours: stats?.hours ?? null,
   }
 }
 
@@ -216,13 +224,17 @@ export default function CatalogManager({
     const originalItem = editing !== 'new' ? items.find(i => i.id === editing) : null
     const assemblyOffsets = originalItem ? parseAssemblyMetadata(originalItem.description) : []
 
-    const finalDescription = serializeAssemblyMetadata(
+    let finalDescription = serializeAssemblyMetadata(
       form.description.trim(),
       assemblyOffsets,
       editingMeshMapping,
       undefined,
       editingTextMeshIndex
     )
+
+    if (form.weight_g !== null && form.print_hours !== null) {
+      finalDescription += `\n${serializeGcodeStats({ weight_g: form.weight_g, hours: form.print_hours })}`
+    }
 
     const data = {
       name: form.name.trim(),
@@ -433,7 +445,7 @@ function GcodeCalculator({
 }: {
   printer: RequestPrinterView
   defaultMaterial: FilamentMaterial
-  onUsePrice: (price: string) => void
+  onUsePrice: (price: string, weight: number | null, hours: number | null) => void
 }) {
   const gcodeInputRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(false)
@@ -627,7 +639,7 @@ function GcodeCalculator({
           </div>
           <div className="px-3 pb-3">
             <button type="button"
-              onClick={() => { onUsePrice(breakdown.total.toFixed(2)); reset(); setOpen(false) }}
+              onClick={() => { onUsePrice(breakdown.total.toFixed(2), totalWeight, totalHours); reset(); setOpen(false) }}
               className="w-full rounded-xl bg-orange-500 py-2 text-sm font-semibold text-white hover:bg-orange-600 transition">
               Use this price
             </button>
@@ -1019,7 +1031,11 @@ function CatalogForm({
       </div>
       {!form.allow_material_choice && (
         <GcodeCalculator printer={printer} defaultMaterial={defaultMaterial}
-          onUsePrice={(price) => set('base_price', price)} />
+          onUsePrice={(price, weight, hours) => {
+            set('base_price', price)
+            set('weight_g', weight)
+            set('print_hours', hours)
+          }} />
       )}
 
       {/* ── Advanced options ── */}

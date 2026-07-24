@@ -509,3 +509,24 @@ export function getColorHexByName(colorName: string): string {
   }
   return colorMap[clean] || '#888888'
 }
+
+export type GcodeStats = {
+  weight_g: number
+  hours: number
+}
+
+export function parseGcodeStats(description: string | null | undefined): GcodeStats | null {
+  if (!description) return null
+  const match = description.match(/<!-- GCODE_STATS: (\{.*?\}) -->/)
+  if (!match) return null
+  try {
+    return JSON.parse(match[1])
+  } catch {
+    return null
+  }
+}
+
+export function serializeGcodeStats(stats: GcodeStats | null | undefined): string {
+  if (!stats) return ''
+  return `<!-- GCODE_STATS: ${JSON.stringify(stats)} -->`
+}

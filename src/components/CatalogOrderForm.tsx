@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import type { CatalogItem, RequestPrinterView, PrintProfile, Filament, FilamentMaterial } from '@/lib/types'
-import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, parseMeshMapping, parseAllowedFilaments, parseTextMeshIndex, cleanDescription, isPreviewFile, COLOR_PRESETS } from '@/lib/types'
+import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, parseMeshMapping, parseAllowedFilaments, parseTextMeshIndex, cleanDescription, isPreviewFile, COLOR_PRESETS, parseGcodeStats } from '@/lib/types'
+import { calculateEstimate } from '@/lib/pricing'
 import { submitRequest } from '@/lib/actions'
 import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
 import AddressInput from './AddressInput'
@@ -135,6 +136,50 @@ export default function CatalogOrderForm({
       ]
     : FINAL_COLOR_PRESETS.map((c, i) => ({ id: `preset-${i}`, name: c.name, hex: c.hex }))
 
+  // Dynamic Pricing Engine calculations
+  const gcodeStats = parseGcodeStats(item.description)
+  const activeFilament = filaments.find((f) => f.material === material && f.in_stock)
+  const costPerKg = activeFilament?.cost_per_kg ?? 55
+  const scaleMultiplier = Math.pow(scalePct / 100, 3)
+
+  let baseUnitPrice = 0
+  let isAutoCalculated = false
+  let calculatedBreakdown: any = null
+
+  if (gcodeStats) {
+    isAutoCalculated = true
+    const currentWeight = gcodeStats.weight_g * scaleMultiplier
+    const currentHours = gcodeStats.hours * (scalePct / 100)
+
+    calculatedBreakdown = calculateEstimate({
+      size: 'medium',
+      quality: 'basic',
+      material,
+      power_watts: printer.power_watts ?? 350,
+      cost_per_kg: costPerKg,
+      machine_rate_per_hour: printer.machine_rate_per_hour ?? 1.5,
+      known_weight_g: currentWeight,
+      known_hours: currentHours,
+      markup_percent: printer.markup_percent ?? 30,
+      waste_percent: printer.waste_percent ?? 8,
+    })
+    baseUnitPrice = calculatedBreakdown.suggested_price
+  } else {
+    const baseMatPrice = (item.allow_material_choice && item.material_prices?.[material])
+      ? Number(item.material_prices[material])
+      : null
+    const baseItemPrice = baseMatPrice !== null ? baseMatPrice : (item.base_price ?? 0)
+    baseUnitPrice = baseItemPrice * scaleMultiplier
+  }
+
+  const orderTotalPrice = baseUnitPrice * quantity
+
+  // Check filament stock capacity
+  const selectedFilamentRoll = filamentsForMaterial.find((f) => f.color === color)
+  const totalWeightRequired = gcodeStats ? gcodeStats.weight_g * scaleMultiplier * quantity : 0
+  const remainingG = selectedFilamentRoll?.grams_remaining
+  const isLowStock = remainingG !== null && remainingG !== undefined && remainingG < totalWeightRequired
+
   const canSubmit = !!(
     name.trim() &&
     email.trim() &&
@@ -224,8 +269,8 @@ export default function CatalogOrderForm({
       model_image:     item.photo_url ?? null,
       stl_url:         null,
       stl_urls:        printableParts,
-      weight_g:        null,
-      print_hours:     null,
+      weight_g:        gcodeStats ? Math.round(gcodeStats.weight_g * scaleMultiplier * quantity * 10) / 10 : null,
+      print_hours:     gcodeStats ? Math.round(gcodeStats.hours * (scalePct / 100) * quantity * 10) / 10 : null,
       profile_id:      profiles.find((p) => p.is_default)?.id ?? profiles[0]?.id ?? null,
       selected_addons: selectedAddons,
       declined_addons: [],
@@ -233,6 +278,7 @@ export default function CatalogOrderForm({
       delivery_address: fulfillment === 'delivery' ? deliveryAddress.trim() || null : null,
       catalog_item_id: item.id,
       quantity,
+      scale_pct:       scalePct,
     })
 
     setPending(false)
@@ -626,57 +672,94 @@ export default function CatalogOrderForm({
       )}
 
       {/* Live Pricing & Order Summary Card */}
-      {item.base_price !== null && item.base_price !== undefined && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Order Summary Estimate</span>
-            <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[10px] font-semibold text-orange-600">
-              Live updates
-            </span>
-          </div>
-          
-          <div className="space-y-1.5 text-xs text-slate-600">
-            <div className="flex justify-between">
-              <span>Catalog item base price:</span>
-              <span className="font-semibold text-slate-800">RM {item.base_price.toFixed(2)}</span>
-            </div>
-
-            {item.allow_resize && scalePct !== 100 && (
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-1">
-                  Volumetric scale multiplier ({scalePct}%):
-                  <span className="group relative cursor-help rounded-full bg-slate-100 px-1 text-[9px] text-slate-400 font-bold" title="Scaling a 3D model changes its volume exponentially (S³). 120% scale uses ~1.73x the print material.">?</span>
-                </span>
-                <span className="font-semibold text-slate-800">
-                  x{Math.pow(scalePct / 100, 3).toFixed(2)}
-                </span>
-              </div>
-            )}
-
-            <div className="flex justify-between">
-              <span>Quantity:</span>
-              <span className="font-semibold text-slate-800">x {quantity} {quantity === 1 ? 'copy' : 'copies'}</span>
-            </div>
-
-            {fulfillment === 'delivery' && (
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Order Summary Estimate</span>
+          <span className="rounded-full bg-teal-50 border border-teal-200 px-2 py-0.5 text-[10px] font-semibold text-teal-600">
+            {isAutoCalculated ? '✨ Auto-priced (G-code)' : 'Live updates'}
+          </span>
+        </div>
+        
+        <div className="space-y-1.5 text-xs text-slate-600">
+          {isAutoCalculated && calculatedBreakdown ? (
+            <>
               <div className="flex justify-between">
-                <span>Delivery:</span>
-                <span className="text-slate-500 italic">Quoted by owner</span>
+                <span>Material weight ({gcodeStats ? Math.round(gcodeStats.weight_g * scaleMultiplier * quantity) : 0}g):</span>
+                <span className="font-semibold text-slate-800">RM {calculatedBreakdown.filament_cost.toFixed(2)}</span>
               </div>
-            )}
+              <div className="flex justify-between">
+                <span>Print time ({gcodeStats ? (gcodeStats.hours * (scalePct / 100) * quantity).toFixed(1) : 0}h):</span>
+                <span className="font-semibold text-slate-800">RM {calculatedBreakdown.machine_cost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Electricity:</span>
+                <span className="font-semibold text-slate-800">RM {calculatedBreakdown.electricity_cost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Waste & markup ({printer.markup_percent ?? 30}%):</span>
+                <span className="font-semibold text-slate-500">
+                  RM {(calculatedBreakdown.waste_cost + calculatedBreakdown.suggested_price - calculatedBreakdown.base_cost).toFixed(2)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex justify-between">
+                <span>Base price ({MATERIAL_LABELS[material]}):</span>
+                <span className="font-semibold text-slate-800">
+                  RM {((item.allow_material_choice && item.material_prices?.[material]) ? Number(item.material_prices[material]) : (item.base_price ?? 0)).toFixed(2)}
+                </span>
+              </div>
+
+              {item.allow_resize && scalePct !== 100 && (
+                <div className="flex justify-between items-center">
+                  <span className="flex items-center gap-1">
+                    Volumetric scale multiplier ({scalePct}%):
+                    <span className="group relative cursor-help rounded-full bg-slate-100 px-1 text-[9px] text-slate-400 font-bold" title="Scaling a 3D model changes its volume exponentially (S³). 120% scale uses ~1.73x the print material.">?</span>
+                  </span>
+                  <span className="font-semibold text-slate-800">
+                    x{Math.pow(scalePct / 100, 3).toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="flex justify-between border-t border-slate-100 pt-1.5">
+            <span>Quantity:</span>
+            <span className="font-semibold text-slate-800">x {quantity} {quantity === 1 ? 'copy' : 'copies'}</span>
           </div>
 
-          <div className="flex items-baseline justify-between border-t border-slate-100 pt-3">
-            <span className="text-sm font-bold text-slate-800">Estimated Subtotal:</span>
-            <div className="text-right">
-              <span className="text-xl font-extrabold text-orange-600">
-                RM {(item.base_price * Math.pow(scalePct / 100, 3) * quantity).toFixed(2)}
-              </span>
-              <p className="text-[9px] text-slate-400 mt-0.5">Excludes delivery fees where applicable</p>
+          {fulfillment === 'delivery' && (
+            <div className="flex justify-between">
+              <span>Delivery:</span>
+              <span className="text-slate-500 italic">Quoted by owner</span>
             </div>
+          )}
+        </div>
+
+        {isLowStock && (
+          <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 space-y-1">
+            <p className="font-semibold flex items-center gap-1 text-[11px] uppercase tracking-wider text-amber-700">⚠️ Low Stock Alert</p>
+            <p>
+              The maker has only <strong>{remainingG}g</strong> of {color} filament in stock, but this configuration requires approx. <strong>{Math.round(totalWeightRequired)}g</strong>.
+            </p>
+            <p className="text-[10px] text-amber-600">
+              You can still submit your order, but the maker may need to restock before printing.
+            </p>
+          </div>
+        )}
+
+        <div className="flex items-baseline justify-between border-t border-slate-100 pt-3">
+          <span className="text-sm font-bold text-slate-800">Estimated Subtotal:</span>
+          <div className="text-right">
+            <span className="text-xl font-extrabold text-orange-600 font-mono">
+              RM {orderTotalPrice.toFixed(2)}
+            </span>
+            <p className="text-[9px] text-slate-400 mt-0.5">Excludes delivery fees where applicable</p>
           </div>
         </div>
-      )}
+      </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 
