@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Pencil, Trash2, Plus, X, Check, Package, ChevronDown, ClipboardPaste, PackagePlus } from 'lucide-react'
+import { Pencil, Trash2, Plus, X, Check, Package, ChevronDown, ClipboardPaste, PackagePlus, Pipette } from 'lucide-react'
 import type { Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS } from '@/lib/types'
 import { createFilament, updateFilament, deleteFilament, restockFilament } from '@/lib/actions'
+import SwatchColorPicker from '@/components/SwatchColorPicker'
 
 const ALL_MATERIALS: FilamentMaterial[] = ['pla', 'petg', 'abs', 'tpu', 'nylon', 'pc']
 
@@ -473,6 +474,7 @@ function FilamentForm({
   const [importOpen,  setImportOpen]  = useState(false)
   const [importTitle, setImportTitle] = useState('')
   const [importPrice, setImportPrice] = useState('')
+  const [pickerOpen,  setPickerOpen]  = useState(false)
 
   function handleImport() {
     const parsed = parseProductTitle(importTitle, parseFloat(importPrice) || 0)
@@ -614,7 +616,27 @@ function FilamentForm({
             className="w-28 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-sm text-slate-700 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
           />
           <span className="text-xs text-slate-400">Custom hex</span>
+
+          <button
+            type="button"
+            onClick={() => setPickerOpen((v) => !v)}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-orange-600 transition"
+          >
+            <Pipette className="h-3.5 w-3.5" /> Pick from Swatch
+          </button>
         </div>
+
+        {pickerOpen && (
+          <div className="mt-3">
+            <SwatchColorPicker
+              onPickColor={(hex) => {
+                set('color_hex', hex)
+                setPickerOpen(false)
+              }}
+              onClose={() => setPickerOpen(false)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Color name */}
