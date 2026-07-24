@@ -140,6 +140,8 @@ export default function FilamentManager({
   const [restockAmount, setRestockAmount] = useState('')
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
+  const [filterMaterial, setFilterMaterial] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState<string>('')
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setFormState((f) => ({ ...f, [key]: value }))
@@ -240,197 +242,285 @@ export default function FilamentManager({
                 grams_total: item.grams_total ?? grams,
                 in_stock: true,
               }
-            : item,
-        ),
+            : item
+        )
       )
       setRestocking(null)
       setRestockAmount('')
     })
   }
 
-  // Group by material
-  const grouped = ALL_MATERIALS.reduce<Record<FilamentMaterial, Filament[]>>(
-    (acc, m) => {
-      acc[m] = filaments.filter((f) => f.material === m)
-      return acc
-    },
-    {} as Record<FilamentMaterial, Filament[]>,
-  )
+  // Filter and search filaments
+  const filtered = filaments.filter((f) => {
+    const matchesMaterial = filterMaterial === 'all' || f.material === filterMaterial
+    const matchesSearch =
+      f.color.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (f.brand?.toLowerCase() || '').includes(searchQuery.toLowerCase())
+    return matchesMaterial && matchesSearch
+  })
+
+  // Helper component for organic spool capacity rendering
+  function SpoolVisual({ hex, percent, inStock }: { hex: string; percent: number; inStock: boolean }) {
+    const radius = 22
+    const circumference = 2 * Math.PI * radius
+    const offset = circumference - (percent / 100) * circumference
+
+    return (
+      <div className="relative flex h-14 w-14 items-center justify-center shrink-0">
+        {/* Outer Spool Rim */}
+        <div className="absolute inset-0 rounded-full border-2 border-slate-350 bg-slate-900 shadow-inner flex items-center justify-center">
+          {/* Inner cavity spool ridges */}
+          <div className="absolute inset-1 rounded-full border border-slate-700 bg-slate-800" />
+        </div>
+        
+        {/* SVG Filament coils wrapping */}
+        <svg className="absolute h-11 w-11 -rotate-90">
+          <circle
+            cx="22"
+            cy="22"
+            r={radius}
+            className="stroke-slate-950/20"
+            strokeWidth="8"
+            fill="transparent"
+          />
+          <circle
+            cx="22"
+            cy="22"
+            r={radius}
+            style={{ stroke: inStock ? hex : '#94a3b8' }}
+            strokeWidth="8"
+            fill="transparent"
+            strokeDasharray={circumference}
+            strokeDashoffset={inStock ? offset : circumference}
+            strokeLinecap="round"
+            className="transition-all duration-500 ease-out"
+          />
+        </svg>
+        
+        {/* Spool Center Core Hole */}
+        <div className="absolute h-4.5 w-4.5 rounded-full border border-slate-550 bg-slate-100 shadow-inner flex items-center justify-center">
+          <div className="h-1.5 w-1.5 rounded-full bg-slate-400 shadow-inner" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
+      {/* Search & Material Filter Pills bar */}
+      <div className="space-y-3">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="🔍 Search filaments by color or brand..."
+          className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-800 focus:border-orange-450 focus:outline-none focus:ring-2 focus:ring-orange-500/10 transition"
+        />
+        
+        <div className="flex flex-wrap gap-1.5">
+          {['all', ...ALL_MATERIALS].map((m) => {
+            const selected = filterMaterial === m
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setFilterMaterial(m)}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  selected
+                    ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-orange-205 hover:bg-orange-50/10'
+                }`}
+              >
+                {m === 'all' ? 'All Materials' : MATERIAL_LABELS[m as FilamentMaterial]}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       {filaments.length === 0 && editing !== 'new' && (
-        <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center">
+        <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center bg-white shadow-sm">
           <Package className="mx-auto mb-3 h-8 w-8 text-slate-300" />
-          <p className="text-sm text-slate-400">No filaments added yet.</p>
-          <p className="mt-1 text-xs text-slate-300">
-            Add the filament rolls you have in stock — each entry defines material, colour, and cost for pricing.
+          <p className="text-sm text-slate-400 font-semibold">No filaments added yet.</p>
+          <p className="mt-1 text-xs text-slate-350 max-w-[280px] mx-auto">
+            List the filament rolls you currently have in stock to enable automatic customer checkout pricing.
           </p>
         </div>
       )}
 
-      {/* Grouped list */}
-      {ALL_MATERIALS.map((material) => {
-        const items = grouped[material]
-        if (items.length === 0) return null
-        return (
-          <div key={material}>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-              {MATERIAL_LABELS[material]}
-            </p>
-            <div className="space-y-2">
-              {items.map((f) => (
-                <div key={f.id}>
-                  {editing !== f.id ? (
-                    <div className={`rounded-xl border bg-white p-4 shadow-sm ${f.in_stock ? 'border-slate-200' : 'border-slate-100 opacity-60'}`}>
-                      <div className="flex items-center gap-3">
-                        {/* Color swatch */}
-                        <div
-                          className="h-8 w-8 shrink-0 rounded-lg border border-slate-200 shadow-sm"
-                          style={{ backgroundColor: f.color_hex }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-slate-900">{f.color}</p>
-                            {f.brand && (
-                              <span className="text-xs text-slate-400">{f.brand}</span>
-                            )}
-                            {!f.in_stock && (
-                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                                Out of stock
-                              </span>
-                            )}
-                            {f.in_stock && f.grams_remaining != null && f.grams_remaining <= f.low_stock_threshold_g && (
-                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                                Low stock
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-400">RM {f.cost_per_kg}/kg</p>
-                        </div>
-                        <div className="flex shrink-0 gap-1">
-                          {f.grams_remaining != null && (
-                            <button
-                              onClick={() => { setRestocking(restocking === f.id ? null : f.id); setRestockAmount('') }}
-                              className="rounded-lg p-1.5 text-slate-400 hover:bg-orange-50 hover:text-orange-600 transition"
-                              title="Restock"
-                            >
-                              <PackagePlus className="h-4 w-4" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => openEdit(f)}
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => setConfirmDelete(f.id)}
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
+      {filaments.length > 0 && filtered.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center bg-white">
+          <p className="text-xs text-slate-400">No filaments matching the active search/filters.</p>
+        </div>
+      )}
 
-                      {/* Quantity progress bar */}
-                      {f.grams_remaining != null && (
-                        <div className="mt-3 pl-11">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs text-slate-500">
-                              {Math.round(f.grams_remaining)}g / {Math.round(f.grams_total ?? f.grams_remaining)}g left
-                            </span>
-                          </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                            <div
-                              className={`h-full rounded-full transition-all ${
-                                f.grams_remaining <= f.low_stock_threshold_g
-                                  ? 'bg-red-400'
-                                  : f.grams_remaining <= (f.grams_total ?? f.grams_remaining) * 0.5
-                                  ? 'bg-amber-400'
-                                  : 'bg-green-500'
-                              }`}
-                              style={{
-                                width: `${Math.max(2, Math.min(100, (f.grams_remaining / ((f.grams_total ?? f.grams_remaining) || 1)) * 100))}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      )}
+      {/* Organic Spool shelf grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {filtered.map((f) => {
+          const isEditingThis = editing === f.id
+          
+          if (isEditingThis) {
+            return (
+              <div key={f.id} className="md:col-span-2">
+                <FilamentForm
+                  form={form}
+                  set={set}
+                  onSave={handleSave}
+                  onCancel={closeForm}
+                  isPending={isPending}
+                  error={error}
+                  title={`Edit ${MATERIAL_LABELS[f.material]} roll`}
+                />
+              </div>
+            )
+          }
 
-                      {/* Restock quick action */}
-                      {restocking === f.id && (
-                        <div className="mt-3 flex items-center gap-2 rounded-lg bg-orange-50 px-3 py-2">
-                          {[250, 500, 1000].map((g) => (
-                            <button
-                              key={g}
-                              onClick={() => handleRestock(f, g)}
-                              disabled={isPending}
-                              className="rounded-lg border border-orange-200 bg-white px-2.5 py-1 text-xs font-medium text-orange-600 hover:bg-orange-100 transition disabled:opacity-50"
-                            >
-                              +{g}g
-                            </button>
-                          ))}
-                          <input
-                            type="number"
-                            min="1"
-                            value={restockAmount}
-                            onChange={(e) => setRestockAmount(e.target.value)}
-                            placeholder="Custom g"
-                            className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:border-orange-400 focus:outline-none"
-                          />
-                          <button
-                            onClick={() => handleRestock(f, Number(restockAmount))}
-                            disabled={isPending || !restockAmount}
-                            className="rounded-lg bg-orange-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-orange-600 transition disabled:opacity-50"
-                          >
-                            Add
-                          </button>
-                          <button
-                            onClick={() => setRestocking(null)}
-                            className="ml-auto text-slate-400 hover:text-slate-600 transition"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )}
+          const capacityPct = f.grams_remaining != null
+            ? Math.max(2, Math.min(100, (f.grams_remaining / (f.grams_total ?? 1000)) * 100))
+            : 100
 
-                      {confirmDelete === f.id && (
-                        <div className="mt-3 flex items-center gap-3 rounded-lg bg-red-50 px-3 py-2 text-sm">
-                          <span className="flex-1 text-red-700">Remove &quot;{f.color}&quot; {MATERIAL_LABELS[f.material]}?</span>
-                          <button
-                            onClick={() => handleDelete(f.id)}
-                            disabled={isPending}
-                            className="rounded-lg bg-red-500 px-3 py-1 text-xs font-medium text-white hover:bg-red-600 transition disabled:opacity-50"
-                          >
-                            {isPending ? '...' : 'Remove'}
-                          </button>
-                          <button
-                            onClick={() => setConfirmDelete(null)}
-                            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-white transition"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <FilamentForm
-                      form={form}
-                      set={set}
-                      onSave={handleSave}
-                      onCancel={closeForm}
-                      isPending={isPending}
-                      error={error}
-                      title={`Edit ${MATERIAL_LABELS[f.material]}`}
-                    />
+          return (
+            <div
+              key={f.id}
+              className={`rounded-2xl border bg-white p-4 shadow-sm transition hover:shadow-md hover:border-orange-200 ${
+                f.in_stock ? 'border-slate-200' : 'border-slate-100 opacity-60'
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                
+                {/* Spool visual gauge */}
+                <SpoolVisual hex={f.color_hex} percent={capacityPct} inStock={f.in_stock} />
+                
+                {/* Spool Details */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="font-semibold text-slate-900 text-sm truncate leading-tight">{f.color}</p>
+                    
+                    {/* Material Badge */}
+                    <span className="rounded bg-orange-50 border border-orange-100 px-1.5 py-0.5 text-[9px] font-bold text-orange-600 uppercase tracking-wide">
+                      {f.material}
+                    </span>
+                    
+                    {!f.in_stock && (
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-500">
+                        Out of stock
+                      </span>
+                    )}
+                    
+                    {f.in_stock && f.grams_remaining != null && f.grams_remaining <= f.low_stock_threshold_g && (
+                      <span className="rounded bg-amber-100 border border-amber-250 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 animate-pulse">
+                        Low stock
+                      </span>
+                    )}
+                  </div>
+                  
+                  {f.brand && (
+                    <p className="text-[11px] text-slate-400 font-medium mt-0.5">{f.brand}</p>
                   )}
+
+                  <div className="flex items-center gap-2 mt-2 text-xs">
+                    <span className="font-semibold text-slate-700">RM {f.cost_per_kg}/kg</span>
+                    {f.grams_remaining != null && (
+                      <>
+                        <span className="text-slate-300">·</span>
+                        <span className="text-slate-500 font-medium font-mono text-[11px]">
+                          {Math.round(f.grams_remaining)}g left ({Math.round(capacityPct)}%)
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
-              ))}
+
+                {/* Spool Actions */}
+                <div className="flex shrink-0 gap-0.5">
+                  {f.grams_remaining != null && (
+                    <button
+                      onClick={() => { setRestocking(restocking === f.id ? null : f.id); setRestockAmount('') }}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-orange-50 hover:text-orange-600 transition"
+                      title="Restock spool roll"
+                    >
+                      <PackagePlus className="h-4 w-4" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => openEdit(f)}
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition"
+                    title="Edit specs"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(f.id)}
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition"
+                    title="Delete spool"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+
+              </div>
+
+              {/* Restock quick action slider */}
+              {restocking === f.id && (
+                <div className="mt-3 flex items-center gap-2 rounded-xl bg-orange-50/50 border border-orange-100 p-2.5">
+                  {[250, 500, 1000].map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => handleRestock(f, g)}
+                      disabled={isPending}
+                      className="rounded-lg border border-orange-200 bg-white px-2.5 py-1 text-xs font-semibold text-orange-600 hover:bg-orange-100 transition disabled:opacity-50"
+                    >
+                      +{g}g
+                    </button>
+                  ))}
+                  <input
+                    type="number"
+                    min="1"
+                    value={restockAmount}
+                    onChange={(e) => setRestockAmount(e.target.value)}
+                    placeholder="Custom g"
+                    className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:border-orange-400 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => handleRestock(f, Number(restockAmount))}
+                    disabled={isPending || !restockAmount}
+                    className="rounded-lg bg-orange-500 px-3 py-1 text-xs font-semibold text-white hover:bg-orange-600 transition disabled:opacity-50 shadow-sm"
+                  >
+                    Add
+                  </button>
+                  <button
+                    onClick={() => setRestocking(null)}
+                    className="ml-auto text-slate-400 hover:text-slate-600 transition"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Confirm deletion */}
+              {confirmDelete === f.id && (
+                <div className="mt-3 flex items-center gap-3 rounded-xl bg-red-50 border border-red-100 px-3 py-2 text-xs">
+                  <span className="flex-1 text-red-700 font-medium">Remove &quot;{f.color}&quot; spool roll?</span>
+                  <button
+                    onClick={() => handleDelete(f.id)}
+                    disabled={isPending}
+                    className="rounded-lg bg-red-500 px-3 py-1.5 font-semibold text-white hover:bg-red-600 transition disabled:opacity-50 shadow-sm"
+                  >
+                    Remove
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(null)}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
             </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
 
       {/* New form */}
       {editing === 'new' && (
@@ -441,7 +531,7 @@ export default function FilamentManager({
           onCancel={closeForm}
           isPending={isPending}
           error={error}
-          title="Add filament"
+          title="Add filament spool roll"
         />
       )}
 
@@ -449,9 +539,9 @@ export default function FilamentManager({
       {editing === null && (
         <button
           onClick={openNew}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-orange-300 py-3 text-sm font-medium text-orange-500 hover:bg-orange-50 transition"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-orange-300 py-3 text-sm font-semibold text-orange-500 hover:bg-orange-50 transition shadow-sm bg-white"
         >
-          <Plus className="h-4 w-4" /> Add filament
+          <Plus className="h-4 w-4" /> Add filament roll
         </button>
       )}
     </div>

@@ -57,61 +57,74 @@ export default async function EquipmentPage() {
   const completedJobs = usageRows.length
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-8">
         <Link
           href="/dashboard"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-655 transition"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
         </Link>
         <h1 className="text-2xl font-bold text-slate-900">Equipment &amp; Filaments</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Manage your printers and the filament rolls you have in stock.
+          Manage your active printers, profiles, and material inventory stock.
         </p>
       </div>
 
-      {/* ── Machine usage (auto-tracked from completed jobs) ── */}
-      <div className="mb-10">
-        <h2 className="text-lg font-semibold text-slate-900">Machine usage</h2>
-        <p className="mb-4 mt-1 text-sm text-slate-500">
-          Automatically tracked from your completed jobs — nothing to fill in.
-        </p>
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { icon: Clock, label: 'Total print hours', value: totalHours > 0 ? `${Math.round(totalHours * 10) / 10}h` : '—', color: 'text-purple-600', bg: 'bg-purple-50' },
-            { icon: CheckCircle, label: 'Completed jobs', value: completedJobs, color: 'text-green-600', bg: 'bg-green-50' },
-            { icon: Weight, label: 'Filament used', value: totalWeightG > 0 ? `${Math.round(totalWeightG)}g` : '—', color: 'text-blue-600', bg: 'bg-blue-50' },
-          ].map(({ icon: Icon, label, value, color, bg }) => (
-            <div key={label} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className={`mb-2 inline-flex rounded-lg p-2 ${bg}`}>
-                <Icon className={`h-4 w-4 ${color}`} />
-              </div>
-              <div className="text-2xl font-bold text-slate-900">{value}</div>
-              <div className="text-xs text-slate-500">{label}</div>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 items-start">
+        
+        {/* ── Left Column: Printers & Usage (lg:col-span-6) ── */}
+        <div className="lg:col-span-6 space-y-8">
+          
+          {/* Machine usage */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-bold text-slate-905">Machine Usage Stats</h2>
+            <p className="mb-4 text-xs text-slate-400 mt-0.5">
+              Automatically calculated based on your completed orders
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { icon: Clock, label: 'Print time', value: totalHours > 0 ? `${Math.round(totalHours * 10) / 10}h` : '—', color: 'text-purple-600', bg: 'bg-purple-50' },
+                { icon: CheckCircle, label: 'Jobs done', value: completedJobs, color: 'text-green-600', bg: 'bg-green-50' },
+                { icon: Weight, label: 'Filament used', value: totalWeightG > 0 ? `${Math.round(totalWeightG)}g` : '—', color: 'text-blue-600', bg: 'bg-blue-50' },
+              ].map(({ icon: Icon, label, value, color, bg }) => (
+                <div key={label} className="text-center rounded-xl bg-slate-50/50 border border-slate-100 p-3">
+                  <div className={`mb-1.5 inline-flex rounded-lg p-1.5 ${bg}`}>
+                    <Icon className={`h-3.5 w-3.5 ${color}`} />
+                  </div>
+                  <div className="text-lg font-bold text-slate-900 leading-none">{value}</div>
+                  <div className="text-[10px] text-slate-450 mt-1">{label}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
 
-      {/* ── My Printers ── */}
-      <div className="mb-10">
-        <h2 className="text-lg font-semibold text-slate-900">My Printers</h2>
-        <p className="mb-4 mt-1 text-sm text-slate-500">
-          The machines behind your shop. Add one when you get a new printer; expand a printer to manage its nozzles, bed, and capabilities.
-        </p>
-        <PrinterList printers={printers} profilesByPrinter={profilesByPrinter} />
-      </div>
+          {/* My Printers */}
+          <div>
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-slate-900 leading-none">My Printers</h2>
+              <p className="text-xs text-slate-400 mt-1.5">
+                Add new equipment or expand active printers to manage bed sizes, nozzles, and configurations.
+              </p>
+            </div>
+            <PrinterList printers={printers} profilesByPrinter={profilesByPrinter} />
+          </div>
 
-      <div>
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-slate-900">Filaments</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Record the filament rolls you have in stock — material, colour, brand, and cost per kg.
-            Shared across all your printers. Used for automatic job pricing. Toggle &quot;in stock&quot; to hide without deleting.
-          </p>
         </div>
-        <FilamentManager filaments={filaments} ownerId={user.id} />
+
+        {/* ── Right Column: Filaments Inventory (lg:col-span-6) ── */}
+        <div className="lg:col-span-6 space-y-8">
+          <div>
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-slate-900 leading-none">Filament Stock</h2>
+              <p className="text-xs text-slate-400 mt-1.5">
+                Record filament spools in stock. Toggling stock status automatically updates your customer order form color presets in real-time.
+              </p>
+            </div>
+            <FilamentManager filaments={filaments} ownerId={user.id} />
+          </div>
+        </div>
+
       </div>
     </div>
   )
