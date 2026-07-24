@@ -629,8 +629,11 @@ function FilamentForm({
         {pickerOpen && (
           <div className="mt-3">
             <SwatchColorPicker
-              onPickColor={(hex) => {
+              onPickColor={(hex, suggestedName) => {
                 set('color_hex', hex)
+                if (!form.color.trim()) {
+                  set('color', suggestedName)
+                }
                 setPickerOpen(false)
               }}
               onClose={() => setPickerOpen(false)}
