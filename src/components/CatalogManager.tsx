@@ -6,7 +6,7 @@ import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, 
 
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView, PartAssembly } from '@/lib/types'
-import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation, COLOR_PRESETS, parseGcodeStats, serializeGcodeStats } from '@/lib/types'
+import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation, parseUrlTranslation, COLOR_PRESETS, parseGcodeStats, serializeGcodeStats } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 import { getPresetById } from '@/lib/printer-models'
@@ -25,7 +25,7 @@ const inputClass =
 const selectClass =
   'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
 
-function updateUrlRotation(url: string, axis: 'rx' | 'ry' | 'rz', angle: number): string {
+function updateUrlParameter(url: string, key: string, value: string | number): string {
   const [base, hash] = url.split('#')
   const isPart = hash?.includes('part')
   const isPreview = hash?.includes('preview')
@@ -34,7 +34,7 @@ function updateUrlRotation(url: string, axis: 'rx' | 'ry' | 'rz', angle: number)
   cleanHash = cleanHash.replace(/preview/g, '').replace(/part/g, '').replace(/^&+|&+$/g, '').replace(/&&+/g, '&')
   
   const params = new URLSearchParams(cleanHash)
-  params.set(axis, String(angle))
+  params.set(key, String(value))
   
   const parts: string[] = []
   if (isPreview) parts.push('preview')
@@ -44,6 +44,10 @@ function updateUrlRotation(url: string, axis: 'rx' | 'ry' | 'rz', angle: number)
   if (paramsStr) parts.push(paramsStr)
   
   return `${base}#${parts.join('&')}`
+}
+
+function updateUrlRotation(url: string, axis: 'rx' | 'ry' | 'rz', angle: number): string {
+  return updateUrlParameter(url, axis, angle)
 }
 
 // ── G-code calculator types ───────────────────────────────────────────────────
@@ -875,6 +879,83 @@ function CatalogForm({
                       Z: {rot.rz}°
                     </button>
                   </div>
+                  
+                  {/* Position offset controls */}
+                  {(() => {
+                    const trans = parseUrlTranslation(url)
+                    return (
+                      <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-1.5 text-[10px]">
+                        <span className="font-semibold text-slate-400">Position (mm):</span>
+                        
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-500 font-medium">X:</span>
+                          <input
+                            type="number"
+                            step="5"
+                            value={trans.x}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0
+                              const nextUrls = [...form.stl_urls]
+                              nextUrls[i] = updateUrlParameter(url, 'x', val)
+                              set('stl_urls', nextUrls)
+                            }}
+                            className="w-12 rounded border border-slate-200 px-1 py-0.5 text-center font-mono focus:border-orange-400 focus:outline-none"
+                            title="X translation offset"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-500 font-medium">Y:</span>
+                          <input
+                            type="number"
+                            step="5"
+                            value={trans.y}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0
+                              const nextUrls = [...form.stl_urls]
+                              nextUrls[i] = updateUrlParameter(url, 'y', val)
+                              set('stl_urls', nextUrls)
+                            }}
+                            className="w-12 rounded border border-slate-200 px-1 py-0.5 text-center font-mono focus:border-orange-400 focus:outline-none"
+                            title="Y translation offset"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-500 font-medium">Z:</span>
+                          <input
+                            type="number"
+                            step="5"
+                            value={trans.z}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0
+                              const nextUrls = [...form.stl_urls]
+                              nextUrls[i] = updateUrlParameter(url, 'z', val)
+                              set('stl_urls', nextUrls)
+                            }}
+                            className="w-12 rounded border border-slate-200 px-1 py-0.5 text-center font-mono focus:border-orange-400 focus:outline-none"
+                            title="Z translation offset"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            let nextUrl = url
+                            nextUrl = updateUrlParameter(nextUrl, 'x', 0)
+                            nextUrl = updateUrlParameter(nextUrl, 'y', 0)
+                            nextUrl = updateUrlParameter(nextUrl, 'z', 0)
+                            const nextUrls = [...form.stl_urls]
+                            nextUrls[i] = nextUrl
+                            set('stl_urls', nextUrls)
+                          }}
+                          className="text-slate-400 hover:text-orange-500 hover:underline transition ml-auto font-medium"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    )
+                  })()}
                 </div>
               )
             })}

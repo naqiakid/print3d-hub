@@ -458,6 +458,30 @@ export function parseUrlRotation(url: string | null | undefined): RotationOffset
   return result
 }
 
+export interface TranslationOffset {
+  x: number
+  y: number
+  z: number
+}
+
+export function parseUrlTranslation(url: string | null | undefined): TranslationOffset {
+  const result = { x: 0, y: 0, z: 0 }
+  if (!url) return result
+  const hash = url.split('#')[1]
+  if (!hash) return result
+
+  const params = new URLSearchParams(hash)
+  const x = parseFloat(params.get('x') || '0')
+  const y = parseFloat(params.get('y') || '0')
+  const z = parseFloat(params.get('z') || '0')
+
+  result.x = isNaN(x) ? 0 : x
+  result.y = isNaN(y) ? 0 : y
+  result.z = isNaN(z) ? 0 : z
+  return result
+}
+
+
 export const COLOR_PRESETS = [
   { name: 'Black',   hex: '#1a1a1a' },
   { name: 'White',   hex: '#f5f5f5' },

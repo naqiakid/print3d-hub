@@ -7,7 +7,7 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
-import { PartAssembly, getDirectDownloadUrl, isPreviewFile, parseUrlRotation } from '@/lib/types'
+import { PartAssembly, getDirectDownloadUrl, isPreviewFile, parseUrlRotation, parseUrlTranslation } from '@/lib/types'
 
 type Props = {
   urls?: string[]
@@ -559,18 +559,23 @@ export default function STLViewer({
           geometry.translate(-centre.x, -centre.y, -centre.z)
         }
 
-        // Apply URL-specific rotation first
+        // Apply URL-specific rotation and translation first
         const urlRot = parseUrlRotation(urlWithHash)
+        const urlTrans = parseUrlTranslation(urlWithHash)
+        
         mesh.rotation.set(
           THREE.MathUtils.degToRad(urlRot.rx),
           THREE.MathUtils.degToRad(urlRot.ry),
           THREE.MathUtils.degToRad(urlRot.rz)
         )
+        mesh.position.set(urlTrans.x, urlTrans.y, urlTrans.z)
 
         // Apply custom position and rotation offsets
         if (isAssembled && assemblyOffsets && assemblyOffsets[i]) {
           const offset = assemblyOffsets[i]
-          mesh.position.set(offset.x, offset.y, offset.z)
+          mesh.position.x += offset.x
+          mesh.position.y += offset.y
+          mesh.position.z += offset.z
           mesh.rotation.x += THREE.MathUtils.degToRad(offset.rx ?? 0)
           mesh.rotation.y += THREE.MathUtils.degToRad(offset.ry ?? 0)
           mesh.rotation.z += THREE.MathUtils.degToRad(offset.rz ?? 0)
@@ -659,18 +664,23 @@ export default function STLViewer({
           obj.position.sub(centre)
         }
 
-        // Apply URL-specific rotation first
+        // Apply URL-specific rotation and translation first
         const urlRot = parseUrlRotation(urlWithHash)
+        const urlTrans = parseUrlTranslation(urlWithHash)
+        
         obj.rotation.set(
           THREE.MathUtils.degToRad(urlRot.rx),
           THREE.MathUtils.degToRad(urlRot.ry),
           THREE.MathUtils.degToRad(urlRot.rz)
         )
+        obj.position.set(urlTrans.x, urlTrans.y, urlTrans.z)
 
         // Apply custom position and rotation offsets
         if (isAssembled && assemblyOffsets && assemblyOffsets[i]) {
           const offset = assemblyOffsets[i]
-          obj.position.set(offset.x, offset.y, offset.z)
+          obj.position.x += offset.x
+          obj.position.y += offset.y
+          obj.position.z += offset.z
           obj.rotation.x += THREE.MathUtils.degToRad(offset.rx ?? 0)
           obj.rotation.y += THREE.MathUtils.degToRad(offset.ry ?? 0)
           obj.rotation.z += THREE.MathUtils.degToRad(offset.rz ?? 0)
@@ -821,19 +831,20 @@ export default function STLViewer({
       if (!url) return
 
       const urlRot = parseUrlRotation(url)
+      const urlTrans = parseUrlTranslation(url)
       let rx = THREE.MathUtils.degToRad(urlRot.rx)
       let ry = THREE.MathUtils.degToRad(urlRot.ry)
       let rz = THREE.MathUtils.degToRad(urlRot.rz)
 
-      let px = 0
-      let py = 0
-      let pz = 0
+      let px = urlTrans.x
+      let py = urlTrans.y
+      let pz = urlTrans.z
 
       if (isAssembled && assemblyOffsets && assemblyOffsets[i]) {
         const offset = assemblyOffsets[i]
-        px = offset.x
-        py = offset.y
-        pz = offset.z
+        px += offset.x
+        py += offset.y
+        pz += offset.z
         rx += THREE.MathUtils.degToRad(offset.rx ?? 0)
         ry += THREE.MathUtils.degToRad(offset.ry ?? 0)
         rz += THREE.MathUtils.degToRad(offset.rz ?? 0)
