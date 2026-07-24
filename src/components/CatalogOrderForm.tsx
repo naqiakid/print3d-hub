@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
+
+const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 import type { CatalogItem, RequestPrinterView, PrintProfile, Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, parseMeshMapping, parseAllowedFilaments, parseTextMeshIndex, cleanDescription, isPreviewFile, COLOR_PRESETS, parseGcodeStats } from '@/lib/types'
 import { calculateEstimate } from '@/lib/pricing'
@@ -293,27 +296,82 @@ export default function CatalogOrderForm({
   if (item.allow_material_choice) customisationBadges.push('Material choice')
 
   return (
-    <div className="space-y-6">
-      {/* Product header */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        {/* Photo gallery / video / 3D viewer with LIVE custom color updates */}
-        <ProductMediaGallery
-          photoUrls={item.photo_urls?.length ? item.photo_urls : (item.photo_url ? [item.photo_url] : [])}
-          videoUrl={item.video_url ?? null}
-          stlUrls={item.stl_urls ?? []}
-          name={item.name}
-          colors={item.stl_urls.map((url) => {
-            const idx = printableParts.indexOf(url)
-            if (idx !== -1) return partColorHexes[idx]
-            return '#ffffff' // preview file fallback color
-          })}
-          assemblyOffsets={parseAssemblyMetadata(item.description)}
-          meshMapping={parseMeshMapping(item.description)}
-          textMeshIndex={parseTextMeshIndex(item.description)}
-          customText={customText}
-          scale={scalePct / 100}
-        />
-        <div className="p-5">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      
+      {/* ── Left Column: Media & 3D Preview (lg:col-span-7) ── */}
+      <div className="lg:col-span-7 space-y-6 lg:sticky lg:top-6">
+        
+        {/* Desktop View: Separate 3D Preview and static Photo Gallery */}
+        <div className="hidden lg:block space-y-6">
+          {item.stl_urls?.length > 0 ? (
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Interactive 3D Customize Preview</span>
+                <span className="rounded-full bg-teal-50 border border-teal-200 px-2 py-0.5 text-[10px] font-semibold text-teal-650">
+                  Live color updates
+                </span>
+              </div>
+              <div className="relative aspect-square w-full rounded-xl overflow-hidden border border-slate-100 bg-slate-905 shadow-inner flex items-center justify-center" style={{ height: 420 }}>
+                <STLViewer
+                  urls={item.stl_urls}
+                  colors={item.stl_urls.map((url) => {
+                    const idx = printableParts.indexOf(url)
+                    if (idx !== -1) return partColorHexes[idx]
+                    return '#ffffff'
+                  })}
+                  assemblyOffsets={parseAssemblyMetadata(item.description)}
+                  meshMapping={parseMeshMapping(item.description)}
+                  textMeshIndex={parseTextMeshIndex(item.description)}
+                  customText={customText}
+                  scale={scalePct / 100}
+                  className="h-full w-full"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border-2 border-dashed border-slate-250 p-8 text-center bg-slate-50/50">
+              <p className="text-xs text-slate-500 font-semibold">No 3D model files loaded</p>
+            </div>
+          )}
+
+          {/* Photo Gallery (without 3D tab) */}
+          {(item.photo_urls?.length > 0 || item.photo_url || item.video_url) && (
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
+                <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">Product Gallery</h4>
+              </div>
+              <ProductMediaGallery
+                photoUrls={item.photo_urls?.length ? item.photo_urls : (item.photo_url ? [item.photo_url] : [])}
+                videoUrl={item.video_url ?? null}
+                stlUrls={[]} // Passing empty array separates it from the 3D tab!
+                name={item.name}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Mobile View: Unified Tabbed ProductMediaGallery (hidden on desktop) */}
+        <div className="block lg:hidden overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <ProductMediaGallery
+            photoUrls={item.photo_urls?.length ? item.photo_urls : (item.photo_url ? [item.photo_url] : [])}
+            videoUrl={item.video_url ?? null}
+            stlUrls={item.stl_urls ?? []}
+            name={item.name}
+            colors={item.stl_urls.map((url) => {
+              const idx = printableParts.indexOf(url)
+              if (idx !== -1) return partColorHexes[idx]
+              return '#ffffff'
+            })}
+            assemblyOffsets={parseAssemblyMetadata(item.description)}
+            meshMapping={parseMeshMapping(item.description)}
+            textMeshIndex={parseTextMeshIndex(item.description)}
+            customText={customText}
+            scale={scalePct / 100}
+          />
+        </div>
+
+        {/* Product Details Header card */}
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h1 className="text-xl font-bold text-slate-900">{item.name}</h1>
@@ -328,7 +386,7 @@ export default function CatalogOrderForm({
           </div>
 
           {item.description && cleanDescription(item.description) && (
-            <p className="mt-3 text-sm text-slate-600 leading-relaxed">{cleanDescription(item.description)}</p>
+            <p className="mt-3 text-sm text-slate-650 leading-relaxed">{cleanDescription(item.description)}</p>
           )}
 
           {customisationBadges.length > 0 && (
@@ -346,17 +404,19 @@ export default function CatalogOrderForm({
               href={item.model_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-3 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-orange-500 transition"
+              className="mt-3.5 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-orange-500 transition"
             >
               <ExternalLink className="h-3 w-3" /> View original design
             </a>
           )}
         </div>
+
       </div>
 
-      <h2 className="text-lg font-bold text-slate-900 border-t border-slate-100 pt-6 mt-2">Customise your order</h2>
-
-      <form onSubmit={handleSubmit} className="space-y-6">
+      {/* ── Right Column: Configuration Options Form (lg:col-span-5) ── */}
+      <form onSubmit={handleSubmit} className="lg:col-span-5 space-y-6">
+        
+        <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3 lg:mt-0">Customise your order</h2>
 
       {/* Copy selector tabs for quantity > 1 (only show if customization is possible) */}
       {quantity > 1 && (item.allow_custom_text || item.allow_color_choice) && (

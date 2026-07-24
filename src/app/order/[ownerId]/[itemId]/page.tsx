@@ -99,7 +99,7 @@ export default async function CatalogOrderPage({
   if (item.allow_material_choice) customisationBadges.push('Material choice')
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-10 sm:px-6">
+    <div className="mx-auto max-w-xl lg:max-w-7xl px-4 py-10 sm:px-6">
       {/* Product Structured Data for Google SEO */}
       <script
         type="application/ld+json"
