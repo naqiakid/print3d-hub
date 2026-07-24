@@ -1,8 +1,10 @@
 import Link from 'next/link'
 import { ArrowRight, Upload, Sliders, ShoppingBag, Search, Printer, Package } from 'lucide-react'
-import PrinterCard from '@/components/PrinterCard'
 import { createClient } from '@/lib/supabase/server'
 import type { Shop } from '@/lib/types'
+import { fetchCatalogBrowseItems } from '@/lib/catalog-browse'
+import { ProductCard } from '@/components/CatalogBrowse'
+import PrintersNearYou from '@/components/PrintersNearYou'
 
 export default async function HomePage() {
   const supabase = await createClient()
@@ -10,7 +12,7 @@ export default async function HomePage() {
   const { data: printerRows } = await supabase.from('printers').select('owner_id')
   const ownerIds = [...new Set((printerRows ?? []).map((p) => p.owner_id))]
 
-  const [{ data: printersData }, { count: completedCount }] = await Promise.all([
+  const [allPrinters, trendingProducts, { count: completedCount }] = await Promise.all([
     ownerIds.length
       ? supabase
           .from('profiles')
@@ -18,15 +20,15 @@ export default async function HomePage() {
           .eq('available', true)
           .in('id', ownerIds)
           .order('created_at', { ascending: false })
-          .limit(3)
-      : Promise.resolve({ data: [] }),
+          .then(({ data }) => (data ?? []) as unknown as Shop[])
+      : Promise.resolve([] as Shop[]),
+    fetchCatalogBrowseItems('custom').then((items) => items.slice(0, 3)),
     supabase
       .from('requests')
       .select('*', { count: 'exact', head: true })
       .in('status', ['collected', 'reviewed']),
   ])
 
-  const featured = (printersData ?? []) as unknown as Shop[]
   const totalPrinters = ownerIds.length
   const totalCompleted = completedCount ?? 0
 
@@ -68,6 +70,48 @@ export default async function HomePage() {
               </Link>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── Top Trending Products ── */}
+      <section className="py-20 bg-slate-50 border-b border-slate-200/50">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-10 flex items-end justify-between">
+            <div>
+              <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Top Trending Products</h2>
+              <p className="mt-1 text-slate-500">Popular customizable items ready to print near you</p>
+            </div>
+            <Link
+              href="/browse/custom"
+              className="hidden items-center gap-1 text-sm font-semibold text-orange-500 hover:text-orange-600 sm:flex transition"
+            >
+              See all designs <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          {trendingProducts.length === 0 ? (
+            <div className="flex flex-col items-center py-16 text-center bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
+              <Package className="h-10 w-10 text-slate-300 mb-3" />
+              <p className="text-slate-500 text-sm">No customisable items listed yet.</p>
+              <Link href="/dashboard/catalog" className="mt-3 text-sm font-semibold text-orange-500 hover:text-orange-600 transition">
+                Add products to catalog →
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {trendingProducts.map((item) => (
+                <ProductCard key={item.id} item={item} distanceKm={undefined} mode="custom" />
+              ))}
+            </div>
+          )}
+
+          {trendingProducts.length > 0 && (
+            <div className="mt-8 text-center sm:hidden">
+              <Link href="/browse/custom" className="inline-flex items-center gap-1 text-sm font-semibold text-orange-500">
+                See all designs <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          )}
         </div>
       </section>
 
@@ -148,8 +192,15 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* ── Printers Near You ── */}
+      <section className="py-20 bg-slate-50 border-y border-slate-200/50">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <PrintersNearYou initialPrinters={allPrinters} />
+        </div>
+      </section>
+
       {/* ── How it works ── */}
-      <section className="bg-slate-50 py-20">
+      <section className="bg-white py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-12 text-center">
             <h2 className="mb-3 text-3xl font-bold text-slate-900">How it works</h2>
@@ -178,7 +229,7 @@ export default async function HomePage() {
               },
             ].map(({ icon: Icon, step, title, desc }) => (
               <div key={step} className="relative rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-                <span className="absolute right-5 top-4 text-5xl font-black text-slate-100 select-none">
+                <span className="absolute right-5 top-4 text-5xl font-black text-slate-105 select-none">
                   {step}
                 </span>
                 <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-orange-100">
@@ -192,50 +243,9 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Featured printers ── */}
-      <section className="py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-8 flex items-end justify-between">
-            <div>
-              <h2 className="text-3xl font-bold text-slate-900">Available now</h2>
-              <p className="mt-1 text-slate-500">Makers ready to take your order</p>
-            </div>
-            <Link
-              href="/printers"
-              className="hidden items-center gap-1 text-sm font-medium text-orange-500 hover:text-orange-600 sm:flex"
-            >
-              See all <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-
-          {featured.length === 0 ? (
-            <div className="flex flex-col items-center py-20 text-center">
-              <p className="text-slate-500">No printers available right now.</p>
-              <Link href="/register" className="mt-3 text-sm font-medium text-orange-500 hover:text-orange-600">
-                Be the first to list your printer →
-              </Link>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {featured.map((printer) => (
-                <PrinterCard key={printer.id} printer={printer} />
-              ))}
-            </div>
-          )}
-
-          {featured.length > 0 && (
-            <div className="mt-8 text-center sm:hidden">
-              <Link href="/printers" className="inline-flex items-center gap-1 text-sm font-medium text-orange-500">
-                See all printers <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          )}
-        </div>
-      </section>
-
       {/* ── Live stats ── */}
       {(totalPrinters > 0 || totalCompleted > 0) && (
-        <section className="border-y border-slate-200 bg-white">
+        <section className="border-b border-slate-200 bg-white">
           <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
             <div className="flex flex-wrap justify-center gap-16 text-center">
               {totalPrinters > 0 && (

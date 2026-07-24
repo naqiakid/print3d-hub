@@ -205,7 +205,7 @@ export default function CatalogBrowse({ items, mode }: Props) {
 
 // ── Product card ──────────────────────────────────────────────────────────────
 
-function ProductCard({
+export function ProductCard({
   item,
   distanceKm,
   mode,
