@@ -478,6 +478,34 @@ export default function CatalogOrderForm({
         </div>
       )}
 
+      {item.allow_material_choice && availableMaterials.length > 0 && (
+        <div>
+          <h3 className="mb-1 text-sm font-semibold text-slate-700">Material</h3>
+          <div className="space-y-2">
+            {availableMaterials.map((mat) => (
+              <button key={mat} type="button" onClick={() => {
+                setMaterial(mat)
+                setUnitsConfig((prev) => {
+                  return prev.map((config) => ({
+                    ...config,
+                    color: 'Any',
+                    colorHex: '#888888',
+                    partColors: config.partColors.map(() => 'Any'),
+                    partColorHexes: config.partColorHexes.map(() => '#888888')
+                  }))
+                })
+              }}
+                className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${material === mat ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'}`}>
+                <p className={`text-sm font-medium ${material === mat ? 'text-orange-700' : 'text-slate-800'}`}>
+                  {MATERIAL_LABELS[mat]}
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">{MATERIAL_DESCRIPTIONS[mat]}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {item.allow_color_choice && (
         <div>
           <h3 className="mb-1 text-sm font-semibold text-slate-700">Color</h3>
@@ -605,35 +633,6 @@ export default function CatalogOrderForm({
             <span>{item.resize_min_pct}% (smaller)</span>
             <span className="font-medium text-orange-600">{scalePct}%</span>
             <span>{item.resize_max_pct}% (larger)</span>
-          </div>
-        </div>
-      )}
-
-      {item.allow_material_choice && availableMaterials.length > 0 && (
-        <div>
-          <h3 className="mb-1 text-sm font-semibold text-slate-700">Material</h3>
-          <div className="space-y-2">
-            {availableMaterials.map((mat) => (
-              <button key={mat} type="button" onClick={() => {
-                setMaterial(mat)
-                setUnitsConfig((prev) => {
-                  const next = [...prev]
-                  if (next[activeUnitIdx]) {
-                    next[activeUnitIdx].color = 'Any'
-                    next[activeUnitIdx].colorHex = '#888888'
-                    next[activeUnitIdx].partColors = next[activeUnitIdx].partColors.map(() => 'Any')
-                    next[activeUnitIdx].partColorHexes = next[activeUnitIdx].partColorHexes.map(() => '#888888')
-                  }
-                  return next
-                })
-              }}
-                className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${material === mat ? 'border-orange-500 bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-200'}`}>
-                <p className={`text-sm font-medium ${material === mat ? 'text-orange-700' : 'text-slate-800'}`}>
-                  {MATERIAL_LABELS[mat]}
-                </p>
-                <p className="text-xs text-slate-400 mt-0.5">{MATERIAL_DESCRIPTIONS[mat]}</p>
-              </button>
-            ))}
           </div>
         </div>
       )}
