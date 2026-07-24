@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Camera, Upload, X, Check, Eye, Lock, RefreshCw } from 'lucide-react'
+import { Camera, Upload, X, Check, Lock, RefreshCw, Sun, Sparkles } from 'lucide-react'
 
 type Props = {
   onPickColor: (hex: string, suggestedName: string) => void
@@ -34,6 +34,61 @@ const COLOR_CATALOG = [
   { hex: '#E6E6FA', name: 'Lavender' },
 ]
 
+// Convert RGB to HSL
+export function rgbToHsl(r: number, g: number, b: number) {
+  r /= 255; g /= 255; b /= 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  let h = 0, s = 0, l = (max + min) / 2
+
+  if (max !== min) {
+    const d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break
+      case g: h = (b - r) / d + 2; break
+      case b: h = (r - g) / d + 4; break
+    }
+    h /= 6
+  }
+  return { h: h * 360, s: s * 100, l: l * 100 }
+}
+
+// Convert HSL to RGB
+export function hslToRgb(h: number, s: number, l: number) {
+  h /= 360; s /= 100; l /= 100
+  let r = l, g = l, b = l
+
+  if (s !== 0) {
+    const hue2rgb = (p: number, q: number, t: number) => {
+      if (t < 0) t += 1
+      if (t > 1) t -= 1
+      if (t < 1/6) return p + (q - p) * 6 * t
+      if (t < 1/2) return q
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6
+      return p
+    }
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s
+    const p = 2 * l - q
+    r = hue2rgb(p, q, h + 1/3)
+    g = hue2rgb(p, q, h)
+    b = hue2rgb(p, q, h - 1/3)
+  }
+  return {
+    r: Math.round(r * 255),
+    g: Math.round(g * 255),
+    b: Math.round(b * 255)
+  }
+}
+
+// Helper to convert decimal coordinates into Hex
+function rgbToHexStr(r: number, g: number, b: number): string {
+  const toHex = (c: number) => {
+    const hex = c.toString(16)
+    return hex.length === 1 ? '0' + hex : hex
+  }
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase()
+}
+
 export function getClosestColorName(hex: string): string {
   const r1 = parseInt(hex.slice(1, 3), 16)
   const g1 = parseInt(hex.slice(3, 5), 16)
@@ -60,7 +115,11 @@ export default function SwatchColorPicker({ onPickColor, onClose }: Props) {
   const [activeTab, setActiveTab] = useState<'camera' | 'upload'>('camera')
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [hoverColor, setHoverColor] = useState<string | null>(null)
-  const [selectedColor, setSelectedColor] = useState<string | null>(null)
+  
+  // Color calibration state variables
+  const [rawColorHex, setRawColorHex] = useState<string | null>(null)
+  const [exposureBoost, setExposureBoost] = useState<number>(1.15) // +15% default exposure boost for webcam dimness
+  const [saturationBoost, setSaturationBoost] = useState<number>(1.10) // +10% default saturation vibrancy boost
 
   // Camera Refs
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -109,32 +168,22 @@ export default function SwatchColorPicker({ onPickColor, onClose }: Props) {
     }
   }, [activeTab])
 
-  // Convert RGB array to hex string
-  function rgbToHex(r: number, g: number, b: number): string {
-    const toHex = (c: number) => {
-      const hex = c.toString(16)
-      return hex.length === 1 ? '0' + hex : hex
-    }
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase()
-  }
-
   // Live center-reticle scanner animation loop
   useEffect(() => {
     let animId: number
     const checkCenterColor = () => {
       const video = videoRef.current
-      if (video && stream && activeTab === 'camera' && !selectedColor && video.readyState === video.HAVE_ENOUGH_DATA) {
+      if (video && stream && activeTab === 'camera' && !rawColorHex && video.readyState === video.HAVE_ENOUGH_DATA) {
         const tempCanvas = document.createElement('canvas')
         tempCanvas.width = 10
         tempCanvas.height = 10
         const ctx = tempCanvas.getContext('2d')
         if (ctx) {
-          // Sample a tiny pixel at the exact center of the video feed
           const sx = video.videoWidth / 2
           const sy = video.videoHeight / 2
           ctx.drawImage(video, sx, sy, 1, 1, 0, 0, 1, 1)
           const pixel = ctx.getImageData(0, 0, 1, 1).data
-          const hex = rgbToHex(pixel[0], pixel[1], pixel[2])
+          const hex = rgbToHexStr(pixel[0], pixel[1], pixel[2])
           setHoverColor(hex)
         }
       }
@@ -148,12 +197,12 @@ export default function SwatchColorPicker({ onPickColor, onClose }: Props) {
     return () => {
       cancelAnimationFrame(animId)
     }
-  }, [activeTab, stream, selectedColor])
+  }, [activeTab, stream, rawColorHex])
 
   // Lock center color in camera mode
   function handleLockCenterColor() {
     if (hoverColor) {
-      setSelectedColor(hoverColor)
+      setRawColorHex(hoverColor)
     }
   }
 
@@ -178,7 +227,7 @@ export default function SwatchColorPicker({ onPickColor, onClose }: Props) {
 
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
         setImageLoaded(true)
-        setSelectedColor(null)
+        setRawColorHex(null)
         setHoverColor(null)
       }
       img.src = event.target?.result as string
@@ -198,8 +247,8 @@ export default function SwatchColorPicker({ onPickColor, onClose }: Props) {
     const y = e.clientY - rect.top
 
     const pixel = ctx.getImageData(x, y, 1, 1).data
-    const hex = rgbToHex(pixel[0], pixel[1], pixel[2])
-    setSelectedColor(hex)
+    const hex = rgbToHexStr(pixel[0], pixel[1], pixel[2])
+    setRawColorHex(hex)
   }
 
   // Handle hover on canvas photo
@@ -214,10 +263,30 @@ export default function SwatchColorPicker({ onPickColor, onClose }: Props) {
     const y = e.clientY - rect.top
 
     const pixel = ctx.getImageData(x, y, 1, 1).data
-    const hex = rgbToHex(pixel[0], pixel[1], pixel[2])
+    const hex = rgbToHexStr(pixel[0], pixel[1], pixel[2])
     setHoverColor(hex)
   }
 
+  // Calibration color boost engine
+  function applyColorBoost(hex: string, exp: number, sat: number): string {
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    
+    const hsl = rgbToHsl(r, g, b)
+    
+    // Skip saturation boost for grayscale shades (white, gray, black) to avoid tinting
+    const sFactor = hsl.s > 8 ? sat : 1.0
+    
+    const boostedL = Math.min(100, hsl.l * exp)
+    const boostedS = Math.min(100, hsl.s * sFactor)
+    
+    const rgb = hslToRgb(hsl.h, boostedS, boostedL)
+    return rgbToHexStr(rgb.r, rgb.g, rgb.b)
+  }
+
+  // Calculate display colors
+  const selectedColor = rawColorHex ? applyColorBoost(rawColorHex, exposureBoost, saturationBoost) : null
   const suggestedName = selectedColor ? getClosestColorName(selectedColor) : ''
 
   return (
@@ -263,11 +332,9 @@ export default function SwatchColorPicker({ onPickColor, onClose }: Props) {
               className="w-full h-full max-h-[300px] object-contain"
             />
             
-            {stream && !selectedColor && (
+            {stream && !rawColorHex && (
               <>
-                {/* QR-style dark mask overlay with center circle cutout */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  {/* Central target aim ring */}
                   <div 
                     className="h-16 w-16 rounded-full border-4 shadow-[0_0_0_9999px_rgba(15,23,42,0.6)] transition-colors duration-200"
                     style={{ borderColor: hoverColor || '#ffffff' }}
@@ -275,12 +342,10 @@ export default function SwatchColorPicker({ onPickColor, onClose }: Props) {
                   <div className="absolute h-1.5 w-1.5 rounded-full bg-white shadow" />
                 </div>
                 
-                {/* Aim helper text */}
                 <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/60 px-3 py-1 rounded-full text-[10px] text-white backdrop-blur font-medium">
                   Center physical swatch card in ring
                 </div>
 
-                {/* Big scan button */}
                 <button
                   type="button"
                   onClick={handleLockCenterColor}
@@ -320,7 +385,7 @@ export default function SwatchColorPicker({ onPickColor, onClose }: Props) {
                   type="button"
                   onClick={() => {
                     setImageLoaded(false)
-                    setSelectedColor(null)
+                    setRawColorHex(null)
                     setHoverColor(null)
                   }}
                   className="absolute -top-2 -right-2 rounded-full bg-slate-800 text-slate-200 border border-slate-700 p-1 hover:bg-slate-700 transition"
@@ -332,14 +397,65 @@ export default function SwatchColorPicker({ onPickColor, onClose }: Props) {
           </div>
         )}
 
-        {/* Live center scanning dynamic indicator (when not locked) */}
-        {hoverColor && !selectedColor && activeTab === 'camera' && (
+        {hoverColor && !rawColorHex && activeTab === 'camera' && (
           <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[10px] text-white backdrop-blur shadow-sm">
             <span className="h-2.5 w-2.5 rounded-full border border-white/40 shrink-0 animate-pulse" style={{ backgroundColor: hoverColor }} />
             <span className="font-mono">{hoverColor}</span>
           </div>
         )}
       </div>
+
+      {/* Calibration calibration panel (visible only when color is locked) */}
+      {rawColorHex && (
+        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3 shadow-sm">
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+            Camera Exposure Calibration
+          </span>
+          <p className="text-[11px] text-slate-400 leading-tight">
+            Adjust exposure/brightness below to compensate for dark indoor lighting or webcam underexposure.
+          </p>
+          
+          <div className="space-y-2">
+            {/* Brightness / Exposure Slider */}
+            <div>
+              <div className="flex justify-between text-xs text-slate-600 font-medium mb-1">
+                <span className="flex items-center gap-1">
+                  <Sun className="h-3.5 w-3.5 text-amber-500" /> Exposure (Brightness)
+                </span>
+                <span className="font-mono text-orange-600">+{Math.round((exposureBoost - 1.0) * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="1.00"
+                max="1.45"
+                step="0.05"
+                value={exposureBoost}
+                onChange={(e) => setExposureBoost(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-orange-500"
+              />
+            </div>
+
+            {/* Vibrancy / Saturation Slider */}
+            <div>
+              <div className="flex justify-between text-xs text-slate-600 font-medium mb-1">
+                <span className="flex items-center gap-1">
+                  <Sparkles className="h-3.5 w-3.5 text-indigo-500" /> Vibrancy (Saturation)
+                </span>
+                <span className="font-mono text-orange-600">+{Math.round((saturationBoost - 1.0) * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="1.00"
+                max="1.30"
+                step="0.05"
+                value={saturationBoost}
+                onChange={(e) => setSaturationBoost(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-orange-500"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Selected Color Section & Action Buttons */}
       <div className="flex items-center justify-between border-t border-slate-200/50 pt-3">
@@ -348,7 +464,7 @@ export default function SwatchColorPicker({ onPickColor, onClose }: Props) {
             <>
               <div className="h-9 w-9 rounded-lg border border-slate-300 shadow-sm" style={{ backgroundColor: selectedColor }} />
               <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Scanned Swatch</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Calibrated Color</span>
                 <div className="flex items-center gap-2 mt-0.5">
                   <p className="font-mono text-sm font-bold text-slate-800 leading-none">{selectedColor}</p>
                   <span className="text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-100 rounded px-1.5 py-0.5">
@@ -368,11 +484,11 @@ export default function SwatchColorPicker({ onPickColor, onClose }: Props) {
           )}
         </div>
 
-        {selectedColor && (
+        {rawColorHex && selectedColor && (
           <div className="flex gap-1.5 shrink-0">
             <button
               type="button"
-              onClick={() => setSelectedColor(null)}
+              onClick={() => setRawColorHex(null)}
               className="rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
               title="Rescan"
             >
