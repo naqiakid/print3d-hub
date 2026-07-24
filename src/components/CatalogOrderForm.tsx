@@ -265,6 +265,7 @@ export default function CatalogOrderForm({
           meshMapping={parseMeshMapping(item.description)}
           textMeshIndex={parseTextMeshIndex(item.description)}
           customText={customText}
+          scale={scalePct / 100}
         />
         <div className="p-5">
           <div className="flex items-start justify-between gap-3">
@@ -393,13 +394,17 @@ export default function CatalogOrderForm({
                         return next
                       })
                     }}
-                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
                       (n === 'Any / Owner decides' ? color === 'Any' : color === n)
-                        ? 'border-orange-500 bg-orange-50 text-orange-700'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
+                        ? 'border-orange-500 bg-orange-50 text-orange-700 ring-2 ring-orange-500/20 font-semibold'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200 hover:bg-slate-50'
                     }`}>
                     {n !== 'Any / Owner decides' && (
-                      <span className="h-3 w-3 rounded-full border border-slate-200 shrink-0" style={{ background: hex }} />
+                      <span className={`h-3 w-3 rounded-full border shrink-0 transition-transform ${
+                        (n === 'Any / Owner decides' ? color === 'Any' : color === n)
+                          ? 'border-orange-500 scale-110 shadow-sm'
+                          : 'border-slate-350'
+                      }`} style={{ background: hex }} />
                     )}
                     {n}
                   </button>
@@ -452,13 +457,15 @@ export default function CatalogOrderForm({
                                   return next
                                 })
                               }}
-                              className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition ${
+                              className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all duration-200 ${
                                 selected
-                                  ? 'border-orange-500 bg-orange-50 text-orange-700 font-semibold'
-                                  : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200'
+                                  ? 'border-orange-500 bg-orange-50 text-orange-700 ring-1 ring-orange-500/20 font-semibold'
+                                  : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200 hover:bg-slate-50'
                               }`}>
                               {n !== 'Any / Owner decides' && (
-                                <span className="h-1.5 w-1.5 rounded-full border border-slate-350 shrink-0" style={{ background: hex }} />
+                                <span className={`h-1.5 w-1.5 rounded-full border shrink-0 transition-transform ${
+                                  selected ? 'border-orange-500 scale-110 shadow-sm' : 'border-slate-350'
+                                }`} style={{ background: hex }} />
                               )}
                               {n === 'Any / Owner decides' ? 'Owner Decides' : n}
                             </button>
@@ -615,6 +622,59 @@ export default function CatalogOrderForm({
               />
             </div>
           )}
+        </div>
+      )}
+
+      {/* Live Pricing & Order Summary Card */}
+      {item.base_price !== null && item.base_price !== undefined && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Order Summary Estimate</span>
+            <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[10px] font-semibold text-orange-600">
+              Live updates
+            </span>
+          </div>
+          
+          <div className="space-y-1.5 text-xs text-slate-600">
+            <div className="flex justify-between">
+              <span>Catalog item base price:</span>
+              <span className="font-semibold text-slate-800">RM {item.base_price.toFixed(2)}</span>
+            </div>
+
+            {item.allow_resize && scalePct !== 100 && (
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-1">
+                  Volumetric scale multiplier ({scalePct}%):
+                  <span className="group relative cursor-help rounded-full bg-slate-100 px-1 text-[9px] text-slate-400 font-bold" title="Scaling a 3D model changes its volume exponentially (S³). 120% scale uses ~1.73x the print material.">?</span>
+                </span>
+                <span className="font-semibold text-slate-800">
+                  x{Math.pow(scalePct / 100, 3).toFixed(2)}
+                </span>
+              </div>
+            )}
+
+            <div className="flex justify-between">
+              <span>Quantity:</span>
+              <span className="font-semibold text-slate-800">x {quantity} {quantity === 1 ? 'copy' : 'copies'}</span>
+            </div>
+
+            {fulfillment === 'delivery' && (
+              <div className="flex justify-between">
+                <span>Delivery:</span>
+                <span className="text-slate-500 italic">Quoted by owner</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-baseline justify-between border-t border-slate-100 pt-3">
+            <span className="text-sm font-bold text-slate-800">Estimated Subtotal:</span>
+            <div className="text-right">
+              <span className="text-xl font-extrabold text-orange-600">
+                RM {(item.base_price * Math.pow(scalePct / 100, 3) * quantity).toFixed(2)}
+              </span>
+              <p className="text-[9px] text-slate-400 mt-0.5">Excludes delivery fees where applicable</p>
+            </div>
+          </div>
         </div>
       )}
 

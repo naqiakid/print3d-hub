@@ -21,6 +21,7 @@ type Props = {
   highlightIndex?: number   // which slot to spotlight (-1 or undefined = all normal)
   highlightMeshIndex?: number // which specific sub-mesh to spotlight inside a group
   customText?: string         // customer's custom text input to display on text meshes
+  scale?: number              // dynamic scale factor (1.0 = 100%)
   className?: string
   onMeshNamesLoaded?: (names: string[]) => void
 }
@@ -247,11 +248,13 @@ export default function STLViewer({
   highlightIndex,
   highlightMeshIndex,
   customText,
+  scale,
   className,
   onMeshNamesLoaded,
 }: Props) {
   const mountRef    = useRef<HTMLDivElement>(null)
   const objectsRef  = useRef<THREE.Object3D[]>([])
+  const groupRef    = useRef<THREE.Group | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const sceneRef    = useRef<THREE.Scene | null>(null)
   const cameraRef   = useRef<THREE.PerspectiveCamera | null>(null)
@@ -350,6 +353,10 @@ export default function STLViewer({
     controls.autoRotate    = false
 
     const group   = new THREE.Group()
+    groupRef.current = group
+    if (scale !== undefined) {
+      group.scale.set(scale, scale, scale)
+    }
     let loaded    = 0
     let hasError  = false
 
@@ -797,6 +804,7 @@ export default function STLViewer({
       rendererRef.current = null
       sceneRef.current    = null
       cameraRef.current   = null
+      groupRef.current    = null
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
@@ -1070,14 +1078,34 @@ export default function STLViewer({
     if (r && s && c) r.render(s, c)
   }, [customText, textMeshIndex, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(',')])
 
+  // ── Live scale updates (no scene rebuild) ──────────────────────────
+  useEffect(() => {
+    const group = groupRef.current
+    if (!group) return
+
+    const sVal = scale !== undefined ? scale : 1.0
+    group.scale.set(sVal, sVal, sVal)
+
+    const r = rendererRef.current
+    const s = sceneRef.current
+    const c = cameraRef.current
+    if (r && s && c) r.render(s, c)
+  }, [scale])
+
+  const scaleFactor = scale !== undefined ? scale : 1.0
+
   return (
     <div className={`relative overflow-hidden rounded-xl bg-slate-50 ${className ?? ''}`}>
       <div ref={mountRef} className="w-full h-full" />
       {dims && (
         <div className="absolute left-3 top-3 rounded-xl bg-slate-900/80 px-2.5 py-1.5 text-[11px] font-medium text-white backdrop-blur-sm shadow-md select-none border border-white/10 pointer-events-none">
-          <p className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">Scale / Dimensions</p>
+          <p className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider mb-0.5">
+            Dimensions ({Math.round(scaleFactor * 100)}%)
+          </p>
           <p className="font-mono">
-            {dims.x} × {dims.y} × {dims.z} mm
+            {Math.round(dims.x * scaleFactor * 10) / 10} ×{' '}
+            {Math.round(dims.y * scaleFactor * 10) / 10} ×{' '}
+            {Math.round(dims.z * scaleFactor * 10) / 10} mm
           </p>
         </div>
       )}

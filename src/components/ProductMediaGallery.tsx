@@ -39,6 +39,7 @@ export default function ProductMediaGallery({
   meshMapping,
   textMeshIndex,
   customText,
+  scale,
 }: {
   photoUrls: string[]
   videoUrl: string | null
@@ -49,7 +50,8 @@ export default function ProductMediaGallery({
   assemblyOffsets?: PartAssembly[]
   meshMapping?: Record<number, number>
   textMeshIndex?: number | null
-  customText?: string
+  customText?: string;
+  scale?: number
 }) {
   const hasPhotos = photoUrls.length > 0
   const hasVideo  = !!videoUrl
@@ -169,7 +171,7 @@ export default function ProductMediaGallery({
       {/* 3D viewer panel */}
       {tab === '3d' && has3D && (
         <div className="bg-slate-50 p-3" style={{ height: 340 }}>
-          <STLViewer urls={stlUrls} colors={colors} partColors={partColors} assemblyOffsets={assemblyOffsets} meshMapping={meshMapping} textMeshIndex={textMeshIndex} customText={customText} className="h-full" />
+          <STLViewer urls={stlUrls} colors={colors} partColors={partColors} assemblyOffsets={assemblyOffsets} meshMapping={meshMapping} textMeshIndex={textMeshIndex} customText={customText} scale={scale} className="h-full" />
         </div>
       )}
 
