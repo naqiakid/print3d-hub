@@ -388,6 +388,7 @@ export default function FilamentManager({
                 f.in_stock ? 'border-slate-200' : 'border-slate-100 opacity-60'
               }`}
             >
+              {/* Top Section: Spool Visual and details */}
               <div className="flex items-start gap-4">
                 
                 {/* Spool visual gauge */}
@@ -396,7 +397,7 @@ export default function FilamentManager({
                 {/* Spool Details */}
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <p className="font-semibold text-slate-900 text-sm truncate leading-tight">{f.color}</p>
+                    <p className="font-bold text-slate-900 text-sm leading-snug break-words">{f.color}</p>
                     
                     {/* Material Badge */}
                     <span className="rounded bg-orange-50 border border-orange-100 px-1.5 py-0.5 text-[9px] font-bold text-orange-600 uppercase tracking-wide">
@@ -433,33 +434,33 @@ export default function FilamentManager({
                   </div>
                 </div>
 
-                {/* Spool Actions */}
-                <div className="flex shrink-0 gap-0.5">
-                  {f.grams_remaining != null && (
-                    <button
-                      onClick={() => { setRestocking(restocking === f.id ? null : f.id); setRestockAmount('') }}
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-orange-50 hover:text-orange-600 transition"
-                      title="Restock spool roll"
-                    >
-                      <PackagePlus className="h-4 w-4" />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => openEdit(f)}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition"
-                    title="Edit specs"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => setConfirmDelete(f.id)}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition"
-                    title="Delete spool"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+              </div>
 
+              {/* Bottom Footer Section: Actions */}
+              <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-end gap-1.5">
+                {f.grams_remaining != null && (
+                  <button
+                    onClick={() => { setRestocking(restocking === f.id ? null : f.id); setRestockAmount('') }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-150 bg-white px-2 py-1 text-slate-500 hover:bg-orange-50 hover:text-orange-600 transition text-[10px] font-semibold shadow-sm"
+                    title="Restock spool roll"
+                  >
+                    <PackagePlus className="h-3 w-3" /> Restock
+                  </button>
+                )}
+                <button
+                  onClick={() => openEdit(f)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-150 bg-white px-2 py-1 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition text-[10px] font-semibold shadow-sm"
+                  title="Edit specs"
+                >
+                  <Pencil className="h-3 w-3" /> Edit
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(f.id)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-150 bg-white px-2 py-1 text-slate-400 hover:bg-red-50 hover:text-red-500 transition text-[10px] font-semibold shadow-sm"
+                  title="Delete spool"
+                >
+                  <Trash2 className="h-3 w-3" /> Delete
+                </button>
               </div>
 
               {/* Restock quick action slider */}
