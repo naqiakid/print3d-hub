@@ -264,31 +264,29 @@ export default function FilamentManager({
     const radius = 22
     const circumference = 2 * Math.PI * radius
     const offset = circumference - (percent / 100) * circumference
+    const displayColor = inStock ? hex : '#cbd5e1'
+
+    // Determine if the color is extremely light/white to apply border contrast
+    const isVeryLight = ['#ffffff', '#f5f0e8', '#d4d4d4', '#facc15', '#ffd700'].includes(hex.toLowerCase())
 
     return (
       <div className="relative flex h-14 w-14 items-center justify-center shrink-0">
-        {/* Outer Spool Rim */}
-        <div className="absolute inset-0 rounded-full border-2 border-slate-350 bg-slate-900 shadow-inner flex items-center justify-center">
-          {/* Inner cavity spool ridges */}
-          <div className="absolute inset-1 rounded-full border border-slate-700 bg-slate-800" />
-        </div>
-        
-        {/* SVG Filament coils wrapping */}
-        <svg className="absolute h-11 w-11 -rotate-90">
+        {/* Outer Circular Volume Remaining Ring Track */}
+        <svg className="absolute h-14 w-14 -rotate-90">
           <circle
-            cx="22"
-            cy="22"
+            cx="28"
+            cy="28"
             r={radius}
-            className="stroke-slate-950/20"
-            strokeWidth="8"
+            className="stroke-slate-200/60"
+            strokeWidth="3.5"
             fill="transparent"
           />
           <circle
-            cx="22"
-            cy="22"
+            cx="28"
+            cy="28"
             r={radius}
-            style={{ stroke: inStock ? hex : '#94a3b8' }}
-            strokeWidth="8"
+            style={{ stroke: displayColor }}
+            strokeWidth="3.5"
             fill="transparent"
             strokeDasharray={circumference}
             strokeDashoffset={inStock ? offset : circumference}
@@ -297,10 +295,14 @@ export default function FilamentManager({
           />
         </svg>
         
-        {/* Spool Center Core Hole */}
-        <div className="absolute h-4.5 w-4.5 rounded-full border border-slate-550 bg-slate-100 shadow-inner flex items-center justify-center">
-          <div className="h-1.5 w-1.5 rounded-full bg-slate-400 shadow-inner" />
-        </div>
+        {/* Center Solid Color Circle (with border fallback for visibility) */}
+        <div
+          className={`h-8 w-8 rounded-full shadow-sm transition-all duration-300 ${
+            isVeryLight ? 'border border-slate-200 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)]' : 'border border-slate-900/10'
+          }`}
+          style={{ backgroundColor: displayColor }}
+          title={`${percent}% remaining`}
+        />
       </div>
     )
   }
