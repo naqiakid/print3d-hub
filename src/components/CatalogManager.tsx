@@ -1330,13 +1330,21 @@ function CatalogForm({
         {/* License status card & inputs */}
         {form.model_url && (
           <div className={`mt-2 rounded-xl border p-3 space-y-3 text-xs ${
-            form.commercial_allowed
-              ? 'border-emerald-100 bg-emerald-50/10'
-              : 'border-amber-100 bg-amber-50/10'
+            licenseCheckError
+              ? 'border-slate-200 bg-slate-50/50'
+              : form.commercial_allowed
+                ? 'border-emerald-100 bg-emerald-50/10'
+                : 'border-amber-100 bg-amber-50/10'
           }`}>
             <div className="flex justify-between items-center">
-              <span className={`font-bold ${form.commercial_allowed ? 'text-emerald-700' : 'text-amber-800'}`}>
-                {form.commercial_allowed ? '✅ Commercial Selling Allowed' : '⚠️ Non-Commercial License'}
+              <span className={`font-bold ${
+                licenseCheckError
+                  ? 'text-slate-600'
+                  : form.commercial_allowed
+                    ? 'text-emerald-700'
+                    : 'text-amber-800'
+              }`}>
+                {licenseCheckError ? '❓ License Unverified' : form.commercial_allowed ? '✅ Commercial Selling Allowed' : '⚠️ Non-Commercial License'}
               </span>
               <button
                 type="button"
@@ -1347,9 +1355,11 @@ function CatalogForm({
               </button>
             </div>
             <p className="text-slate-500 text-[10px] leading-relaxed">
-              {form.commercial_allowed
-                ? 'You can print and sell this model under its current license. crediting the designer is recommended.'
-                : 'The designer has marked this model for Non-Commercial use. Ensure you have licensing permission or configure a Tip URL below to support them.'}
+              {licenseCheckError
+                ? 'We could not connect to the website due to security restrictions (anti-bot challenge). Please check the licensing terms on the original page manually, select the correct license type, and toggle the commercial permission accordingly.'
+                : form.commercial_allowed
+                  ? 'You can print and sell this model under its current license. crediting the designer is recommended.'
+                  : 'The designer has marked this model for Non-Commercial use. Ensure you have licensing permission or configure a Tip URL below to support them.'}
             </p>
 
             {/* Inputs */}
@@ -1400,10 +1410,7 @@ function CatalogForm({
               />
             </div>
 
-            {licenseCheckError && (
-              <p className="text-[10px] text-red-500 font-semibold mt-1">{licenseCheckError}</p>
-            )}
-          </div>
+            </div>
         )}
       </div>
 
