@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Package } from 'lucide-react'
 import type { CatalogItem, Filament } from '@/lib/types'
-import { cleanDescription } from '@/lib/types'
+import { cleanDescription, parseDesignerMetadata } from '@/lib/types'
 
 function isInStock(item: CatalogItem, filaments: Filament[]): boolean {
   if (item.allow_material_choice) {
@@ -74,6 +74,7 @@ export default function CatalogGrid({
           if (item.allow_resize)          badges.push('Resize')
           if (item.allow_material_choice) badges.push('Material choice')
           const inStock = isInStock(item, filaments)
+          const designer = parseDesignerMetadata(item.description)
 
           return (
             <div
@@ -130,6 +131,47 @@ export default function CatalogGrid({
                         {b}
                       </span>
                     ))}
+                  </div>
+                )}
+
+                {designer && (designer.name || designer.license) && (
+                  <div className="mb-3 flex items-center justify-between text-[10px] border-t border-slate-100/80 pt-2 text-slate-400">
+                    <span className="truncate max-w-[130px]">
+                      {designer.name && (
+                        <>
+                          By{' '}
+                          {designer.tipUrl ? (
+                            <a
+                              href={designer.tipUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-bold text-orange-600 hover:underline"
+                              title="Tip the designer"
+                            >
+                              {designer.name} ☕
+                            </a>
+                          ) : (
+                            <span className="font-bold text-slate-600">{designer.name}</span>
+                          )}
+                        </>
+                      )}
+                    </span>
+                    {designer.license && (
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[9px] font-bold shrink-0 ${
+                          designer.commercialAllowed !== false
+                            ? 'bg-emerald-500/10 text-emerald-600'
+                            : 'bg-amber-500/10 text-amber-700'
+                        }`}
+                        title={
+                          designer.commercialAllowed !== false
+                            ? 'Commercial printing allowed by creator'
+                            : 'Non-Commercial license'
+                        }
+                      >
+                        {designer.license.split(' ')[0]}
+                      </span>
+                    )}
                   </div>
                 )}
                 {inStock ? (

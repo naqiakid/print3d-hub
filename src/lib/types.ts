@@ -354,6 +354,26 @@ export function parseTextMeshIndex(description: string | null | undefined): numb
   return null
 }
 
+export interface DesignerMetadata {
+  name?: string
+  tipUrl?: string
+  license?: string
+  commercialAllowed?: boolean
+}
+
+export function parseDesignerMetadata(description: string | null | undefined): DesignerMetadata | null {
+  if (!description) return null
+  const match = description.match(/<!-- DESIGNER_METADATA: (.*?) -->/)
+  if (match) {
+    try {
+      return JSON.parse(match[1])
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
 export function cleanDescription(description: string | null | undefined): string {
   if (!description) return ''
   return description
@@ -361,6 +381,8 @@ export function cleanDescription(description: string | null | undefined): string
     .replace(/\s*<!-- MESH_MAPPING: .*? -->/g, '')
     .replace(/\s*<!-- ALLOWED_FILAMENTS: .*? -->/g, '')
     .replace(/\s*<!-- TEXT_MESH_INDEX: .*? -->/g, '')
+    .replace(/\s*<!-- GCODE_STATS: .*? -->/g, '')
+    .replace(/\s*<!-- DESIGNER_METADATA: .*? -->/g, '')
     .trim()
 }
 

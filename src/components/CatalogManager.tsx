@@ -6,7 +6,7 @@ import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, 
 
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView, PartAssembly } from '@/lib/types'
-import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation, parseUrlTranslation, COLOR_PRESETS, parseGcodeStats, serializeGcodeStats } from '@/lib/types'
+import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation, parseUrlTranslation, COLOR_PRESETS, parseGcodeStats, serializeGcodeStats, parseDesignerMetadata } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 import { getPresetById } from '@/lib/printer-models'
@@ -99,6 +99,11 @@ type FormState = {
   // G-code baseline stats (serialized to description comments)
   weight_g: number | null
   print_hours: number | null
+  // Designer & Licensing
+  designer_name: string
+  designer_tip_url: string
+  license_type: string
+  commercial_allowed: boolean
 }
 
 const BLANK: FormState = {
@@ -125,6 +130,10 @@ const BLANK: FormState = {
   base_price: '',
   weight_g: null,
   print_hours: null,
+  designer_name: '',
+  designer_tip_url: '',
+  license_type: 'CC BY 4.0 (Default)',
+  commercial_allowed: true,
 }
 
 function itemToForm(item: CatalogItem): FormState {
@@ -133,6 +142,7 @@ function itemToForm(item: CatalogItem): FormState {
     prices[mat] = String(price)
   }
   const stats = parseGcodeStats(item.description)
+  const designer = parseDesignerMetadata(item.description)
   return {
     name: item.name,
     description: cleanDescription(item.description),
@@ -157,6 +167,10 @@ function itemToForm(item: CatalogItem): FormState {
     base_price: item.base_price != null ? String(item.base_price) : '',
     weight_g: stats?.weight_g ?? null,
     print_hours: stats?.hours ?? null,
+    designer_name: designer?.name ?? '',
+    designer_tip_url: designer?.tipUrl ?? '',
+    license_type: designer?.license ?? 'CC BY 4.0 (Default)',
+    commercial_allowed: designer?.commercialAllowed ?? true,
   }
 }
 
@@ -178,6 +192,39 @@ export default function CatalogManager({
   const [editingTextMeshIndex, setEditingTextMeshIndex] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
+  const [checkingLicense, setCheckingLicense] = useState(false)
+  const [licenseCheckError, setLicenseCheckError] = useState('')
+
+  const handleVerifyLicense = async () => {
+    if (!form.model_url) return
+    setCheckingLicense(true)
+    setLicenseCheckError('')
+    try {
+      const res = await fetch(`/api/parse-license?url=${encodeURIComponent(form.model_url)}`)
+      if (!res.ok) {
+        throw new Error('Failed to parse URL')
+      }
+      const data = await res.json()
+      if (data.error) {
+        throw new Error(data.error)
+      }
+
+      setForm(prev => ({
+        ...prev,
+        designer_name: data.designer || prev.designer_name || 'Original Creator',
+        license_type: data.license || prev.license_type,
+        commercial_allowed: data.commercialAllowed ?? true,
+      }))
+      if (data.title && !form.name) {
+        setForm(prev => ({ ...prev, name: data.title }))
+      }
+    } catch (err: any) {
+      console.error(err)
+      setLicenseCheckError(err.message || 'Could not verify. Please enter details manually.')
+    } finally {
+      setCheckingLicense(false)
+    }
+  }
 
   function openNew() { setForm(BLANK); setEditing('new'); setEditingMeshMapping({}); setEditingTextMeshIndex(null); setError('') }
   function openEdit(item: CatalogItem) { setForm(itemToForm(item)); setEditing(item.id); setEditingMeshMapping(parseMeshMapping(item.description)); setEditingTextMeshIndex(parseTextMeshIndex(item.description)); setError('') }
@@ -238,6 +285,16 @@ export default function CatalogManager({
 
     if (form.weight_g !== null && form.print_hours !== null) {
       finalDescription += `\n${serializeGcodeStats({ weight_g: form.weight_g, hours: form.print_hours })}`
+    }
+
+    const designerMeta = {
+      name: form.designer_name.trim(),
+      tipUrl: form.designer_tip_url.trim(),
+      license: form.license_type,
+      commercialAllowed: form.commercial_allowed,
+    }
+    if (designerMeta.name || designerMeta.tipUrl || designerMeta.license) {
+      finalDescription += `\n\n<!-- DESIGNER_METADATA: ${JSON.stringify(designerMeta)} -->`
     }
 
     const data = {
@@ -401,6 +458,9 @@ export default function CatalogManager({
             setTextMeshIndex={setEditingTextMeshIndex}
             onSave={handleSave} onCancel={closeForm}
             isPending={isPending} error={error}
+            checkingLicense={checkingLicense}
+            licenseCheckError={licenseCheckError}
+            handleVerifyLicense={handleVerifyLicense}
           />
         </div>
       </div>
@@ -661,6 +721,7 @@ function CatalogForm({
   filaments, printer, meshMapping, setMeshMapping,
   textMeshIndex, setTextMeshIndex,
   onSave, onCancel, isPending, error,
+  checkingLicense, licenseCheckError, handleVerifyLicense,
 }: {
   form: FormState
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void
@@ -676,6 +737,9 @@ function CatalogForm({
   onCancel: () => void
   isPending: boolean
   error: string
+  checkingLicense: boolean
+  licenseCheckError: string
+  handleVerifyLicense: () => Promise<void>
 }) {
   const previewUrl = form.stl_urls.find(url => isPreviewFile(url))
   const [previewMeshes, setPreviewMeshes] = useState<string[]>([])
@@ -1229,11 +1293,111 @@ function CatalogForm({
         </p>
       </div>
 
-      {/* ── Design link ── */}
+      {/* ── Design link & Licensing ── */}
       <div>
         <label className="mb-1 block text-xs font-medium text-slate-600">Original design link (optional)</label>
-        <input value={form.model_url} onChange={(e) => set('model_url', e.target.value)}
-          placeholder="https://www.makerworld.com/..." className={inputClass} />
+        <div className="flex gap-2">
+          <input
+            value={form.model_url}
+            onChange={(e) => set('model_url', e.target.value)}
+            placeholder="https://www.makerworld.com/... or https://www.printables.com/..."
+            className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs focus:border-orange-500 focus:bg-white focus:outline-none transition"
+          />
+          <button
+            type="button"
+            onClick={handleVerifyLicense}
+            disabled={checkingLicense || !form.model_url}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm active:scale-95 shrink-0"
+          >
+            {checkingLicense ? (
+              <>
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
+                <span>Checking...</span>
+              </>
+            ) : (
+              <span>🔍 Check License</span>
+            )}
+          </button>
+        </div>
+
+        {/* License status card & inputs */}
+        {form.model_url && (
+          <div className={`mt-2 rounded-xl border p-3 space-y-3 text-xs ${
+            form.commercial_allowed
+              ? 'border-emerald-100 bg-emerald-50/10'
+              : 'border-amber-100 bg-amber-50/10'
+          }`}>
+            <div className="flex justify-between items-center">
+              <span className={`font-bold ${form.commercial_allowed ? 'text-emerald-700' : 'text-amber-800'}`}>
+                {form.commercial_allowed ? '✅ Commercial Selling Allowed' : '⚠️ Non-Commercial License'}
+              </span>
+              <button
+                type="button"
+                onClick={() => set('commercial_allowed', !form.commercial_allowed)}
+                className="text-[10px] text-slate-500 underline font-medium hover:text-slate-700"
+              >
+                Override: Toggle commercial permission
+              </button>
+            </div>
+            <p className="text-slate-500 text-[10px] leading-relaxed">
+              {form.commercial_allowed
+                ? 'You can print and sell this model under its current license. crediting the designer is recommended.'
+                : 'The designer has marked this model for Non-Commercial use. Ensure you have licensing permission or configure a Tip URL below to support them.'}
+            </p>
+
+            {/* Inputs */}
+            <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-200/40">
+              <div>
+                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Original Designer
+                </label>
+                <input
+                  type="text"
+                  value={form.designer_name}
+                  onChange={(e) => set('designer_name', e.target.value)}
+                  placeholder="Designer name"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 focus:border-orange-500 focus:outline-none transition text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  License Type
+                </label>
+                <select
+                  value={form.license_type}
+                  onChange={(e) => set('license_type', e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 focus:border-orange-500 focus:outline-none transition text-xs"
+                >
+                  <option value="CC BY (Attribution)">CC BY (Attribution)</option>
+                  <option value="CC BY-SA (Attribution-ShareAlike)">CC BY-SA (ShareAlike)</option>
+                  <option value="CC BY-ND (Attribution-NoDerivatives)">CC BY-ND (NoDerivs)</option>
+                  <option value="CC BY-NC (Attribution-NonCommercial)">CC BY-NC (Non-Comm)</option>
+                  <option value="CC BY-NC-SA (Attribution-NonCommercial-ShareAlike)">CC BY-NC-SA</option>
+                  <option value="CC BY-NC-ND (Attribution-NonCommercial-NoDerivatives)">CC BY-NC-ND</option>
+                  <option value="CC0 (Public Domain)">CC0 (Public Domain)</option>
+                  <option value="Commercial License">Commercial License</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                Designer Tip/Royalty Link (optional)
+              </label>
+              <input
+                type="url"
+                value={form.designer_tip_url}
+                onChange={(e) => set('designer_tip_url', e.target.value)}
+                placeholder="e.g. Patreon, Ko-fi, PayPal, MakerWorld URL"
+                className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 focus:border-orange-500 focus:outline-none transition text-xs"
+              />
+            </div>
+
+            {licenseCheckError && (
+              <p className="text-[10px] text-red-500 font-semibold mt-1">{licenseCheckError}</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 3D model upload section moved to right column */}

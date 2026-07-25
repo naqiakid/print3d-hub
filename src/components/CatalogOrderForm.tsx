@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic'
 
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 import type { CatalogItem, RequestPrinterView, PrintProfile, Filament, FilamentMaterial } from '@/lib/types'
-import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, parseMeshMapping, parseAllowedFilaments, parseTextMeshIndex, cleanDescription, isPreviewFile, COLOR_PRESETS, parseGcodeStats } from '@/lib/types'
+import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, parseMeshMapping, parseAllowedFilaments, parseTextMeshIndex, cleanDescription, isPreviewFile, COLOR_PRESETS, parseGcodeStats, parseDesignerMetadata } from '@/lib/types'
 import { calculateEstimate } from '@/lib/pricing'
 import { submitRequest } from '@/lib/actions'
 import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
@@ -388,6 +388,37 @@ export default function CatalogOrderForm({
           {item.description && cleanDescription(item.description) && (
             <p className="mt-3 text-sm text-slate-650 leading-relaxed">{cleanDescription(item.description)}</p>
           )}
+
+          {(() => {
+            const designer = parseDesignerMetadata(item.description)
+            if (!designer || (!designer.name && !designer.license)) return null
+            return (
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-xs text-slate-500 space-y-1.5">
+                {designer.name && (
+                  <p className="flex items-center gap-1">
+                    <span>🎨 Model by</span>
+                    {designer.tipUrl ? (
+                      <a
+                        href={designer.tipUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-bold text-orange-600 hover:underline inline-flex items-center gap-0.5"
+                      >
+                        {designer.name} <span className="text-[10px]" title="Support the creator">☕</span>
+                      </a>
+                    ) : (
+                      <span className="font-bold text-slate-700">{designer.name}</span>
+                    )}
+                  </p>
+                )}
+                {designer.license && (
+                  <p className="text-[10px] text-slate-400">
+                    License: <span className="font-medium text-slate-600">{designer.license}</span>
+                  </p>
+                )}
+              </div>
+            )
+          })()}
 
           {customisationBadges.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
