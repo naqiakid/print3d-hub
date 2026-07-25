@@ -202,11 +202,18 @@ export default function CatalogManager({
     try {
       const res = await fetch(`/api/parse-license?url=${encodeURIComponent(form.model_url)}`)
       if (!res.ok) {
-        throw new Error('Failed to parse URL')
+        setLicenseCheckError('Anti-scraping protection active. Please enter details manually below.')
+        return
       }
       const data = await res.json()
-      if (data.error) {
-        throw new Error(data.error)
+      if (data.fallback) {
+        setLicenseCheckError(data.error || 'Website security block. Please fill in details manually.')
+        setForm(prev => ({
+          ...prev,
+          designer_name: prev.designer_name || 'Original Creator',
+          license_type: prev.license_type || 'CC BY (Attribution)',
+        }))
+        return
       }
 
       setForm(prev => ({
