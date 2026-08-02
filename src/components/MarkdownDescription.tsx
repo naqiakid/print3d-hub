@@ -27,47 +27,78 @@ export default function MarkdownDescription({
   return (
     <div className={`space-y-1.5 leading-relaxed text-sm text-slate-600 ${className}`}>
       {lines.map((line, idx) => {
+        const trimmed = line.trim()
+        
+        // Empty line
+        if (!trimmed) {
+          return <div key={idx} className="h-1.5" />
+        }
+
+        // Determine if line has indentation in original text (e.g. starting with 2+ spaces or a tab)
+        const indentMatch = line.match(/^(\s+)(.*)$/)
+        const isIndented = indentMatch && (indentMatch[1].includes('\t') || indentMatch[1].length >= 2)
+        const indentClass = isIndented ? 'ml-6' : ''
+
         // Bullet list
-        if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-          const content = line.trim().substring(2)
+        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+          const content = trimmed.substring(2)
           return (
-            <ul key={idx} className="list-disc list-inside ml-3 text-slate-600">
-              <li>{parseInlineMarkdown(content)}</li>
-            </ul>
+            <div key={idx} className={`pl-6 -indent-6 text-slate-600 text-sm ${indentClass}`}>
+              <span className="inline-block w-6 text-slate-400 text-center pr-2 select-none">•</span>
+              {parseInlineMarkdown(content)}
+            </div>
+          )
+        }
+
+        // Numbered list (e.g., 1. Item, 10. Item)
+        const numberedMatch = trimmed.match(/^(\d+)\.\s+(.*)$/)
+        if (numberedMatch) {
+          const num = numberedMatch[1]
+          const content = numberedMatch[2]
+          return (
+            <div key={idx} className={`pl-6 -indent-6 text-slate-655 text-sm ${indentClass}`}>
+              <span className="inline-block w-6 text-slate-400 font-semibold text-right pr-2 select-none">{num}.</span>
+              {parseInlineMarkdown(content)}
+            </div>
           )
         }
         
-        // Headings
-        if (line.trim().startsWith('### ')) {
+        // Blockquote
+        if (trimmed.startsWith('> ')) {
+          const content = trimmed.substring(2)
           return (
-            <h4 key={idx} className="text-xs font-bold uppercase tracking-wider text-slate-800 mt-2 mb-1">
-              {parseInlineMarkdown(line.trim().substring(4))}
+            <blockquote key={idx} className={`border-l-4 border-slate-200 pl-4 py-0.5 italic text-slate-500 text-sm ${indentClass}`}>
+              {parseInlineMarkdown(content)}
+            </blockquote>
+          )
+        }
+
+        // Headings
+        if (trimmed.startsWith('### ')) {
+          return (
+            <h4 key={idx} className={`text-xs font-bold uppercase tracking-wider text-slate-800 mt-3 mb-1 ${indentClass}`}>
+              {parseInlineMarkdown(trimmed.substring(4))}
             </h4>
           )
         }
-        if (line.trim().startsWith('## ')) {
+        if (trimmed.startsWith('## ')) {
           return (
-            <h3 key={idx} className="text-sm font-bold text-slate-800 mt-3 mb-1">
-              {parseInlineMarkdown(line.trim().substring(3))}
+            <h3 key={idx} className={`text-sm font-bold text-slate-800 mt-4 mb-1.5 ${indentClass}`}>
+              {parseInlineMarkdown(trimmed.substring(3))}
             </h3>
           )
         }
-        if (line.trim().startsWith('# ')) {
+        if (trimmed.startsWith('# ')) {
           return (
-            <h2 key={idx} className="text-base font-bold text-slate-900 mt-3 mb-1.5">
-              {parseInlineMarkdown(line.trim().substring(2))}
+            <h2 key={idx} className={`text-base font-bold text-slate-900 mt-4 mb-2 ${indentClass}`}>
+              {parseInlineMarkdown(trimmed.substring(2))}
             </h2>
           )
         }
 
-        // Empty line
-        if (!line.trim()) {
-          return <div key={idx} className="h-1.5" />
-        }
-
         // Standard paragraph
         return (
-          <p key={idx} className="text-slate-600">
+          <p key={idx} className={`text-slate-600 ${indentClass}`}>
             {parseInlineMarkdown(line)}
           </p>
         )

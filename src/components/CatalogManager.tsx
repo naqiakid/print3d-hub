@@ -788,6 +788,46 @@ function CatalogForm({
     }, 0)
   }
 
+  const insertList = (type: 'bullet' | 'number') => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const text = form.description
+
+    const selectedText = text.substring(start, end)
+    
+    if (!selectedText) {
+      const insertion = type === 'bullet' ? '- ' : '1. '
+      const newText = text.substring(0, start) + insertion + text.substring(end)
+      set('description', newText)
+      setTimeout(() => {
+        textarea.focus()
+        textarea.setSelectionRange(start + insertion.length, start + insertion.length)
+      }, 0)
+      return
+    }
+
+    const lines = selectedText.split('\n')
+    let numCount = 1
+    const formattedLines = lines.map((line) => {
+      if (!line.trim()) return line
+      // Strip existing bullet/number prefix if any, to avoid doubling
+      const cleanLine = line.trim().replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '')
+      return type === 'bullet' ? `- ${cleanLine}` : `${numCount++}. ${cleanLine}`
+    })
+
+    const replacement = formattedLines.join('\n')
+    const newText = text.substring(0, start) + replacement + text.substring(end)
+    set('description', newText)
+
+    setTimeout(() => {
+      textarea.focus()
+      textarea.setSelectionRange(start, start + replacement.length)
+    }, 0)
+  }
+
   const handleAddLink = () => {
     setLinkError('')
     const trimmed = linkInput.trim()
@@ -1299,7 +1339,7 @@ function CatalogForm({
               </button>
               <button
                 type="button"
-                onClick={() => insertMarkdown('- ')}
+                onClick={() => insertList('bullet')}
                 className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition active:scale-95"
                 title="Bullet List (- item)"
               >
@@ -1307,7 +1347,7 @@ function CatalogForm({
               </button>
               <button
                 type="button"
-                onClick={() => insertMarkdown('1. ')}
+                onClick={() => insertList('number')}
                 className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition active:scale-95"
                 title="Numbered List (1. item)"
               >
