@@ -92,7 +92,6 @@ export default function PrinterProfileView({
   filamentsByMaterial,
   nozzleSizes,
   bedTypes,
-  hasCap,
 }: {
   shop: Shop
   printers: Printer[]
@@ -104,10 +103,10 @@ export default function PrinterProfileView({
   filamentsByMaterial: Record<string, Filament[]>
   nozzleSizes: number[]
   bedTypes: string[]
-  hasCap: (key: keyof PrintProfile) => boolean
 }) {
   const [activeTab, setActiveTab] = useState<'storefront' | 'estimator' | 'materials' | 'about'>('storefront')
 
+  const hasCap = (key: keyof PrintProfile) => profiles.some((p) => p[key] === true)
   const heroPrinter = printers[0]
   const preset = heroPrinter ? findPreset(heroPrinter.printer_model) : undefined
   const brand = preset?.brand ?? heroPrinter?.printer_model.split(' ')[0]

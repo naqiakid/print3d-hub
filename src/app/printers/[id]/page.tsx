@@ -165,7 +165,6 @@ export default async function ShopDetailPage({
         filamentsByMaterial={filamentsByMaterial}
         nozzleSizes={nozzleSizes}
         bedTypes={bedTypes}
-        hasCap={hasCap}
       />
     </>
   )
