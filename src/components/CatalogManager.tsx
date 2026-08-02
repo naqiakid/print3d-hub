@@ -2,13 +2,14 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, ChevronUp, Image as ImageIcon, Video, ArrowLeft } from 'lucide-react'
+import { Plus, Pencil, Trash2, Package, Upload, FileBox, X, FileCode2, Loader2, ChevronUp, Image as ImageIcon, Video, ArrowLeft, Bold, Italic, Code, Heading3, List, ListOrdered, Link2, Quote, Eye } from 'lucide-react'
 
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView, PartAssembly } from '@/lib/types'
 import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation, parseUrlTranslation, COLOR_PRESETS, parseGcodeStats, serializeGcodeStats, parseDesignerMetadata } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
+import MarkdownDescription from '@/components/MarkdownDescription'
 import { getPresetById } from '@/lib/printer-models'
 import { parseGcodeFile } from '@/lib/parse-gcode'
 import {
@@ -751,6 +752,7 @@ function CatalogForm({
   const previewUrl = form.stl_urls.find(url => isPreviewFile(url))
   const [previewMeshes, setPreviewMeshes] = useState<string[]>([])
   const [hoveredMeshIdx, setHoveredMeshIdx] = useState<number | undefined>(undefined)
+  const [editorTab, setEditorTab] = useState<'write' | 'preview'>('write')
   
   useEffect(() => {
     setPreviewMeshes([])
@@ -1223,73 +1225,138 @@ function CatalogForm({
       <>
 
       {/* Description */}
-      <div>
-        <div className="mb-1 flex items-center justify-between">
-          <label className="block text-xs font-medium text-slate-600">Description</label>
-          <span className="text-[10px] text-slate-400">Supports Markdown formatting</span>
-        </div>
-        
-        {/* Markdown Editor Toolbar */}
-        <div className="flex flex-wrap items-center gap-1 bg-slate-100 border border-b-0 border-slate-200 px-2 py-1.5 rounded-t-xl select-none">
-          <button
-            type="button"
-            onClick={() => insertMarkdown('**', '**')}
-            className="rounded p-1 text-xs font-bold text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition min-w-[24px]"
-            title="Bold"
-          >
-            B
-          </button>
-          <button
-            type="button"
-            onClick={() => insertMarkdown('*', '*')}
-            className="rounded p-1 text-xs italic text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition min-w-[24px]"
-            title="Italic"
-          >
-            I
-          </button>
-          <button
-            type="button"
-            onClick={() => insertMarkdown('`', '`')}
-            className="rounded p-1 text-[10px] font-mono text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition min-w-[24px]"
-            title="Inline Code"
-          >
-            &lt;/&gt;
-          </button>
-          <div className="h-4 w-px bg-slate-300 mx-1" />
-          <button
-            type="button"
-            onClick={() => insertMarkdown('### ')}
-            className="rounded px-1.5 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition"
-            title="Heading 3"
-          >
-            H3
-          </button>
-          <button
-            type="button"
-            onClick={() => insertMarkdown('- ')}
-            className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition"
-            title="Bullet list"
-          >
-            • List
-          </button>
-          <button
-            type="button"
-            onClick={() => insertMarkdown('[', '](url)')}
-            className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition"
-            title="Insert Link"
-          >
-            🔗 Link
-          </button>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Product Description</label>
+          
+          {/* Write / Preview Tab Toggle */}
+          <div className="flex rounded-lg bg-slate-100 p-0.5 border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setEditorTab('write')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition ${
+                editorTab === 'write'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-850'
+              }`}
+            >
+              <Pencil className="h-3 w-3" />
+              Write
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditorTab('preview')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition ${
+                editorTab === 'preview'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-850'
+              }`}
+            >
+              <Eye className="h-3 w-3" />
+              Preview
+            </button>
+          </div>
         </div>
 
-        <textarea
-          ref={textareaRef}
-          value={form.description}
-          onChange={(e) => set('description', e.target.value)}
-          placeholder="Describe your product's features, dimensions, printing details, or special instructions..."
-          rows={5}
-          className={`${inputClass} rounded-t-none resize-y`}
-        />
+        {editorTab === 'write' ? (
+          <div className="flex flex-col rounded-2xl border border-slate-200 bg-slate-50/20 overflow-hidden focus-within:ring-2 focus-within:ring-orange-500/20 focus-within:border-orange-500 transition duration-150 shadow-sm">
+            {/* Formatting Toolbar */}
+            <div className="flex flex-wrap items-center gap-1 bg-slate-50 border-b border-slate-200 px-3 py-2 select-none">
+              <button
+                type="button"
+                onClick={() => insertMarkdown('**', '**')}
+                className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition active:scale-95"
+                title="Bold (**bold**)"
+              >
+                <Bold className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => insertMarkdown('*', '*')}
+                className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition active:scale-95"
+                title="Italic (*italic*)"
+              >
+                <Italic className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => insertMarkdown('`', '`')}
+                className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition active:scale-95"
+                title="Inline Code (`code`)"
+              >
+                <Code className="h-3.5 w-3.5" />
+              </button>
+              
+              <div className="h-4 w-px bg-slate-200 mx-1" />
+              
+              <button
+                type="button"
+                onClick={() => insertMarkdown('### ')}
+                className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition active:scale-95"
+                title="Heading 3 (### heading)"
+              >
+                <Heading3 className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => insertMarkdown('- ')}
+                className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition active:scale-95"
+                title="Bullet List (- item)"
+              >
+                <List className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => insertMarkdown('1. ')}
+                className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition active:scale-95"
+                title="Numbered List (1. item)"
+              >
+                <ListOrdered className="h-3.5 w-3.5" />
+              </button>
+              
+              <div className="h-4 w-px bg-slate-200 mx-1" />
+
+              <button
+                type="button"
+                onClick={() => insertMarkdown('> ')}
+                className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition active:scale-95"
+                title="Blockquote (> text)"
+              >
+                <Quote className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => insertMarkdown('[', '](url)')}
+                className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition active:scale-95"
+                title="Link ([label](url))"
+              >
+                <Link2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* Textarea */}
+            <textarea
+              ref={textareaRef}
+              value={form.description}
+              onChange={(e) => set('description', e.target.value)}
+              placeholder="Describe your product's features, dimensions, printing details, assembly guides, or licensing attributions..."
+              rows={10}
+              className="w-full bg-transparent px-3.5 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none resize-y min-h-[220px]"
+            />
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/40 p-4 min-h-[262px] max-h-[350px] overflow-y-auto">
+            {form.description.trim() ? (
+              <MarkdownDescription description={form.description} className="prose max-w-none text-slate-700" />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full py-12 text-slate-400">
+                <Pencil className="h-6 w-6 mb-2 text-slate-350 stroke-1" />
+                <p className="text-xs">No description to preview yet.</p>
+                <p className="text-[10px] text-slate-400/80 mt-0.5">Start typing in the "Write" tab to see it formatted here.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Category */}
