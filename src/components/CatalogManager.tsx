@@ -763,6 +763,28 @@ function CatalogForm({
   const [photoUploadError, setPhotoUploadError] = useState('')
   const [linkInput, setLinkInput] = useState('')
   const [linkError, setLinkError] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const insertMarkdown = (prefix: string, suffix: string = '') => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const text = form.description
+
+    const selectedText = text.substring(start, end)
+    const replacement = prefix + selectedText + suffix
+
+    const newText = text.substring(0, start) + replacement + text.substring(end)
+    set('description', newText)
+
+    // Focus and select back
+    setTimeout(() => {
+      textarea.focus()
+      textarea.setSelectionRange(start + prefix.length, start + prefix.length + selectedText.length)
+    }, 0)
+  }
 
   const handleAddLink = () => {
     setLinkError('')
@@ -1202,13 +1224,71 @@ function CatalogForm({
 
       {/* Description */}
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-600">Description</label>
+        <div className="mb-1 flex items-center justify-between">
+          <label className="block text-xs font-medium text-slate-600">Description</label>
+          <span className="text-[10px] text-slate-400">Supports Markdown formatting</span>
+        </div>
+        
+        {/* Markdown Editor Toolbar */}
+        <div className="flex flex-wrap items-center gap-1 bg-slate-100 border border-b-0 border-slate-200 px-2 py-1.5 rounded-t-xl select-none">
+          <button
+            type="button"
+            onClick={() => insertMarkdown('**', '**')}
+            className="rounded p-1 text-xs font-bold text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition min-w-[24px]"
+            title="Bold"
+          >
+            B
+          </button>
+          <button
+            type="button"
+            onClick={() => insertMarkdown('*', '*')}
+            className="rounded p-1 text-xs italic text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition min-w-[24px]"
+            title="Italic"
+          >
+            I
+          </button>
+          <button
+            type="button"
+            onClick={() => insertMarkdown('`', '`')}
+            className="rounded p-1 text-[10px] font-mono text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition min-w-[24px]"
+            title="Inline Code"
+          >
+            &lt;/&gt;
+          </button>
+          <div className="h-4 w-px bg-slate-300 mx-1" />
+          <button
+            type="button"
+            onClick={() => insertMarkdown('### ')}
+            className="rounded px-1.5 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition"
+            title="Heading 3"
+          >
+            H3
+          </button>
+          <button
+            type="button"
+            onClick={() => insertMarkdown('- ')}
+            className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition"
+            title="Bullet list"
+          >
+            • List
+          </button>
+          <button
+            type="button"
+            onClick={() => insertMarkdown('[', '](url)')}
+            className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition"
+            title="Insert Link"
+          >
+            🔗 Link
+          </button>
+        </div>
+
         <textarea
+          ref={textareaRef}
           value={form.description}
           onChange={(e) => set('description', e.target.value)}
-          placeholder="What is this print?"
-          rows={3}
-          className={`${inputClass} resize-none`}
+          placeholder="Describe your product's features, dimensions, printing details, or special instructions..."
+          rows={5}
+          className={`${inputClass} rounded-t-none resize-y`}
         />
       </div>
 

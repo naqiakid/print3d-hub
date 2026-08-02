@@ -13,6 +13,7 @@ import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
 import AddressInput from './AddressInput'
 import ProductMediaGallery from '@/components/ProductMediaGallery'
 import { ExternalLink } from 'lucide-react'
+import MarkdownDescription from '@/components/MarkdownDescription'
 
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
@@ -385,8 +386,8 @@ export default function CatalogOrderForm({
             )}
           </div>
 
-          {item.description && cleanDescription(item.description) && (
-            <p className="mt-3 text-sm text-slate-650 leading-relaxed">{cleanDescription(item.description)}</p>
+          {item.description && (
+            <MarkdownDescription description={item.description} className="mt-3 text-slate-655" />
           )}
 
           {(() => {
