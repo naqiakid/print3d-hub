@@ -1203,8 +1203,13 @@ function CatalogForm({
       {/* Description */}
       <div>
         <label className="mb-1 block text-xs font-medium text-slate-600">Description</label>
-        <input value={form.description} onChange={(e) => set('description', e.target.value)}
-          placeholder="What is this print?" className={inputClass} />
+        <textarea
+          value={form.description}
+          onChange={(e) => set('description', e.target.value)}
+          placeholder="What is this print?"
+          rows={3}
+          className={`${inputClass} resize-none`}
+        />
       </div>
 
       {/* Category */}
