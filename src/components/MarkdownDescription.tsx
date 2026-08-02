@@ -22,10 +22,20 @@ export default function MarkdownDescription({
   const cleanText = cleanDescription(description)
   if (!cleanText) return null
 
+  const isHTML = /<[a-z][\s\S]*>/i.test(cleanText)
+  if (isHTML) {
+    return (
+      <div 
+        className={`space-y-2 text-slate-600 text-sm leading-relaxed ${className} [&_ul]:list-disc [&_ul]:list-inside [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:list-inside [&_ol]:ml-4 [&_strong]:font-semibold [&_strong]:text-slate-850 [&_em]:italic [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-slate-850 [&_h3]:mt-3 [&_h3]:mb-1 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-200 [&_blockquote]:pl-4 [&_blockquote]:py-0.5 [&_blockquote]:italic [&_blockquote]:text-slate-500`}
+        dangerouslySetInnerHTML={{ __html: cleanText }}
+      />
+    )
+  }
+
   // Split text by lines to handle paragraphs and lists
   const lines = cleanText.split('\n')
   return (
-    <div className={`space-y-1.5 leading-relaxed text-sm text-slate-600 ${className}`}>
+    <div className={`space-y-1.5 leading-relaxed text-sm text-slate-605 ${className}`}>
       {lines.map((line, idx) => {
         const trimmed = line.trim()
         
