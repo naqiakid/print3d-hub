@@ -115,7 +115,7 @@ export default function PrinterProfileView({
   const storefrontHasContent = catalog.length > 0 || shop.sample_photos?.length > 0
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8 pb-24 lg:pb-12">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 pb-24 lg:pb-12">
       <Link
         href="/printers"
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 transition font-medium"
