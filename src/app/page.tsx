@@ -36,38 +36,118 @@ export default async function HomePage() {
     <div className="flex flex-col">
 
       {/* ── Hero ── */}
-      <section className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
-        <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
-          <div className="max-w-2xl">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-orange-500/20 px-3 py-1.5 text-sm text-orange-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-              Local 3D Printing Network
+      <section className="relative overflow-hidden bg-slate-950 py-24 lg:py-32 text-white">
+        <style>{`
+          @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-12px) rotate(0.5deg); }
+          }
+          .animate-float {
+            animation: float 6s ease-in-out infinite;
+          }
+        `}</style>
+
+        {/* Faint Background Grid Pattern & Radial Glows */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,#000_80%,transparent_100%)] pointer-events-none" />
+        <div className="absolute -left-1/4 top-0 h-96 w-96 rounded-full bg-orange-600/10 blur-[120px] pointer-events-none" />
+        <div className="absolute -right-1/4 bottom-0 h-96 w-96 rounded-full bg-blue-600/10 blur-[120px] pointer-events-none" />
+
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+            {/* Left Column: Text & CTAs */}
+            <div className="lg:col-span-7 flex flex-col justify-center text-center lg:text-left">
+              <div className="mb-6 inline-flex self-center lg:self-start items-center gap-2 rounded-full border border-orange-500/30 bg-orange-500/10 px-3.5 py-1.5 text-xs font-semibold tracking-wide text-orange-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-orange-400 animate-pulse" />
+                Local 3D Printing Network
+              </div>
+
+              <h1 className="mb-6 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl bg-clip-text bg-gradient-to-r from-white via-slate-100 to-slate-350">
+                Get anything{' '}
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-orange-400 to-amber-400 drop-shadow-sm">3D printed</span>
+                {' '}near you
+              </h1>
+
+              <p className="mb-8 max-w-xl text-base sm:text-lg leading-relaxed text-slate-300 mx-auto lg:mx-0">
+                Connect with vetted local 3D printer owners. Choose a design or bring your own,
+                and pick up locally—no 3D printer required.
+              </p>
+
+              <div className="flex flex-col gap-3 sm:flex-row justify-center lg:justify-start">
+                <Link
+                  href="/printers"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-orange-500/20 transition duration-200 hover:bg-orange-600 hover:shadow-orange-500/35 hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  Find a Printer Near Me <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link
+                  href="/register"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/50 px-6 py-3.5 text-sm font-semibold text-slate-250 transition duration-200 hover:border-slate-500 hover:bg-slate-800 hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  List Your Printer
+                </Link>
+              </div>
+
+              {/* Social Proof Block */}
+              <div className="mt-8 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 animate-fade-in">
+                <div className="flex -space-x-2.5">
+                  <img className="inline-block h-8 w-8 rounded-full ring-2 ring-slate-950 object-cover" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=100&h=100&q=80" alt="User face" />
+                  <img className="inline-block h-8 w-8 rounded-full ring-2 ring-slate-950 object-cover" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&h=100&q=80" alt="User face" />
+                  <img className="inline-block h-8 w-8 rounded-full ring-2 ring-slate-950 object-cover" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&h=100&q=80" alt="User face" />
+                  <img className="inline-block h-8 w-8 rounded-full ring-2 ring-slate-950 object-cover" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=100&h=100&q=80" alt="User face" />
+                </div>
+                <p className="text-slate-400 text-sm font-medium tracking-tight text-center sm:text-left">
+                  <span className="text-amber-400 mr-1.5">⭐⭐⭐⭐⭐</span>
+                  Join 50+ locals printing in Ampang & KL
+                </p>
+              </div>
             </div>
 
-            <h1 className="mb-5 text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-              Get anything{' '}
-              <span className="text-orange-400">3D printed</span>
-              {' '}near you
-            </h1>
+            {/* Right Column: Floating Showcase (Wow Factor) */}
+            <div className="hidden lg:block lg:col-span-5 relative pl-6">
+              {/* Outer Glow container */}
+              <div className="relative mx-auto max-w-[340px] animate-float">
+                {/* Floating Badge 1 (Live Quote) */}
+                <div className="absolute -top-4 -left-10 z-20 rounded-xl border border-teal-500/30 bg-slate-950/85 px-3.5 py-2 text-[11px] font-bold text-teal-400 shadow-xl backdrop-blur-md flex items-center gap-1.5 animate-pulse">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500" />
+                  </span>
+                  <span>Live Quote: RM 25.00</span>
+                </div>
 
-            <p className="mb-8 max-w-xl text-lg leading-relaxed text-slate-200">
-              Connect with vetted local 3D printer owners. Choose a design or bring your own,
-              and pick up locally—no 3D printer required.
-            </p>
+                {/* Floating Badge 2 (Pickup) */}
+                <div className="absolute -bottom-4 -right-6 z-20 rounded-xl border border-orange-500/30 bg-slate-950/85 px-3.5 py-2 text-[11px] font-bold text-orange-400 shadow-xl backdrop-blur-md flex items-center gap-1.5">
+                  <span>📍 Pickup in Ampang</span>
+                </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Link
-                href="/printers"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:bg-orange-600"
-              >
-                Find a Printer Near Me <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                href="/register"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-600 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-              >
-                List Your Printer
-              </Link>
+                {/* Main Card Grid */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md shadow-2xl space-y-4">
+                  {/* Window Controls chrome */}
+                  <div className="flex items-center gap-1.5 border-b border-white/5 pb-3">
+                    <div className="h-2.5 w-2.5 rounded-full bg-red-500/60" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/60" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-green-500/60" />
+                    <span className="text-[10px] font-bold text-slate-500 ml-1.5 tracking-wide uppercase">Print Preview</span>
+                  </div>
+
+                  {/* 3D Print Time-Lapse Image */}
+                  <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-white/10 bg-slate-950 shadow-inner">
+                    <img 
+                      src="https://images.unsplash.com/photo-1615840287214-7fe58a8b668f?auto=format&fit=crop&w=600&q=80" 
+                      alt="3D printer in progress" 
+                      className="h-full w-full object-cover opacity-85 hover:scale-105 transition duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 to-transparent" />
+                  </div>
+
+                  {/* Settings specs summary bar */}
+                  <div className="flex items-center justify-between text-[9px] font-bold tracking-wider text-slate-450 uppercase border-t border-white/5 pt-3">
+                    <span className="bg-white/5 border border-white/5 px-2 py-0.5 rounded">Layer: 0.2mm</span>
+                    <span className="bg-white/5 border border-white/5 px-2 py-0.5 rounded">Infill: 15%</span>
+                    <span className="bg-white/5 border border-white/5 px-2 py-0.5 rounded">Time: 2h 45m</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
