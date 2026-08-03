@@ -145,6 +145,18 @@ export default function AffiliateManager({
         </div>
       </div>
 
+      {/* Promotion Policy Alert Box */}
+      <div className="rounded-xl border border-orange-100 bg-orange-50/30 p-3.5 text-xs text-orange-800 flex items-start gap-2.5 shadow-sm">
+        <span className="text-orange-500 text-base leading-none">💡</span>
+        <div>
+          <p className="font-bold text-orange-900">Merchant-Funded Promotion Policy (Option A)</p>
+          <p className="text-orange-700 mt-0.5 leading-relaxed">
+            Customer discounts and promoter commissions are funded directly from your markup profit margins. 
+            The customer pays the discounted subtotal directly, and you payout the promoter commission manually offline.
+          </p>
+        </div>
+      </div>
+
       {/* Main Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Affiliate codes list */}
