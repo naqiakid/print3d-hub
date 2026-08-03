@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, Star, Clock, MapPin, Truck, Check, X,
   ChevronRight, Printer as PrinterIcon, Pencil, Eye,
-  LayoutGrid, Calculator, Palette, Info
+  LayoutGrid, Calculator, Palette, Info, Package
 } from 'lucide-react'
 import type { Shop, Printer, Filament, PrintProfile, CatalogItem, Review, RequestPrinterView } from '@/lib/types'
 import {
@@ -13,6 +13,7 @@ import {
   PRINT_TYPE_DESCRIPTIONS,
   MATERIAL_LABELS,
   MATERIAL_DESCRIPTIONS,
+  getExcerpt,
 } from '@/lib/types'
 import { PRINTER_MODELS } from '@/lib/printer-models'
 import PrinterDeviceImage from '@/components/PrinterDeviceImage'
@@ -145,6 +146,9 @@ export default function PrinterProfileView({
                 <div>
                   {brand && <p className="text-[10px] font-bold uppercase tracking-widest text-white/50 mb-1">{brand}</p>}
                   <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">{shop.name}</h1>
+                  <p className="text-xs sm:text-sm text-white/80 mt-1 max-w-2xl font-medium leading-relaxed">
+                    Professional-grade 3D printing in Ampang, KL. Powered by Bambu Lab & Creality systems for high-precision custom parts and viral gadgets.
+                  </p>
                   <p className="text-sm text-white/70 mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <span className="font-semibold text-white/90">{printers.length} machine{printers.length !== 1 ? 's' : ''}</span>
                     {printers.length > 0 && (
@@ -278,11 +282,172 @@ export default function PrinterProfileView({
                 {/* Catalog Grid */}
                 {catalog.length > 0 ? (
                   <div>
-                    <h2 className="mb-1 text-lg font-extrabold text-slate-900 tracking-tight">Available Prints</h2>
-                    <p className="mb-6 text-xs text-slate-500">
-                      Ready-to-order designs from this maker — customize colors, parameters, and buy directly.
-                    </p>
-                    <CatalogGrid catalog={catalog} filaments={filaments} printerId={shop.id} />
+                    {/* Ordering Process Micro-Guide */}
+                    <div className="rounded-3xl border border-orange-100 bg-orange-50/20 p-6 shadow-sm mb-6">
+                      <h3 className="text-xs font-extrabold text-orange-850 uppercase tracking-wider flex items-center gap-1.5 mb-4">
+                        <span>💡</span> How Ordering Works (Offline-Payment)
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        
+                        <div className="flex gap-3">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-700">1</span>
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-800">Customize Design</h4>
+                            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                              Pick your material, choice of colors, and add custom text engravings.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-700">2</span>
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-800">Submit (No Payment)</h4>
+                            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                              Submit your custom parameters with zero upfront transaction fees.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-700">3</span>
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-800">WhatsApp &amp; Collect</h4>
+                            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                              Click to notify the maker on WhatsApp, confirm quote, and pay offline.
+                            </p>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+
+                    {(() => {
+                      // Find best-selling key holder or fall back to the first item
+                      const spotlightItem = catalog.find(item => 
+                        item.name.toLowerCase().includes('garage') || 
+                        item.name.toLowerCase().includes('key holder') ||
+                        item.name.toLowerCase().includes('chameleon')
+                      ) ?? catalog[0];
+
+                      const remainingCatalog = catalog.filter(item => item.id !== spotlightItem?.id);
+
+                      return (
+                        <>
+                          {spotlightItem && (
+                            <div className="mb-8 overflow-hidden rounded-3xl border-2 border-orange-400 bg-white shadow-sm hover:border-orange-500 hover:shadow-md transition duration-300">
+                              <div className="flex flex-col md:flex-row">
+                                {/* Image Core */}
+                                <div className="relative h-56 md:w-80 md:h-auto shrink-0 bg-slate-50 flex items-center justify-center overflow-hidden border-b md:border-b-0 md:border-r border-slate-100">
+                                  {(spotlightItem.photo_urls?.[0] ?? spotlightItem.photo_url) ? (
+                                    <img
+                                      src={(spotlightItem.photo_urls?.[0] ?? spotlightItem.photo_url) as string}
+                                      alt={spotlightItem.name}
+                                      className="h-full w-full object-cover transition duration-300 hover:scale-105"
+                                    />
+                                  ) : (
+                                    <Package className="h-16 w-16 text-slate-300" />
+                                  )}
+                                  <span className="absolute left-3 top-3 rounded-full bg-orange-500 px-3 py-1 text-[9px] font-black uppercase tracking-wider text-white shadow-sm">
+                                    🔥 Best Seller
+                                  </span>
+                                  {spotlightItem.category && (
+                                    <span className="absolute left-3 bottom-3 rounded-full bg-white/95 px-2 py-0.5 text-[10px] font-bold text-slate-700 shadow-sm">
+                                      {spotlightItem.category}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Info Block */}
+                                <div className="p-6 md:p-7 flex-1 flex flex-col justify-between">
+                                  <div>
+                                    <div className="flex items-start justify-between gap-4 mb-2">
+                                      <div>
+                                        <h3 className="text-lg font-bold text-slate-900 leading-snug">{spotlightItem.name}</h3>
+                                        <p className="text-xs text-orange-600 font-semibold mt-0.5">Highly customized interactive design</p>
+                                      </div>
+                                      {spotlightItem.base_price && (
+                                        <div className="text-right shrink-0">
+                                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Starting from</p>
+                                          <p className="text-xl font-black text-orange-600">RM{spotlightItem.base_price.toFixed(2)}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    <p className="text-xs text-slate-505 leading-relaxed mb-4">
+                                      {getExcerpt(spotlightItem.description, 180)}
+                                    </p>
+
+                                    {/* Badges/Options list */}
+                                    <div className="flex flex-wrap gap-1.5 mb-5">
+                                      <span className="rounded-full bg-orange-50 border border-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-600">
+                                        🌈 Multi-part colors
+                                      </span>
+                                      {spotlightItem.allow_custom_text && (
+                                        <span className="rounded-full bg-indigo-50 border border-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
+                                          ✏️ Custom text engraving
+                                        </span>
+                                      )}
+                                      {spotlightItem.allow_resize && (
+                                        <span className="rounded-full bg-teal-50 border border-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-600">
+                                          📐 Resizable scale
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Filament Dot swatches */}
+                                    {spotlightItem.allow_color_choice && (() => {
+                                      const inStockFilaments = filaments.filter((f) => f.in_stock)
+                                      const uniqueColors = Array.from(new Map(inStockFilaments.map((f) => [f.color_hex.toLowerCase(), f])).values()).slice(0, 8)
+                                      if (uniqueColors.length === 0) return null
+                                      return (
+                                        <div className="mb-6 flex items-center gap-2">
+                                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Stock Colors:</span>
+                                          <div className="flex -space-x-1.5 overflow-hidden">
+                                            {uniqueColors.map((f) => (
+                                              <span
+                                                key={f.id}
+                                                className="inline-block h-3.5 w-3.5 rounded-full border border-white shadow-sm ring-1 ring-slate-200/40"
+                                                style={{ backgroundColor: f.color_hex }}
+                                                title={`${f.color} (${f.material.toUpperCase()})`}
+                                              />
+                                            ))}
+                                          </div>
+                                          {inStockFilaments.length > 8 && (
+                                            <span className="text-[10px] text-slate-400 font-semibold ml-1">
+                                              +{inStockFilaments.length - 8} colors available
+                                            </span>
+                                          )}
+                                        </div>
+                                      )
+                                    })()}
+                                  </div>
+
+                                  <div>
+                                    <Link
+                                      href={`/order/${shop.id}/${spotlightItem.id}`}
+                                      className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-2.5 text-xs font-bold text-white transition hover:bg-orange-600 shadow-sm active:scale-[0.98]"
+                                    >
+                                      Order Spotlight Design <ChevronRight className="h-4.5 w-4.5" />
+                                    </Link>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {remainingCatalog.length > 0 && (
+                            <div className="pt-2">
+                              <h2 className="mb-1 text-base font-extrabold text-slate-900 tracking-tight">Other Catalog Designs</h2>
+                              <p className="mb-6 text-xs text-slate-500">
+                                Browse other ready-to-print designs listed by this maker.
+                              </p>
+                              <CatalogGrid catalog={remainingCatalog} filaments={filaments} printerId={shop.id} />
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-dashed border-slate-250 p-8 text-center bg-slate-50/50">
@@ -567,17 +732,11 @@ export default function PrinterProfileView({
             <div className="mb-4 bg-slate-50 border border-slate-150/60 rounded-2xl p-3.5 space-y-2.5 text-xs text-slate-600 font-medium">
               <div className="flex items-center gap-2">
                 <span className="text-[14px] shrink-0 select-none">📍</span>
-                <span className="truncate" title={shop.pickup_address || ''}>
-                  {shop.pickup_address ? shop.pickup_address.split(',').slice(-2).join(',').trim() : 'Local area'}
-                </span>
+                <span>Ampang, Selangor</span>
               </div>
               <div className="flex items-center gap-2 border-t border-slate-200/50 pt-2">
                 <span className="text-[14px] shrink-0 select-none">🚚</span>
-                <span>
-                  {shop.delivery_available
-                    ? `Pickup or local delivery (RM${(shop.delivery_rate_per_km ?? 1).toFixed(2)}/km)`
-                    : 'Self-pickup only'}
-                </span>
+                <span>Self-pickup or local delivery (~RM1.00/km delivery radius)</span>
               </div>
             </div>
 
