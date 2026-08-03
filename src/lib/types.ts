@@ -386,6 +386,15 @@ export function cleanDescription(description: string | null | undefined): string
     .trim()
 }
 
+export function stripHtml(description: string | null | undefined): string {
+  if (!description) return ''
+  const clean = cleanDescription(description)
+  return clean
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function serializeAssemblyMetadata(
   description: string,
   metadata: PartAssembly[],

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Package } from 'lucide-react'
 import type { CatalogItem, Filament } from '@/lib/types'
-import { cleanDescription, parseDesignerMetadata } from '@/lib/types'
+import { cleanDescription, stripHtml, parseDesignerMetadata } from '@/lib/types'
 
 function isInStock(item: CatalogItem, filaments: Filament[]): boolean {
   if (item.allow_material_choice) {
@@ -79,14 +79,14 @@ export default function CatalogGrid({
           return (
             <div
               key={item.id}
-              className={`group rounded-2xl border overflow-hidden transition ${
+              className={`group flex flex-col h-full rounded-2xl border overflow-hidden transition ${
                 inStock
                   ? 'border-slate-200 bg-white hover:border-orange-200 hover:shadow-md'
                   : 'border-slate-100 bg-slate-50 opacity-70'
               }`}
             >
               {/* Photo */}
-              <div className="relative h-44 w-full overflow-hidden bg-slate-100 flex items-center justify-center">
+              <div className="relative h-44 w-full shrink-0 overflow-hidden bg-slate-100 flex items-center justify-center">
                 {(item.photo_urls?.[0] ?? item.photo_url) ? (
                   <img
                     src={(item.photo_urls?.[0] ?? item.photo_url) as string}
@@ -111,85 +111,92 @@ export default function CatalogGrid({
               </div>
 
               {/* Info */}
-              <div className="p-4">
-                <div className="mb-1 flex items-start justify-between gap-2">
-                  <p className="font-semibold text-slate-900 leading-snug">{item.name}</p>
-                  {item.base_price && (
-                    <p className="shrink-0 text-base font-bold text-orange-600">From RM{item.base_price.toFixed(2)}</p>
+              <div className="p-4 flex-1 flex flex-col justify-between">
+                <div className="flex-1">
+                  <p className="font-semibold text-slate-900 leading-snug mb-1.5 line-clamp-1">{item.name}</p>
+                  {item.description && (
+                    <p className="mb-3 text-xs text-slate-500 line-clamp-2 leading-relaxed">{stripHtml(item.description)}</p>
+                  )}
+                  {badges.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-1">
+                      {badges.map((b) => (
+                        <span
+                          key={b}
+                          className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-600"
+                        >
+                          {b}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
-                {item.description && (
-                  <p className="mb-3 text-xs text-slate-500 line-clamp-2">{cleanDescription(item.description)}</p>
-                )}
-                {badges.length > 0 && (
-                  <div className="mb-3 flex flex-wrap gap-1">
-                    {badges.map((b) => (
-                      <span
-                        key={b}
-                        className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-600"
-                      >
-                        {b}
-                      </span>
-                    ))}
-                  </div>
-                )}
 
-                {designer && (designer.name || designer.license) && (
-                  <div className="mb-3 flex items-center justify-between text-[10px] border-t border-slate-100/80 pt-2 text-slate-400">
-                    <span className="truncate max-w-[130px]">
-                      {designer.name && (
-                        <>
-                          By{' '}
-                          {designer.tipUrl ? (
-                            <a
-                              href={designer.tipUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-bold text-orange-600 hover:underline"
-                              title="Tip the designer"
-                            >
-                              {designer.name} ☕
-                            </a>
-                          ) : (
-                            <span className="font-bold text-slate-600">{designer.name}</span>
-                          )}
-                        </>
-                      )}
-                    </span>
-                    {designer.license && (
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-[9px] font-bold shrink-0 ${
-                          designer.commercialAllowed !== false
-                            ? 'bg-emerald-500/10 text-emerald-600'
-                            : 'bg-amber-500/10 text-amber-700'
-                        }`}
-                        title={
-                          designer.commercialAllowed !== false
-                            ? 'Commercial printing allowed by creator'
-                            : 'Non-Commercial license'
-                        }
-                      >
-                        {designer.license.split(' ')[0]}
+                <div className="mt-4">
+                  {designer && (designer.name || designer.license) && (
+                    <div className="mb-3 flex items-center justify-between text-[10px] border-t border-slate-100 pt-2 text-slate-400">
+                      <span className="truncate max-w-[130px]">
+                        {designer.name && (
+                          <>
+                            By{' '}
+                            {designer.tipUrl ? (
+                              <a
+                                href={designer.tipUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-bold text-orange-600 hover:underline"
+                                title="Tip the designer"
+                              >
+                                {designer.name} ☕
+                              </a>
+                            ) : (
+                              <span className="font-bold text-slate-605">{designer.name}</span>
+                            )}
+                          </>
+                        )}
                       </span>
-                    )}
-                  </div>
-                )}
-                {inStock ? (
-                  <Link
-                    href={`/order/${printerId}/${item.id}`}
-                    className="block w-full rounded-xl bg-orange-500 py-2 text-center text-sm font-semibold text-white transition hover:bg-orange-600"
-                  >
-                    Order this
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    disabled
-                    className="block w-full cursor-not-allowed rounded-xl bg-slate-200 py-2 text-center text-sm font-semibold text-slate-400"
-                  >
-                    Currently unavailable
-                  </button>
-                )}
+                      {designer.license && (
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[9px] font-bold shrink-0 ${
+                            designer.commercialAllowed !== false
+                              ? 'bg-emerald-500/10 text-emerald-600'
+                              : 'bg-amber-500/10 text-amber-700'
+                          }`}
+                          title={
+                            designer.commercialAllowed !== false
+                              ? 'Commercial printing allowed by creator'
+                              : 'Non-Commercial license'
+                          }
+                        >
+                          {designer.license.split(' ')[0]}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  
+                  {item.base_price && (
+                    <div className="mb-3 flex items-center justify-between border-t border-slate-100 pt-2.5">
+                      <span className="text-xs text-slate-400 font-medium">Starting price</span>
+                      <span className="text-base font-extrabold text-orange-600">From RM{item.base_price.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {inStock ? (
+                    <Link
+                      href={`/order/${printerId}/${item.id}`}
+                      className="block w-full rounded-xl bg-orange-500 py-2 text-center text-sm font-semibold text-white transition hover:bg-orange-600"
+                    >
+                      Order this
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="block w-full cursor-not-allowed rounded-xl bg-slate-200 py-2 text-center text-sm font-semibold text-slate-400"
+                    >
+                      Currently unavailable
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )

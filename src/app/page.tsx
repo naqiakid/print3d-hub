@@ -50,9 +50,9 @@ export default async function HomePage() {
               {' '}near you
             </h1>
 
-            <p className="mb-8 max-w-lg text-lg leading-relaxed text-slate-300">
-              Find a local 3D printer owner, choose how you want to order, and pick up
-              your print — no technical knowledge required.
+            <p className="mb-8 max-w-xl text-lg leading-relaxed text-slate-300">
+              Connect with vetted local 3D printer owners. Choose a design or bring your own,
+              and pick up locally—no 3D printer required.
             </p>
 
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -227,47 +227,75 @@ export default async function HomePage() {
                 title: 'Pick it up locally',
                 desc: 'The owner prints your order and you collect it nearby. Pay directly at pickup or on delivery.',
               },
-            ].map(({ icon: Icon, step, title, desc }) => (
-              <div key={step} className="relative rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-                <span className="absolute right-5 top-4 text-5xl font-black text-slate-105 select-none">
-                  {step}
-                </span>
-                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-orange-100">
-                  <Icon className="h-5 w-5 text-orange-600" />
+            ].map(({ icon: Icon, step, title, desc }, idx) => (
+              <div
+                key={step}
+                className="group relative rounded-3xl border border-slate-200 bg-white p-8 shadow-sm hover:border-orange-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between"
+              >
+                <div>
+                  <span className="absolute right-6 top-5 text-5xl font-black text-slate-100/70 select-none group-hover:text-orange-50/70 transition-colors duration-300">
+                    {step}
+                  </span>
+                  <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 group-hover:bg-orange-500 transition-all duration-300 shadow-sm shadow-orange-100 group-hover:shadow-orange-500/20">
+                    <Icon className="h-5 w-5 text-orange-600 group-hover:text-white transition-colors duration-300" />
+                  </div>
+                  <h3 className="mb-2.5 text-base font-bold text-slate-900 tracking-tight">{title}</h3>
+                  <p className="text-sm leading-relaxed text-slate-500">{desc}</p>
                 </div>
-                <h3 className="mb-2 text-base font-semibold text-slate-900">{title}</h3>
-                <p className="text-sm leading-relaxed text-slate-600">{desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Live stats ── */}
-      {(totalPrinters > 0 || totalCompleted > 0) && (
-        <section className="border-b border-slate-200 bg-white">
-          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-            <div className="flex flex-wrap justify-center gap-16 text-center">
-              {totalPrinters > 0 && (
-                <div>
-                  <div className="text-3xl font-bold text-slate-900">{totalPrinters}</div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    Printer{totalPrinters !== 1 ? 's' : ''} on the network
-                  </div>
-                </div>
-              )}
-              {totalCompleted > 0 && (
-                <div>
-                  <div className="text-3xl font-bold text-slate-900">{totalCompleted}</div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    Print{totalCompleted !== 1 ? 's' : ''} completed
-                  </div>
-                </div>
-              )}
+      {/* ── Trust Benefits Bar ── */}
+      <section className="border-b border-slate-200/50 bg-slate-50/50 py-10">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100/60 text-lg">
+                📍
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Local Pickup</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">Collect prints nearby &amp; save on shipping fees</p>
+              </div>
             </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100/60 text-lg">
+                💰
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Upfront Pricing</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">Instant quotes with zero hidden processing costs</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100/60 text-lg">
+                ⚙️
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Verified Makers</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">Vetted local print hubs ensuring print quality</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100/60 text-lg">
+                💬
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Direct WhatsApp</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">Coordinate custom modifications directly with makers</p>
+              </div>
+            </div>
+
           </div>
-        </section>
-      )}
+        </div>
+      </section>
 
       {/* ── Owner CTA ── */}
       <section className="bg-orange-500 py-16">
