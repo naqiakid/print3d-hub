@@ -190,6 +190,39 @@ export default function CatalogManager({
   const [items, setItems] = useState<CatalogItem[]>(initialItems)
   const [editing, setEditing] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(BLANK)
+  const [toast, setToast] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
+
+  const handleCopyMarketplaceListing = (item: CatalogItem) => {
+    const plainDesc = cleanDescription(item.description)
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    
+    const publicUrl = `${window.location.origin}/order/${printer.id}/${item.id}`
+    
+    const text = `${item.name} - Custom 3D Printed
+
+${plainDesc}
+
+Available for local pickup or delivery. Fully customize your colors and options directly on my page here: 
+${publicUrl}
+
+Message me to request a custom print!`
+
+    navigator.clipboard.writeText(text).then(() => {
+      setToast('Listing copied to clipboard! Ready to paste in Carousell/Facebook.')
+    }).catch((err) => {
+      console.error('Failed to copy: ', err)
+      alert('Failed to copy. Please copy manually.')
+    })
+  }
   const [editingMeshMapping, setEditingMeshMapping] = useState<Record<number, number>>({})
   const [editingTextMeshIndex, setEditingTextMeshIndex] = useState<number | null>(null)
   const [error, setError] = useState('')
@@ -412,7 +445,15 @@ export default function CatalogManager({
                     )}
                   </div>
                 </div>
-                <div className="flex gap-1 shrink-0">
+                <div className="flex gap-1.5 shrink-0 items-center">
+                  <button
+                    type="button"
+                    onClick={() => handleCopyMarketplaceListing(item)}
+                    title="Copy listing description and links for Carousell/Facebook Marketplace"
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-orange-200 hover:text-orange-600 hover:bg-orange-50/20 transition shadow-sm"
+                  >
+                    📋 Copy Listing
+                  </button>
                   <button type="button" onClick={() => openEdit(item)}
                     className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition">
                     <Pencil className="h-3.5 w-3.5" />
@@ -477,7 +518,19 @@ export default function CatalogManager({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {toast && (
+        <div className="fixed top-6 right-6 z-50 animate-slide-in-right max-w-sm rounded-2xl border border-emerald-100 bg-emerald-50 p-4 shadow-lg flex items-start gap-3">
+          <span className="text-emerald-500 text-lg">✅</span>
+          <div className="flex-1">
+            <p className="text-xs font-bold text-emerald-800">Success</p>
+            <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">{toast}</p>
+          </div>
+          <button type="button" onClick={() => setToast(null)} className="text-emerald-450 hover:text-emerald-600 ml-auto text-xs font-bold font-mono leading-none">
+            ×
+          </button>
+        </div>
+      )}
       {items.length === 0 && (
         <div className="rounded-2xl border-2 border-dashed border-slate-200 py-14 text-center animate-fade-in">
           <Package className="mx-auto mb-3 h-10 w-10 text-slate-300" />
