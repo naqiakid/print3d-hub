@@ -515,17 +515,42 @@ export async function submitRequest(data: {
   custom_wall_count?: number | null
   quantity?: number
   scale_pct?: number | null
+  affiliate_code?: string | null
 }): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
 
   // Strip optional columns that may not exist yet if migrations haven't run
-  const { color_preferences, fulfillment, delivery_address, declined_addons, catalog_item_id, custom_infill, custom_wall_count, quantity, scale_pct, ...baseData } = data
+  const { color_preferences, fulfillment, delivery_address, declined_addons, catalog_item_id, custom_infill, custom_wall_count, quantity, scale_pct, affiliate_code, ...baseData } = data
+
+  // Verify and record valid affiliate code if provided
+  let validatedPromoCode = null
+  let activePromoData: any = null
+  if (affiliate_code) {
+    const { data: promo } = await supabase
+      .from('affiliates')
+      .select('code, discount_pct, commission_pct, is_active, owner_id')
+      .eq('code', affiliate_code.trim().toUpperCase())
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (promo && (!promo.owner_id || promo.owner_id === data.owner_id)) {
+      validatedPromoCode = promo.code
+      activePromoData = promo
+    }
+  }
 
   // Catalog orders are pre-priced — the price was already fixed when the owner
   // listed the item, so the customer isn't waiting on a manual quote. Look the
   // real price up server-side (never trust a client-supplied price) so the
   // owner's dashboard can skip straight to Accept/Decline.
-  let catalogPricing: { quoted_price: number; status?: RequestStatus } | Record<string, never> = {}
+  let catalogPricing: { 
+    quoted_price: number
+    status?: RequestStatus
+    affiliate_code?: string | null
+    affiliate_discount_amount?: number
+    affiliate_commission_amount?: number
+  } | Record<string, never> = {}
+
   if (catalog_item_id) {
     const { data: item } = await supabase
       .from('catalog_items')
@@ -572,9 +597,23 @@ export async function submitRequest(data: {
 
       if (unitPrice > 0) {
         const qty = quantity && quantity > 0 ? quantity : 1
+        let discountAmount = 0
+        let commissionAmount = 0
+
+        if (activePromoData) {
+          discountAmount = unitPrice * (Number(activePromoData.discount_pct) / 100)
+          commissionAmount = unitPrice * (Number(activePromoData.commission_pct) / 100)
+          unitPrice = Math.max(0, unitPrice - discountAmount)
+        }
+
         catalogPricing = {
           quoted_price: Math.round(unitPrice * qty * 100) / 100,
-          status: 'quoted' // Automatically transition status to pre-quoted
+          status: 'quoted', // Automatically transition status to pre-quoted
+          ...(validatedPromoCode ? {
+            affiliate_code: validatedPromoCode,
+            affiliate_discount_amount: Math.round(discountAmount * qty * 100) / 100,
+            affiliate_commission_amount: Math.round(commissionAmount * qty * 100) / 100,
+          } : {})
         }
       }
     }
@@ -589,6 +628,7 @@ export async function submitRequest(data: {
     ...(catalog_item_id ? { catalog_item_id } : {}),
     ...(custom_infill != null ? { custom_infill } : {}),
     ...(custom_wall_count != null ? { custom_wall_count } : {}),
+    ...(validatedPromoCode ? { affiliate_code: validatedPromoCode } : {}),
     ...catalogPricing,
   }
 
@@ -1286,3 +1326,122 @@ export async function deleteCatalogItem(
   revalidatePath(`/printers/${user.id}`)
   return { success: true }
 }
+
+// ─── Affiliate Program Actions ───────────────────────────────
+
+export async function verifyAffiliateCode(
+  code: string,
+  ownerId?: string
+): Promise<{ error: string } | { valid: true; commission_pct: number; discount_pct: number; code: string }> {
+  const supabase = await createClient()
+  const cleanCode = code.trim().toUpperCase()
+
+  let query = supabase
+    .from('affiliates')
+    .select('code, commission_pct, discount_pct, is_active, owner_id')
+    .eq('code', cleanCode)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  const { data: affiliate, error } = await query
+
+  if (error) return { error: error.message }
+  if (!affiliate) return { error: 'Invalid or inactive promo code.' }
+
+  // If code is shop-specific, check if it belongs to this printer owner
+  if (affiliate.owner_id && ownerId && affiliate.owner_id !== ownerId) {
+    return { error: 'This code is not valid for this shop.' }
+  }
+
+  return {
+    valid: true,
+    code: affiliate.code,
+    commission_pct: Number(affiliate.commission_pct),
+    discount_pct: Number(affiliate.discount_pct)
+  }
+}
+
+export async function createAffiliateCode(data: {
+  code: string
+  name: string
+  commission_pct: number
+  discount_pct: number
+}): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const cleanCode = data.code.trim().toUpperCase()
+  if (!cleanCode) return { error: 'Code is required' }
+
+  const { error } = await supabase
+    .from('affiliates')
+    .insert({
+      owner_id: user.id,
+      code: cleanCode,
+      name: data.name.trim(),
+      commission_pct: data.commission_pct,
+      discount_pct: data.discount_pct,
+    })
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard', 'layout')
+  return { success: true }
+}
+
+export async function toggleAffiliateCode(
+  id: string,
+  isActive: boolean
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('affiliates')
+    .update({ is_active: isActive })
+    .eq('id', id)
+    .eq('owner_id', user.id)
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard', 'layout')
+  return { success: true }
+}
+
+export async function deleteAffiliateCode(
+  id: string
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('affiliates')
+    .delete()
+    .eq('id', id)
+    .eq('owner_id', user.id)
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard', 'layout')
+  return { success: true }
+}
+
+export async function incrementAffiliateClicks(code: string): Promise<void> {
+  const supabase = await createClient()
+  const cleanCode = code.trim().toUpperCase()
+
+  // Increment clicks_count using postgres rpc or plain select+update (safe for simple affiliate)
+  const { data } = await supabase
+    .from('affiliates')
+    .select('id, clicks_count')
+    .eq('code', cleanCode)
+    .maybeSingle()
+
+  if (data) {
+    await supabase
+      .from('affiliates')
+      .update({ clicks_count: (data.clicks_count ?? 0) + 1 })
+      .eq('id', data.id)
+  }
+}
+

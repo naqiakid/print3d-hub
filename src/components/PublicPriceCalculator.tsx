@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { Upload, FileCode2, Info, ChevronRight, HelpCircle, Loader2 } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Upload, FileCode2, Info, ChevronRight, HelpCircle, Loader2, Sparkles, Check, AlertCircle } from 'lucide-react'
 import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import type { RequestPrinterView, Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS } from '@/lib/types'
 import { calculateEstimate, DEFAULT_ELECTRICITY_RATE } from '@/lib/pricing'
+import { verifyAffiliateCode } from '@/lib/actions'
 
 interface Props {
   printer: RequestPrinterView
@@ -61,6 +62,51 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
   )
   const [infill, setInfill] = useState(15)
   const [nozzle, setNozzle] = useState(0.4)
+
+  // Affiliate/Promo States
+  const [promoCodeInput, setPromoCodeInput] = useState('')
+  const [activePromo, setActivePromo] = useState<{ code: string; discount_pct: number } | null>(null)
+  const [verifyingPromo, setVerifyingPromo] = useState(false)
+  const [promoError, setPromoError] = useState('')
+
+  // Load from session storage / local storage on mount
+  useEffect(() => {
+    const storedCode = sessionStorage.getItem('active_affiliate_code') || localStorage.getItem('affiliate_code')
+    if (storedCode) {
+      setPromoCodeInput(storedCode)
+      handleApplyPromo(storedCode)
+    }
+  }, [])
+
+  const handleApplyPromo = async (codeToVerify?: string) => {
+    const code = (codeToVerify ?? promoCodeInput).trim().toUpperCase()
+    if (!code) return
+
+    setVerifyingPromo(true)
+    setPromoError('')
+
+    const res = await verifyAffiliateCode(code, printer.id)
+    setVerifyingPromo(false)
+
+    if ('error' in res) {
+      setPromoError(res.error)
+      setActivePromo(null)
+    } else {
+      setActivePromo({
+        code: res.code,
+        discount_pct: res.discount_pct
+      })
+      // Keep it synced in session storage
+      sessionStorage.setItem('active_affiliate_code', res.code)
+    }
+  }
+
+  const handleRemovePromo = () => {
+    setActivePromo(null)
+    setPromoCodeInput('')
+    setPromoError('')
+    sessionStorage.removeItem('active_affiliate_code')
+  }
 
   const handleFileChange = async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -138,12 +184,15 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
       waste_percent: printer.waste_percent ?? 8,
       known_weight_g: estimatedWeightG,
       known_hours: estimatedHours,
+      affiliate_discount_pct: activePromo?.discount_pct ?? 0,
     })
 
     return {
       weight: Math.round(estimatedWeightG),
       hours: Math.round(estimatedHours * 10) / 10,
-      price: est.suggested_price,
+      price: est.final_price,
+      rawPrice: est.suggested_price,
+      discountAmount: est.discount_amount,
     }
   }
 
@@ -263,6 +312,56 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
             />
           </div>
 
+          {/* Promo Code Input */}
+          <div className="pt-3 border-t border-slate-100 space-y-2">
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Promo / Affiliate Code
+            </label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="e.g. SAVE5"
+                  value={promoCodeInput}
+                  onChange={(e) => setPromoCodeInput(e.target.value)}
+                  disabled={activePromo !== null || verifyingPromo}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold focus:border-orange-500 focus:bg-white focus:outline-none transition disabled:opacity-75 disabled:bg-slate-100 uppercase"
+                />
+                {activePromo && (
+                  <Check className="absolute right-2.5 top-1.5 h-4.5 w-4.5 text-emerald-500" />
+                )}
+              </div>
+              {activePromo ? (
+                <button
+                  type="button"
+                  onClick={handleRemovePromo}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition whitespace-nowrap"
+                >
+                  Remove
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleApplyPromo()}
+                  disabled={verifyingPromo || !promoCodeInput.trim()}
+                  className="rounded-lg bg-slate-900 px-4 py-1.5 text-xs font-bold text-white hover:bg-slate-800 transition disabled:opacity-50 whitespace-nowrap"
+                >
+                  {verifyingPromo ? 'Verifying...' : 'Apply'}
+                </button>
+              )}
+            </div>
+            {promoError && (
+              <p className="text-[10px] text-red-500 flex items-center gap-1 font-medium">
+                <AlertCircle className="h-3 w-3 shrink-0" /> {promoError}
+              </p>
+            )}
+            {activePromo && (
+              <p className="text-[10px] text-emerald-600 flex items-center gap-1 font-medium">
+                <Sparkles className="h-3 w-3 shrink-0 animate-pulse" /> Code <strong>{activePromo.code}</strong> applied! ({activePromo.discount_pct}% discount)
+              </p>
+            )}
+          </div>
+
           {/* Estimates Card */}
           <div className="rounded-xl border border-orange-100 bg-orange-50/20 p-3 space-y-2.5">
             <div className="flex justify-between items-center text-xs">
@@ -281,9 +380,29 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
                 {estimate.hours} hour{estimate.hours !== 1 ? 's' : ''}
               </span>
             </div>
+
+            {estimate.discountAmount > 0 && (
+              <>
+                <div className="flex justify-between items-center text-xs border-t border-dashed border-orange-100/50 pt-2">
+                  <span className="text-slate-500 font-medium">Base Price</span>
+                  <span className="font-semibold text-slate-500 font-mono line-through">
+                    RM {estimate.rawPrice.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-xs text-emerald-600 font-medium">
+                  <span className="flex items-center gap-0.5">Promo Discount ({activePromo?.discount_pct}%)</span>
+                  <span className="font-bold font-mono">
+                    - RM {estimate.discountAmount.toFixed(2)}
+                  </span>
+                </div>
+              </>
+            )}
+
             <div className="border-t border-orange-100/50 pt-2 flex justify-between items-end">
               <div>
-                <p className="text-[10px] text-slate-400 font-medium leading-none mb-0.5">Estimated Cost</p>
+                <p className="text-[10px] text-slate-400 font-medium leading-none mb-0.5">
+                  {estimate.discountAmount > 0 ? 'Discounted Price' : 'Estimated Cost'}
+                </p>
                 <p className="text-lg font-black text-orange-600 font-mono leading-none">
                   RM {estimate.price.toFixed(2)}
                 </p>

@@ -137,6 +137,9 @@ export type PrintRequest = {
   quoted_by_date: string | null
   quote_message: string | null
   delivery_cost: number | null
+  affiliate_code: string | null
+  affiliate_commission_amount: number | null
+  affiliate_discount_amount: number | null
   created_at: string
 }
 
@@ -590,4 +593,16 @@ export function parseGcodeStats(description: string | null | undefined): GcodeSt
 export function serializeGcodeStats(stats: GcodeStats | null | undefined): string {
   if (!stats) return ''
   return `<!-- GCODE_STATS: ${JSON.stringify(stats)} -->`
+}
+
+export type Affiliate = {
+  id: string
+  owner_id: string | null
+  code: string
+  name: string
+  commission_pct: number
+  discount_pct: number
+  is_active: boolean
+  clicks_count: number
+  created_at: string
 }

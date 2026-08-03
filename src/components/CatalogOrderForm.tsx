@@ -8,11 +8,12 @@ const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: 
 import type { CatalogItem, RequestPrinterView, PrintProfile, Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, parseMeshMapping, parseAllowedFilaments, parseTextMeshIndex, cleanDescription, isPreviewFile, COLOR_PRESETS, parseGcodeStats, parseDesignerMetadata } from '@/lib/types'
 import { calculateEstimate } from '@/lib/pricing'
-import { submitRequest } from '@/lib/actions'
+import Navbar from '@/components/Navbar'
+import { submitRequest, verifyAffiliateCode } from '@/lib/actions'
 import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
 import AddressInput from './AddressInput'
 import ProductMediaGallery from '@/components/ProductMediaGallery'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, Check, Sparkles, AlertCircle } from 'lucide-react'
 import MarkdownDescription from '@/components/MarkdownDescription'
 
 const inputClass =
@@ -122,6 +123,51 @@ export default function CatalogOrderForm({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
 
+  // Affiliate / Promo code states
+  const [promoCodeInput, setPromoCodeInput] = useState('')
+  const [activePromo, setActivePromo] = useState<{ code: string; discount_pct: number; commission_pct: number } | null>(null)
+  const [verifyingPromo, setVerifyingPromo] = useState(false)
+  const [promoError, setPromoError] = useState('')
+
+  // Load from session/local storage on mount
+  useEffect(() => {
+    const storedCode = sessionStorage.getItem('active_affiliate_code') || localStorage.getItem('affiliate_code')
+    if (storedCode) {
+      setPromoCodeInput(storedCode)
+      handleApplyPromo(storedCode)
+    }
+  }, [])
+
+  const handleApplyPromo = async (codeToVerify?: string) => {
+    const code = (codeToVerify ?? promoCodeInput).trim().toUpperCase()
+    if (!code) return
+
+    setVerifyingPromo(true)
+    setPromoError('')
+
+    const res = await verifyAffiliateCode(code, printer.id)
+    setVerifyingPromo(false)
+
+    if ('error' in res) {
+      setPromoError(res.error)
+      setActivePromo(null)
+    } else {
+      setActivePromo({
+        code: res.code,
+        discount_pct: res.discount_pct,
+        commission_pct: res.commission_pct
+      })
+      sessionStorage.setItem('active_affiliate_code', res.code)
+    }
+  }
+
+  const handleRemovePromo = () => {
+    setActivePromo(null)
+    setPromoCodeInput('')
+    setPromoError('')
+    sessionStorage.removeItem('active_affiliate_code')
+  }
+
   // Color options — prefer actual filament stock for the selected material, fall back to presets.
   // Keyed by filament id (not color name) since two different materials can share a color name.
   const allowedFilaments = parseAllowedFilaments(item.description)
@@ -146,7 +192,9 @@ export default function CatalogOrderForm({
   const costPerKg = activeFilament?.cost_per_kg ?? 55
   const scaleMultiplier = Math.pow(scalePct / 100, 3)
 
-  let baseUnitPrice = 0
+  let baseUnitPrice = 0 // Undiscounted unit price
+  let finalUnitPrice = 0 // Discounted unit price
+  let discountAmountPerUnit = 0
   let isAutoCalculated = false
   let calculatedBreakdown: any = null
 
@@ -166,17 +214,24 @@ export default function CatalogOrderForm({
       known_hours: currentHours,
       markup_percent: printer.markup_percent ?? 30,
       waste_percent: printer.waste_percent ?? 8,
+      affiliate_discount_pct: activePromo?.discount_pct ?? 0,
+      affiliate_commission_pct: activePromo?.commission_pct ?? 0,
     })
     baseUnitPrice = calculatedBreakdown.suggested_price
+    finalUnitPrice = calculatedBreakdown.final_price
+    discountAmountPerUnit = calculatedBreakdown.discount_amount
   } else {
     const baseMatPrice = (item.allow_material_choice && item.material_prices?.[material])
       ? Number(item.material_prices[material])
       : null
     const baseItemPrice = baseMatPrice !== null ? baseMatPrice : (item.base_price ?? 0)
     baseUnitPrice = baseItemPrice * scaleMultiplier
+    discountAmountPerUnit = baseUnitPrice * ((activePromo?.discount_pct ?? 0) / 100)
+    finalUnitPrice = baseUnitPrice - discountAmountPerUnit
   }
 
-  const orderTotalPrice = baseUnitPrice * quantity
+  const orderTotalPrice = finalUnitPrice * quantity
+  const totalDiscountAmount = discountAmountPerUnit * quantity
 
   // Check filament stock capacity
   const selectedFilamentRoll = filamentsForMaterial.find((f) => f.color === color)
@@ -283,6 +338,7 @@ export default function CatalogOrderForm({
       catalog_item_id: item.id,
       quantity,
       scale_pct:       scalePct,
+      affiliate_code:  activePromo?.code ?? null,
     })
 
     setPending(false)
@@ -826,6 +882,76 @@ export default function CatalogOrderForm({
               <span>Delivery:</span>
               <span className="text-slate-500 italic">Quoted by owner</span>
             </div>
+          )}
+
+          {totalDiscountAmount > 0 && (
+            <>
+              <div className="flex justify-between border-t border-dashed border-slate-150 pt-1.5 text-slate-400">
+                <span>Base Price:</span>
+                <span className="font-semibold line-through">
+                  RM {((isAutoCalculated ? baseUnitPrice : baseUnitPrice) * quantity).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-emerald-600 font-medium">
+                <span>Promo Discount ({activePromo?.discount_pct}%):</span>
+                <span className="font-bold">- RM {totalDiscountAmount.toFixed(2)}</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Promo Code Input */}
+        <div className="border-t border-slate-100 pt-2.5 space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Promo Code</span>
+            {activePromo && (
+              <span className="text-[10px] font-bold text-emerald-650 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 uppercase">
+                {activePromo.code} Applied
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Enter promo code"
+                value={promoCodeInput}
+                onChange={(e) => setPromoCodeInput(e.target.value)}
+                disabled={activePromo !== null || verifyingPromo}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold focus:border-orange-500 focus:bg-white focus:outline-none transition disabled:opacity-75 disabled:bg-slate-100 uppercase"
+              />
+              {activePromo && (
+                <Check className="absolute right-2 top-1.5 h-3.5 w-3.5 text-emerald-500" />
+              )}
+            </div>
+            {activePromo ? (
+              <button
+                type="button"
+                onClick={handleRemovePromo}
+                className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition whitespace-nowrap"
+              >
+                Remove
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleApplyPromo()}
+                disabled={verifyingPromo || !promoCodeInput.trim()}
+                className="rounded-lg bg-slate-900 px-3 py-1 text-xs font-bold text-white hover:bg-slate-800 transition disabled:opacity-50 whitespace-nowrap"
+              >
+                {verifyingPromo ? 'Applying...' : 'Apply'}
+              </button>
+            )}
+          </div>
+          {promoError && (
+            <p className="text-[10px] text-red-500 flex items-center gap-0.5 font-medium">
+              <AlertCircle className="h-2.5 w-2.5 shrink-0" /> {promoError}
+            </p>
+          )}
+          {activePromo && (
+            <p className="text-[10px] text-emerald-600 flex items-center gap-0.5 font-medium">
+              <Sparkles className="h-2.5 w-2.5 shrink-0 animate-pulse" /> {activePromo.discount_pct}% discount applied to order.
+            </p>
           )}
         </div>
 

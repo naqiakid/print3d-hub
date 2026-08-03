@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { ChevronDown, LayoutDashboard, Wrench, Settings, LogOut, Store, ShoppingBag, HelpCircle } from 'lucide-react'
+import { ChevronDown, LayoutDashboard, Wrench, Settings, LogOut, Store, ShoppingBag, HelpCircle, Users } from 'lucide-react'
 import Link from 'next/link'
 import { logout } from '@/lib/actions'
 
@@ -64,6 +64,13 @@ export default function UserMenu({ email }: { email: string }) {
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
             >
               <Wrench className="h-4 w-4 text-slate-400" /> Equipment
+            </Link>
+            <Link
+              href="/dashboard/affiliates"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
+            >
+              <Users className="h-4 w-4 text-slate-400" /> Affiliates
             </Link>
             <Link
               href="/dashboard/account"

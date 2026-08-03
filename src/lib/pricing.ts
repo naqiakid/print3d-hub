@@ -60,6 +60,8 @@ export type EstimateInput = {
   ironing?: boolean               // adds 15% print time, smoother top surface
   known_weight_g?: number | null  // from real STL slicing — bypasses the size-bucket weight guess
   known_hours?: number | null     // from real STL slicing — bypasses the size-bucket time guess
+  affiliate_discount_pct?: number
+  affiliate_commission_pct?: number
 }
 
 export type EstimateResult = {
@@ -71,6 +73,9 @@ export type EstimateResult = {
   waste_cost: number
   base_cost: number
   suggested_price: number
+  discount_amount: number
+  commission_amount: number
+  final_price: number
 }
 
 // Map legacy DB values to current quality keys
@@ -120,6 +125,10 @@ export function calculateEstimate(input: EstimateInput): EstimateResult {
   const base_cost        = subtotal + waste_cost
   const suggested_price  = base_cost * (1 + markup_percent / 100)
 
+  const discount_amount = suggested_price * ((input.affiliate_discount_pct ?? 0) / 100)
+  const commission_amount = suggested_price * ((input.affiliate_commission_pct ?? 0) / 100)
+  const final_price = suggested_price - discount_amount
+
   const r = (n: number) => Math.round(n * 100) / 100
   return {
     weight_g: r(weight_g), hours: r(hours),
@@ -129,6 +138,9 @@ export function calculateEstimate(input: EstimateInput): EstimateResult {
     waste_cost:       r(waste_cost),
     base_cost:        r(base_cost),
     suggested_price:  r(suggested_price),
+    discount_amount:  r(discount_amount),
+    commission_amount: r(commission_amount),
+    final_price:      r(final_price),
   }
 }
 
