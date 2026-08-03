@@ -782,6 +782,28 @@ export default function RequestForm({
     })
   }, [uploadFile])
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).__pendingRequestFile) {
+      const pendingFile = (window as any).__pendingRequestFile
+      const params = (window as any).__pendingRequestParams
+
+      setModelMode('file')
+      addFiles([pendingFile])
+
+      if (params) {
+        if (params.material) {
+          setMaterial(params.material)
+        }
+        if (params.infill) {
+          setCustomInfill(params.infill)
+        }
+      }
+
+      delete (window as any).__pendingRequestFile
+      delete (window as any).__pendingRequestParams
+    }
+  }, [addFiles])
+
   const removeFile      = useCallback((id: string) => setFileItems((prev) => prev.filter((i) => i.id !== id)), [])
 
   const updateFileColor = useCallback((id: string, color: string, hex: string, filamentId?: string) =>
