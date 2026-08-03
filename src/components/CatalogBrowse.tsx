@@ -2,7 +2,7 @@
 
 import { useState, lazy, Suspense } from 'react'
 import Link from 'next/link'
-import { Locate, MapPin, Package, Sliders, ShoppingBag } from 'lucide-react'
+import { Locate, MapPin, Package, Sliders, ShoppingBag, Search } from 'lucide-react'
 import { cleanDescription, getExcerpt, type CatalogItem } from '@/lib/types'
 import { haversineKm, fmtDist } from '@/lib/geo'
 
@@ -29,6 +29,7 @@ export default function CatalogBrowse({ items, mode }: Props) {
   const [userLng, setUserLng]     = useState<number | null>(null)
   const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle')
   const [activeCategory, setActiveCategory] = useState('All')
+  const [searchQuery, setSearchQuery] = useState('')
 
   function requestLocation() {
     if (!navigator.geolocation) { setGeoStatus('denied'); return }
@@ -67,9 +68,17 @@ export default function CatalogBrowse({ items, mode }: Props) {
     'All',
     ...[...new Set(items.map((i) => i.category).filter((c): c is string => !!c))].sort(),
   ]
-  const visible = activeCategory === 'All'
+  const visible = (activeCategory === 'All'
     ? enriched
     : enriched.filter(({ item }) => (item.category ?? 'Uncategorized') === activeCategory)
+  ).filter(({ item }) => {
+    const term = searchQuery.trim().toLowerCase()
+    if (!term) return true
+    return (
+      item.name.toLowerCase().includes(term) ||
+      (item.description ?? '').toLowerCase().includes(term)
+    )
+  })
 
   const heading = mode === 'custom'
     ? 'Browse customisable products'
@@ -132,25 +141,43 @@ export default function CatalogBrowse({ items, mode }: Props) {
         </div>
       )}
 
-      {/* Category filter */}
-      {categories.length > 1 && (
-        <div className="mb-5 flex flex-wrap gap-2">
-          {categories.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setActiveCategory(c)}
-              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                activeCategory === c
-                  ? 'border-orange-500 bg-orange-500 text-white'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-orange-200'
-              }`}
-            >
-              {c}
-            </button>
-          ))}
+      {/* Category filter & Search Bar */}
+      <div className="mb-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-slate-50 border border-slate-200 p-2.5 rounded-2xl">
+        {categories.length > 1 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {categories.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setActiveCategory(c)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold tracking-wide transition ${
+                  activeCategory === c
+                    ? 'border-orange-500 bg-orange-500 text-white shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs font-semibold text-slate-400 pl-1.5">All Categories</div>
+        )}
+
+        {/* Search Bar Input */}
+        <div className="relative w-full md:max-w-xs">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+            <Search className="h-3.5 w-3.5" />
+          </span>
+          <input
+            type="text"
+            placeholder="Search products..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-4 py-2 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition"
+          />
         </div>
-      )}
+      </div>
 
       {/* Map + List — same split layout as Browse Printers */}
       <div className="flex flex-col gap-6 lg:flex-row">
@@ -229,7 +256,7 @@ export function ProductCard({
   return (
     <Link
       href={`/order/${item.owner_id}/${item.id}`}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:border-orange-200 hover:shadow-md"
+      className="group flex flex-col h-full overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:border-orange-200 hover:shadow-md shadow-sm"
     >
       {/* Photo */}
       <div className="relative h-44 w-full shrink-0 overflow-hidden bg-slate-100 flex items-center justify-center">
@@ -242,16 +269,6 @@ export function ProductCard({
         ) : (
           <Package className="h-10 w-10 text-slate-300" />
         )}
-        {/* Availability dot */}
-        <span
-          className={`absolute right-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-            item.shop_available
-              ? 'bg-green-500/90 text-white'
-              : 'bg-slate-700/80 text-slate-200'
-          }`}
-        >
-          {item.shop_available ? 'Available' : 'Busy'}
-        </span>
         {item.category && (
           <span className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-medium text-slate-700 shadow-sm">
             {item.category}
@@ -265,9 +282,21 @@ export function ProductCard({
           {item.name}
         </p>
 
-        {/* Shop name + distance */}
-        <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
-          <span className="truncate">{item.shop_name}</span>
+        {/* Shop name + distance + Status Pulsing Indicator */}
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-400">
+          <span className="truncate text-slate-650 font-bold">{item.shop_name}</span>
+          <span>·</span>
+          {item.shop_available ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              In stock
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500">
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-450" />
+              Busy
+            </span>
+          )}
           {distanceKm !== undefined && (
             <>
               <span>·</span>
@@ -280,7 +309,7 @@ export function ProductCard({
         </div>
 
         {item.description && (
-          <p className="mt-2 flex-1 text-xs text-slate-500 line-clamp-2 leading-relaxed">
+          <p className="mt-2 text-xs text-slate-500 line-clamp-2 leading-relaxed">
             {getExcerpt(item.description, 95)}
           </p>
         )}
@@ -306,9 +335,9 @@ export function ProductCard({
           </div>
         )}
 
-        {/* Price */}
+        {/* Price - aligned to bottom */}
         {item.base_price != null && (
-          <p className="mt-3 text-sm font-bold text-orange-600">
+          <p className="mt-auto pt-3 text-sm font-bold text-orange-605 text-orange-600">
             {(mode === 'custom' || (mode === 'all' && !isReadyMade)) ? 'From ' : ''}RM{item.base_price.toFixed(2)}
           </p>
         )}
