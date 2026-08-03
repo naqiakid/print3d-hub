@@ -557,11 +557,29 @@ export default function PrinterProfileView({
                 ? 'Quote on request'
                 : `RM${shop.price_min.toFixed(2)}–RM${shop.price_max.toFixed(2)}`}
             </div>
-            <p className="mb-5 text-xs text-slate-500">
+            <p className="mb-4 text-xs text-slate-505">
               {shop.price_min === 0 && shop.price_max === 0
                 ? 'Upload STL to get estimate instantly'
                 : 'Standard price range per order'}
             </p>
+
+            {/* Quick logistics banner */}
+            <div className="mb-4 bg-slate-50 border border-slate-150/60 rounded-2xl p-3.5 space-y-2.5 text-xs text-slate-600 font-medium">
+              <div className="flex items-center gap-2">
+                <span className="text-[14px] shrink-0 select-none">📍</span>
+                <span className="truncate" title={shop.pickup_address || ''}>
+                  {shop.pickup_address ? shop.pickup_address.split(',').slice(-2).join(',').trim() : 'Local area'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 border-t border-slate-200/50 pt-2">
+                <span className="text-[14px] shrink-0 select-none">🚚</span>
+                <span>
+                  {shop.delivery_available
+                    ? `Pickup or local delivery (RM${(shop.delivery_rate_per_km ?? 1).toFixed(2)}/km)`
+                    : 'Self-pickup only'}
+                </span>
+              </div>
+            </div>
 
             {shop.available ? (
               <div className="space-y-2">
@@ -656,7 +674,11 @@ export default function PrinterProfileView({
       {shop.available && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white/95 backdrop-blur-md px-4 py-3 flex items-center justify-between z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-none mb-1">Akid's Printer</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-none mb-1 flex items-center gap-1">
+              <span>{shop.name}</span>
+              <span>·</span>
+              <span>{shop.pickup_address ? shop.pickup_address.split(',').slice(-2).join(',').trim() : 'Local'}</span>
+            </p>
             <p className="text-sm font-black text-slate-900 leading-none">
               {shop.price_min === 0 && shop.price_max === 0
                 ? 'Quote on request'

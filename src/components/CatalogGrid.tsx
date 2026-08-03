@@ -129,6 +129,33 @@ export default function CatalogGrid({
                       ))}
                     </div>
                   )}
+
+                  {/* Stock Colors preview swatches */}
+                  {item.allow_color_choice && (() => {
+                    const inStockFilaments = filaments.filter((f) => f.in_stock)
+                    const uniqueColors = Array.from(new Map(inStockFilaments.map((f) => [f.color_hex.toLowerCase(), f])).values()).slice(0, 6)
+                    if (uniqueColors.length === 0) return null
+                    return (
+                      <div className="mb-3 flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Colors:</span>
+                        <div className="flex -space-x-1.5 overflow-hidden">
+                          {uniqueColors.map((f) => (
+                            <span
+                              key={f.id}
+                              className="inline-block h-3.5 w-3.5 rounded-full border border-white shadow-sm ring-1 ring-slate-200/40"
+                              style={{ backgroundColor: f.color_hex }}
+                              title={`${f.color} (${f.material.toUpperCase()})`}
+                            />
+                          ))}
+                        </div>
+                        {inStockFilaments.length > 6 && (
+                          <span className="text-[10px] text-slate-400 font-semibold ml-1">
+                            +{inStockFilaments.length - 6} more
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 <div className="mt-4">
