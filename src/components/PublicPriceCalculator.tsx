@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Upload, FileCode2, Info, ChevronRight, HelpCircle, Loader2, Sparkles, Check, AlertCircle } from 'lucide-react'
+import { Upload, FileCode2, Info, ChevronRight, HelpCircle, Loader2, Sparkles, Check, AlertCircle, Trash2, Plus } from 'lucide-react'
 import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import { useRouter } from 'next/navigation'
@@ -125,13 +125,19 @@ function ModelPreview({ geometry }: { geometry: THREE.BufferGeometry }) {
   )
 }
 
+interface SlicedItem {
+  id: string
+  file: File
+  dimensions: { x: number; y: number; z: number }
+  volumeCc: number
+  geometry: THREE.BufferGeometry | null
+}
+
 export default function PublicPriceCalculator({ printer, filaments }: Props) {
   const router = useRouter()
-  const [file, setFile] = useState<File | null>(null)
+  const [slicedItems, setSlicedItems] = useState<SlicedItem[]>([])
   const [parsing, setParsing] = useState(false)
-  const [dimensions, setDimensions] = useState<{ x: number; y: number; z: number } | null>(null)
-  const [rawVolumeCc, setRawVolumeCc] = useState<number | null>(null)
-  const [parsedGeometry, setParsedGeometry] = useState<THREE.BufferGeometry | null>(null)
+  const [activePreviewId, setActivePreviewId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Options
@@ -177,7 +183,6 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
         code: res.code,
         discount_pct: res.discount_pct
       })
-      // Keep it synced in session storage
       sessionStorage.setItem('active_affiliate_code', res.code)
     }
   }
@@ -191,10 +196,10 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
 
   const handleProceedToOrder = (e: React.MouseEvent) => {
     e.preventDefault()
-    if (!file) return
+    if (slicedItems.length === 0) return
 
     if (typeof window !== 'undefined') {
-      (window as any).__pendingRequestFile = file;
+      (window as any).__pendingRequestFiles = slicedItems.map((item) => item.file);
       (window as any).__pendingRequestParams = {
         material: selectedMaterial,
         infill: infill,
@@ -206,67 +211,109 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
 
   const handleFileChange = async (files: FileList | null) => {
     if (!files || files.length === 0) return
-    const selectedFile = files[0]
-    
-    const ext = selectedFile.name.toLowerCase().split('.').pop()
-    if (ext !== 'stl' && ext !== 'obj') {
-      alert('Only .stl and .obj files are supported in this estimator.')
-      return
-    }
+    const fileList = Array.from(files)
 
-    if (selectedFile.size > 50 * 1024 * 1024) {
-      alert('File exceeds the maximum size limit of 50MB.')
-      return
-    }
-
-    setFile(selectedFile)
-    setParsing(true)
-    setParsedGeometry(null)
-
-    if (ext === 'obj') {
-      // Mock stats for OBJ files in instant calculator; direct request form will handle upload
-      setDimensions({ x: 60, y: 60, z: 60 })
-      setRawVolumeCc(45)
-      setParsing(false)
-      return
-    }
-
-    try {
-      const arrayBuffer = await selectedFile.arrayBuffer()
-      const loader = new STLLoader()
-      const geometry = loader.parse(arrayBuffer)
-      setParsedGeometry(geometry)
-      
-      // Bounding box dimensions
-      geometry.computeBoundingBox()
-      const box = geometry.boundingBox
-      if (box) {
-        const size = new THREE.Vector3()
-        box.getSize(size)
-        setDimensions({
-          x: Math.round(size.x * 10) / 10,
-          y: Math.round(size.y * 10) / 10,
-          z: Math.round(size.z * 10) / 10,
-        })
+    // Filter valid files
+    const validFiles = fileList.filter((f) => {
+      const ext = f.name.toLowerCase().split('.').pop()
+      if (ext !== 'stl' && ext !== 'obj' && ext !== '3mf') {
+        alert(`File format for "${f.name}" is not supported. Upload .stl, .obj, or .3mf.`)
+        return false
       }
+      if (f.size > 50 * 1024 * 1024) {
+        alert(`File "${f.name}" exceeds the 50MB maximum size limit.`)
+        return false
+      }
+      return true
+    })
 
-      // Volume calculation
-      const volumeMm3 = calculateSTLVolume(geometry)
-      setRawVolumeCc(volumeMm3 / 1000)
-    } catch (err) {
-      console.error('Failed to parse STL file:', err)
-      alert('Error parsing STL file. Ensure the file is not corrupted.')
-      setFile(null)
-    } finally {
-      setParsing(false)
+    if (validFiles.length === 0) return
+
+    setParsing(true)
+    
+    // Parse files sequentially
+    for (const f of validFiles) {
+      const ext = f.name.toLowerCase().split('.').pop()
+      const newId = crypto.randomUUID()
+
+      if (ext === 'obj' || ext === '3mf') {
+        // Fallback mock stats for OBJ/3MF files
+        const newItem: SlicedItem = {
+          id: newId,
+          file: f,
+          dimensions: { x: 75, y: 75, z: 75 },
+          volumeCc: 50,
+          geometry: null,
+        }
+        setSlicedItems((prev) => [...prev, newItem])
+      } else {
+        // Parse STL
+        try {
+          const arrayBuffer = await f.arrayBuffer()
+          const loader = new STLLoader()
+          const geometry = loader.parse(arrayBuffer)
+          
+          geometry.computeBoundingBox()
+          const box = geometry.boundingBox
+          let dims = { x: 50, y: 50, z: 50 }
+          if (box) {
+            const size = new THREE.Vector3()
+            box.getSize(size)
+            dims = {
+              x: Math.round(size.x * 10) / 10,
+              y: Math.round(size.y * 10) / 10,
+              z: Math.round(size.z * 10) / 10,
+            }
+          }
+
+          const volumeMm3 = calculateSTLVolume(geometry)
+          const newItem: SlicedItem = {
+            id: newId,
+            file: f,
+            dimensions: dims,
+            volumeCc: volumeMm3 / 1000,
+            geometry,
+          }
+          setSlicedItems((prev) => [...prev, newItem])
+          setActivePreviewId((prev) => prev ?? newId)
+        } catch (err) {
+          console.error(`Failed to parse STL file "${f.name}":`, err)
+          alert(`Error parsing STL file "${f.name}". Ensure it is not corrupted.`)
+        }
+      }
     }
+    setParsing(false)
+  }
+
+  const handleRemoveItem = (id: string) => {
+    setSlicedItems((prev) => {
+      const target = prev.find((item) => item.id === id)
+      if (target?.geometry) {
+        target.geometry.dispose()
+      }
+      return prev.filter((item) => item.id !== id)
+    })
+    setActivePreviewId((prev) => {
+      if (prev !== id) return prev
+      const remaining = slicedItems.filter((item) => item.id !== id)
+      return remaining.find((item) => item.geometry !== null)?.id ?? remaining[0]?.id ?? null
+    })
+  }
+
+  const handleClearAll = () => {
+    slicedItems.forEach((item) => {
+      if (item.geometry) {
+        item.geometry.dispose()
+      }
+    })
+    setSlicedItems([])
+    setActivePreviewId(null)
   }
 
   // Perform price calculation
   const getEstimate = () => {
-    if (rawVolumeCc == null) return null
+    if (slicedItems.length === 0) return null
 
-    // Plastic density grams per cc
     const DENSITIES: Record<FilamentMaterial, number> = {
       pla: 1.24,
       petg: 1.27,
@@ -277,17 +324,21 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
     }
     const density = DENSITIES[selectedMaterial] ?? 1.24
 
-    // Weight: Volume * Density * (infill * 0.6 + 0.4) to account for walls
-    const estimatedWeightG = rawVolumeCc * density * ((infill / 100) * 0.6 + 0.4)
-    
-    // Print hours: Standard extrusion of 15g per hour, scaled by nozzle multiplier
-    const nozzleTimeMults: Record<string, number> = { '0.2': 1.8, '0.4': 1.0, '0.6': 0.7, '0.8': 0.5 }
-    const mult = nozzleTimeMults[String(nozzle)] ?? 1.0
-    const estimatedHours = (estimatedWeightG / 15) * mult
+    let totalWeightG = 0
+    let totalHours = 0
+
+    slicedItems.forEach((item) => {
+      const w = item.volumeCc * density * ((infill / 100) * 0.6 + 0.4)
+      totalWeightG += w
+
+      const nozzleTimeMults: Record<string, number> = { '0.2': 1.8, '0.4': 1.0, '0.6': 0.7, '0.8': 0.5 }
+      const mult = nozzleTimeMults[String(nozzle)] ?? 1.0
+      totalHours += (w / 15) * mult
+    })
 
     const filamentCostPerKg = (printer.filament_costs || {})[selectedMaterial] ?? 50
     const est = calculateEstimate({
-      size: 'medium', // fallback bucket
+      size: 'medium',
       quality: 'basic',
       material: selectedMaterial,
       power_watts: printer.power_watts ?? 350,
@@ -296,14 +347,14 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
       markup_percent: printer.markup_percent ?? 30,
       machine_rate_per_hour: printer.machine_rate_per_hour ?? 1.5,
       waste_percent: printer.waste_percent ?? 8,
-      known_weight_g: estimatedWeightG,
-      known_hours: estimatedHours,
+      known_weight_g: totalWeightG,
+      known_hours: totalHours,
       affiliate_discount_pct: activePromo?.discount_pct ?? 0,
     })
 
     return {
-      weight: Math.round(estimatedWeightG),
-      hours: Math.round(estimatedHours * 10) / 10,
+      weight: Math.round(totalWeightG),
+      hours: Math.round(totalHours * 10) / 10,
       price: est.final_price,
       rawPrice: est.suggested_price,
       discountAmount: est.discount_amount,
@@ -311,101 +362,146 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
   }
 
   const estimate = getEstimate()
+  const activePreviewItem = slicedItems.find((item) => item.id === activePreviewId)
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-      <div>
-        <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-          <span>⚡ Instant Price Estimator</span>
-        </h3>
-        <p className="text-[11px] text-slate-400 mt-0.5">
-          Drop your STL file to estimate weight, time, and pricing instantly.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+            <span>⚡ Instant Price Estimator</span>
+          </h3>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Drop STL, OBJ, or 3MF files to calculate weight, time, and pricing.
+          </p>
+        </div>
+        {slicedItems.length > 0 && (
+          <button
+            type="button"
+            onClick={handleClearAll}
+            className="text-[10px] font-bold text-red-500 hover:text-red-600 transition"
+          >
+            Clear All
+          </button>
+        )}
       </div>
 
       {/* File Dropzone */}
-      {!file ? (
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50/5 transition duration-200 group"
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".stl,.obj"
-            className="hidden"
-            onChange={(e) => handleFileChange(e.target.files)}
-          />
-          <Upload className="mx-auto h-7 w-7 text-slate-400 group-hover:text-orange-500 transition mb-2" />
-          <p className="text-xs font-bold text-slate-600 group-hover:text-slate-800 transition">
-            Upload 3D model
-          </p>
-          <p className="text-[10px] text-slate-400 mt-1">Drag and drop or click to browse</p>
-          <p className="text-[9px] text-slate-400 mt-1.5 font-medium border-t border-slate-100 pt-2 max-w-[240px] mx-auto">
-            Supported formats: <strong>.STL, .OBJ</strong><br />
-            Max file size: <strong>50MB</strong>
-          </p>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-slate-150 p-3 bg-slate-50 flex items-center gap-2 text-xs">
-          <FileCode2 className="h-5 w-5 text-orange-500 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-slate-700 truncate">{file.name}</p>
-            <p className="text-[10px] text-slate-400 font-medium">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+      <div
+        onClick={() => fileInputRef.current?.click()}
+        className={`border-2 border-dashed border-slate-200 rounded-xl p-5 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50/5 transition duration-200 group ${
+          slicedItems.length > 0 ? 'py-4' : 'py-7'
+        }`}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".stl,.obj,.3mf"
+          multiple
+          className="hidden"
+          onChange={(e) => handleFileChange(e.target.files)}
+        />
+        <Upload className="mx-auto h-6 w-6 text-slate-400 group-hover:text-orange-500 transition mb-1.5" />
+        <p className="text-xs font-bold text-slate-650 group-hover:text-slate-800 transition">
+          {slicedItems.length > 0 ? 'Add more files' : 'Upload 3D models'}
+        </p>
+        {slicedItems.length === 0 && (
+          <>
+            <p className="text-[10px] text-slate-400 mt-0.5">Drag and drop or click to browse</p>
+            <p className="text-[9px] text-slate-400 mt-1.5 font-medium border-t border-slate-100 pt-2 max-w-[240px] mx-auto">
+              Supported formats: <strong>.STL, .OBJ, .3MF</strong><br />
+              Max file size: <strong>50MB per file</strong>
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Sliced File Queue */}
+      {slicedItems.length > 0 && (
+        <div className="space-y-2 border border-slate-150 rounded-xl p-2.5 bg-slate-50/40">
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Uploaded Files ({slicedItems.length})</p>
+          <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+            {slicedItems.map((item) => {
+              const isStl = item.file.name.toLowerCase().endsWith('.stl')
+              const isSelected = item.id === activePreviewId
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => isStl && setActivePreviewId(item.id)}
+                  className={`rounded-lg border p-2 flex items-center justify-between gap-3 text-xs cursor-pointer transition ${
+                    isSelected
+                      ? 'border-orange-200 bg-orange-50/20 shadow-sm'
+                      : isStl
+                      ? 'border-slate-150 bg-white hover:border-slate-250'
+                      : 'border-slate-150 bg-white cursor-default'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileCode2 className={`h-4 w-4 shrink-0 ${isStl ? 'text-orange-500' : 'text-slate-400'}`} />
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-700 truncate max-w-[160px]">{item.file.name}</p>
+                      <p className="text-[9px] text-slate-400 font-medium">
+                        {(item.file.size / 1024 / 1024).toFixed(2)} MB · {isStl ? 'STL (Click to preview)' : item.file.name.split('.').pop()?.toUpperCase()}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleRemoveItem(item.id)
+                    }}
+                    className="text-slate-400 hover:text-red-500 p-1 rounded transition"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )
+            })}
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setFile(null)
-              setDimensions(null)
-              setRawVolumeCc(null)
-              setParsedGeometry(null)
-            }}
-            className="text-slate-400 hover:text-red-500 transition text-[10px] font-bold"
-          >
-            Clear
-          </button>
         </div>
       )}
 
       {/* Loading State */}
       {parsing && (
-        <div className="flex items-center justify-center gap-2 py-4 text-xs font-medium text-slate-500">
+        <div className="flex items-center justify-center gap-2 py-3 text-xs font-medium text-slate-500 bg-slate-50 rounded-xl border border-slate-150 animate-pulse">
           <Loader2 className="h-4 w-4 text-orange-500 animate-spin" />
           <span>Analyzing model geometry...</span>
         </div>
       )}
 
       {/* Options & Results */}
-      {file && !parsing && dimensions && estimate && (
-        <div className="pt-4 border-t border-slate-100 animate-fade-in">
+      {slicedItems.length > 0 && !parsing && estimate && (
+        <div className="pt-4 border-t border-slate-150 animate-fade-in">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
-            {/* Left Column: 3D Preview (for STL files only) */}
+            {/* Left Column: Active 3D Preview */}
             <div>
-              {parsedGeometry ? (
-                <ModelPreview geometry={parsedGeometry} />
+              {activePreviewItem?.geometry ? (
+                <ModelPreview geometry={activePreviewItem.geometry} />
               ) : (
                 <div className="w-full aspect-square md:aspect-video rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-center p-4">
-                  <FileCode2 className="h-8 w-8 text-slate-350 mb-2 animate-bounce" />
+                  <FileCode2 className="h-8 w-8 text-slate-350 mb-2" />
                   <p className="text-xs font-bold text-slate-600">3D Preview Unavailable</p>
                   <p className="text-[10px] text-slate-400 mt-1 max-w-[200px] mx-auto">
-                    Instant 3D model parsing is supported for STL files. You can still order this OBJ file.
+                    Instant 3D rendering is active for STL files. Click any STL file above to preview it.
                   </p>
                 </div>
               )}
               
-              <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 space-y-1.5 text-[11px]">
-                <div className="flex justify-between items-center text-slate-500">
-                  <span>File Name</span>
-                  <span className="font-semibold text-slate-700 truncate max-w-[150px]">{file.name}</span>
+              {activePreviewItem && (
+                <div className="mt-3 rounded-xl border border-slate-150 bg-slate-50/50 p-2.5 space-y-1.5 text-[11px]">
+                  <div className="flex justify-between items-center text-slate-500">
+                    <span>Active Preview</span>
+                    <span className="font-semibold text-slate-700 truncate max-w-[150px]">{activePreviewItem.file.name}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-500">
+                    <span>Preview Bounds</span>
+                    <span className="font-semibold text-slate-700 font-mono">
+                      {activePreviewItem.dimensions.x} × {activePreviewItem.dimensions.y} × {activePreviewItem.dimensions.z} mm
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center text-slate-500">
-                  <span>Model Bounds</span>
-                  <span className="font-semibold text-slate-700 font-mono">
-                    {dimensions.x} × {dimensions.y} × {dimensions.z} mm
-                  </span>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Right Column: Parameters & Checkout */}
@@ -462,7 +558,7 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
               </div>
 
               {/* Promo Code Input */}
-              <div className="pt-3 border-t border-slate-100 space-y-2">
+              <div className="pt-3 border-t border-slate-150 space-y-2">
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   Promo / Affiliate Code
                 </label>
@@ -514,11 +610,11 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
               {/* Estimates Card */}
               <div className="rounded-xl border border-orange-100 bg-orange-50/20 p-3.5 space-y-2">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500 font-medium">Est. Weight</span>
+                  <span className="text-slate-500 font-medium">Est. Weight (Total)</span>
                   <span className="font-semibold text-slate-700 font-mono">{estimate.weight} grams</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500 font-medium">Est. Print Time</span>
+                  <span className="text-slate-500 font-medium">Est. Print Time (Total)</span>
                   <span className="font-semibold text-slate-700 font-mono">
                     {estimate.hours} hour{estimate.hours !== 1 ? 's' : ''}
                   </span>

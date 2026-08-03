@@ -783,23 +783,26 @@ export default function RequestForm({
   }, [uploadFile])
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).__pendingRequestFile) {
-      const pendingFile = (window as any).__pendingRequestFile
+    if (typeof window !== 'undefined') {
+      const pendingFiles = (window as any).__pendingRequestFiles || ((window as any).__pendingRequestFile ? [(window as any).__pendingRequestFile] : null)
       const params = (window as any).__pendingRequestParams
 
-      setModelMode('file')
-      addFiles([pendingFile])
+      if (pendingFiles && pendingFiles.length > 0) {
+        setModelMode('file')
+        addFiles(pendingFiles)
 
-      if (params) {
-        if (params.material) {
-          setMaterial(params.material)
-        }
-        if (params.infill) {
-          setCustomInfill(params.infill)
+        if (params) {
+          if (params.material) {
+            setMaterial(params.material)
+          }
+          if (params.infill) {
+            setCustomInfill(params.infill)
+          }
         }
       }
 
       delete (window as any).__pendingRequestFile
+      delete (window as any).__pendingRequestFiles
       delete (window as any).__pendingRequestParams
     }
   }, [addFiles])
