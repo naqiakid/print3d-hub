@@ -13,7 +13,7 @@ import {
   getWhatsAppLink,
   parseAssemblyMetadata,
   cleanDescription,
-  stripHtml,
+  getExcerpt,
 } from '@/lib/types'
 import { updateRequestStatus, sendQuote } from '@/lib/actions'
 import {
@@ -383,7 +383,7 @@ export default function RequestCard({ request, printer, onCardDragStart }: { req
 
         {/* Subtitle / Description */}
         <p className="text-xs text-slate-500 font-medium line-clamp-2 w-full">
-          {request.model_title || stripHtml(request.description) || 'No description provided'}
+          {request.model_title || getExcerpt(request.description, 95) || 'No description provided'}
         </p>
 
         {/* Tag / Chip row */}

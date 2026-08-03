@@ -50,7 +50,7 @@ export default async function HomePage() {
               {' '}near you
             </h1>
 
-            <p className="mb-8 max-w-xl text-lg leading-relaxed text-slate-300">
+            <p className="mb-8 max-w-xl text-lg leading-relaxed text-slate-200">
               Connect with vetted local 3D printer owners. Choose a design or bring your own,
               and pick up locally—no 3D printer required.
             </p>
@@ -128,10 +128,10 @@ export default async function HomePage() {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
 
             {/* 1 — Fully custom */}
-            <div className="relative flex flex-col rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:border-orange-200 hover:shadow-md transition">
-              <span className="absolute right-5 top-4 text-5xl font-black text-slate-100 select-none">01</span>
-              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100">
-                <Upload className="h-5 w-5 text-orange-600" />
+            <div className="group relative flex flex-col rounded-3xl border border-slate-200 bg-slate-50/40 p-8 shadow-sm hover:bg-white hover:border-orange-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300">
+              <span className="absolute right-6 top-5 text-5xl font-black text-slate-100/60 select-none group-hover:text-orange-50/70 transition-colors duration-300">01</span>
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 group-hover:bg-orange-500 transition-all duration-300 shadow-sm shadow-orange-100 group-hover:shadow-orange-500/20">
+                <Upload className="h-5 w-5 text-orange-600 group-hover:text-white transition-colors duration-300" />
               </div>
               <h3 className="mb-2 text-lg font-bold text-slate-900">Fully custom print</h3>
               <p className="mb-6 flex-1 text-sm leading-relaxed text-slate-500">
@@ -147,13 +147,13 @@ export default async function HomePage() {
             </div>
 
             {/* 2 — Semi-custom */}
-            <div className="relative flex flex-col rounded-2xl border border-orange-200 bg-orange-50/40 p-8 shadow-sm hover:shadow-md transition">
-              <span className="absolute right-5 top-4 text-5xl font-black text-orange-100 select-none">02</span>
+            <div className="group relative flex flex-col rounded-3xl border-2 border-orange-400 bg-orange-50/20 p-8 shadow-md hover:bg-orange-50/40 hover:border-orange-500 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+              <span className="absolute right-6 top-5 text-5xl font-black text-orange-200/50 select-none group-hover:text-orange-300/40 transition-colors duration-300">02</span>
               <div className="mb-1 self-start rounded-full bg-orange-500 px-2.5 py-0.5 text-[11px] font-semibold text-white">
                 Most popular
               </div>
-              <div className="mb-4 mt-4 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100">
-                <Sliders className="h-5 w-5 text-orange-600" />
+              <div className="mb-4 mt-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500 transition-all duration-300 shadow-sm shadow-orange-100 group-hover:shadow-orange-500/20">
+                <Sliders className="h-5 w-5 text-white" />
               </div>
               <h3 className="mb-2 text-lg font-bold text-slate-900">Semi-custom</h3>
               <p className="mb-6 flex-1 text-sm leading-relaxed text-slate-500">
@@ -170,10 +170,10 @@ export default async function HomePage() {
             </div>
 
             {/* 3 — Ready-made */}
-            <div className="relative flex flex-col rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:border-orange-200 hover:shadow-md transition">
-              <span className="absolute right-5 top-4 text-5xl font-black text-slate-100 select-none">03</span>
-              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100">
-                <ShoppingBag className="h-5 w-5 text-orange-600" />
+            <div className="group relative flex flex-col rounded-3xl border border-slate-200 bg-slate-50/40 p-8 shadow-sm hover:bg-white hover:border-orange-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300">
+              <span className="absolute right-6 top-5 text-5xl font-black text-slate-100/60 select-none group-hover:text-orange-50/70 transition-colors duration-300">03</span>
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 group-hover:bg-orange-500 transition-all duration-300 shadow-sm shadow-orange-100 group-hover:shadow-orange-500/20">
+                <ShoppingBag className="h-5 w-5 text-orange-600 group-hover:text-white transition-colors duration-300" />
               </div>
               <h3 className="mb-2 text-lg font-bold text-slate-900">Ready-made product</h3>
               <p className="mb-6 flex-1 text-sm leading-relaxed text-slate-500">

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Package } from 'lucide-react'
 import type { CatalogItem, Filament } from '@/lib/types'
-import { cleanDescription, stripHtml, parseDesignerMetadata } from '@/lib/types'
+import { cleanDescription, getExcerpt, parseDesignerMetadata } from '@/lib/types'
 
 function isInStock(item: CatalogItem, filaments: Filament[]): boolean {
   if (item.allow_material_choice) {
@@ -115,7 +115,7 @@ export default function CatalogGrid({
                 <div className="flex-1">
                   <p className="font-semibold text-slate-900 leading-snug mb-1.5 line-clamp-1">{item.name}</p>
                   {item.description && (
-                    <p className="mb-3 text-xs text-slate-500 line-clamp-2 leading-relaxed">{stripHtml(item.description)}</p>
+                    <p className="mb-3 text-xs text-slate-500 line-clamp-2 leading-relaxed">{getExcerpt(item.description, 95)}</p>
                   )}
                   {badges.length > 0 && (
                     <div className="mb-3 flex flex-wrap gap-1">

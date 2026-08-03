@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import type { PrintRequest } from '@/lib/types'
-import { MATERIAL_LABELS, QUALITY_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, isPreviewFile, cleanDescription, stripHtml, getColorHexByName } from '@/lib/types'
+import { MATERIAL_LABELS, QUALITY_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, isPreviewFile, cleanDescription, getExcerpt, getColorHexByName } from '@/lib/types'
 
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 
@@ -133,7 +133,7 @@ export default function TrackingSummary({ request, pickupAddress, catalogItemStl
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-slate-700">Order summary</h2>
-          <p className="text-sm text-slate-650 mt-1">{stripHtml(request.description?.replace(/Catalog order: /, ''))}</p>
+          <p className="text-sm text-slate-655 mt-1">{getExcerpt(request.description?.replace(/Catalog order: /, ''), 120)}</p>
         </div>
       </div>
 

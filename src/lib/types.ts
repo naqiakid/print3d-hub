@@ -395,6 +395,12 @@ export function stripHtml(description: string | null | undefined): string {
     .trim()
 }
 
+export function getExcerpt(description: string | null | undefined, maxLen = 100): string {
+  const plain = stripHtml(description)
+  if (plain.length <= maxLen) return plain
+  return plain.substring(0, maxLen).trim() + '...'
+}
+
 export function serializeAssemblyMetadata(
   description: string,
   metadata: PartAssembly[],
