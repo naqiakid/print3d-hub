@@ -24,6 +24,24 @@ const FINAL_COLOR_PRESETS = [
   ...COLOR_PRESETS
 ]
 
+function formatPartName(url: string, index: number): string {
+  const filename = url.split('/').pop()?.replace(/^\d+-/, '')
+  if (!filename) return `Part ${index + 1}`
+  
+  // Strip file extension
+  let name = filename.replace(/\.[a-zA-Z0-9]+$/, '')
+  
+  // Replace hyphens and underscores with spaces
+  name = name.replace(/[-_]/g, ' ')
+  
+  // Convert to Title Case
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
 export default function CatalogOrderForm({
   item,
   printer,
@@ -128,6 +146,9 @@ export default function CatalogOrderForm({
   const [activePromo, setActivePromo] = useState<{ code: string; discount_pct: number; commission_pct: number } | null>(null)
   const [verifyingPromo, setVerifyingPromo] = useState(false)
   const [promoError, setPromoError] = useState('')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [bulkPrimary, setBulkPrimary] = useState<string>('Any')
+  const [bulkSecondary, setBulkSecondary] = useState<string>('Any')
 
   // Load from session/local storage on mount
   useEffect(() => {
@@ -185,6 +206,54 @@ export default function CatalogOrderForm({
         ...filamentsForMaterial.map((f) => ({ id: f.id, name: f.color, hex: f.color_hex })),
       ]
     : FINAL_COLOR_PRESETS.map((c, i) => ({ id: `preset-${i}`, name: c.name, hex: c.hex }))
+
+  const handleBulkPrimaryChange = (val: string) => {
+    setBulkPrimary(val)
+    const match = filamentColors.find((f) => f.name === val || (val === 'Any' && f.name === 'Any / Owner decides'))
+    const hex = match?.hex ?? '#888888'
+    const finalName = val === 'Any' ? 'Any' : val
+    
+    setUnitsConfig((prev) => {
+      const next = [...prev]
+      if (next[activeUnitIdx]) {
+        const newColors = [...next[activeUnitIdx].partColors]
+        const newHexes = [...next[activeUnitIdx].partColorHexes]
+        printableParts.forEach((_, idx) => {
+          if (idx % 2 === 0) { // Odd parts (1st, 3rd, 5th...)
+            newColors[idx] = finalName
+            newHexes[idx] = hex
+          }
+        })
+        next[activeUnitIdx].partColors = newColors
+        next[activeUnitIdx].partColorHexes = newHexes
+      }
+      return next
+    })
+  }
+
+  const handleBulkSecondaryChange = (val: string) => {
+    setBulkSecondary(val)
+    const match = filamentColors.find((f) => f.name === val || (val === 'Any' && f.name === 'Any / Owner decides'))
+    const hex = match?.hex ?? '#888888'
+    const finalName = val === 'Any' ? 'Any' : val
+    
+    setUnitsConfig((prev) => {
+      const next = [...prev]
+      if (next[activeUnitIdx]) {
+        const newColors = [...next[activeUnitIdx].partColors]
+        const newHexes = [...next[activeUnitIdx].partColorHexes]
+        printableParts.forEach((_, idx) => {
+          if (idx % 2 !== 0) { // Even parts (2nd, 4th, 6th...)
+            newColors[idx] = finalName
+            newHexes[idx] = hex
+          }
+        })
+        next[activeUnitIdx].partColors = newColors
+        next[activeUnitIdx].partColorHexes = newHexes
+      }
+      return next
+    })
+  }
 
   // Dynamic Pricing Engine calculations
   const gcodeStats = parseGcodeStats(item.description)
@@ -369,7 +438,7 @@ export default function CatalogOrderForm({
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
       
       {/* ── Left Column: Media & 3D Preview (lg:col-span-7) ── */}
-      <div className="lg:col-span-7 space-y-6 lg:sticky lg:top-6">
+      <div className="lg:col-span-7 space-y-6 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-2 scrollbar-thin">
         
         {/* Desktop View: Separate 3D Preview and static Photo Gallery */}
         <div className="hidden lg:block space-y-6">
@@ -648,69 +717,194 @@ export default function CatalogOrderForm({
             </>
           ) : (
             <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
-              <p className="text-xs text-slate-400">This product has multiple parts. Select colors for each part below:</p>
-              <div className="space-y-3">
-                {item.stl_urls.map((url, i) => {
-                  if (isPreviewFile(url)) return null
-                  const printableIndex = printableParts.indexOf(url)
-                  const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${printableIndex + 1}`
-                  const currentPartColor = partColors[printableIndex] || 'Any'
-                  return (
-                    <div key={url} className="space-y-1.5 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-700 truncate max-w-[65%]">{filename}</span>
-                        {(() => {
-                          const ownerParts = item.color ? item.color.split('|') : []
-                          const ownerPartHex = item.color_hex ? item.color_hex.split('|') : []
-                          const ownerDef = ownerParts[i]
-                          if (ownerDef && ownerDef !== 'Any') {
-                            return (
-                              <span className="text-[10px] text-slate-400 italic flex items-center gap-1">
-                                Default: <span className="h-1.5 w-1.5 rounded-full border border-slate-250 shrink-0" style={{ background: ownerPartHex[i] || '#888' }} /> {ownerDef}
-                              </span>
-                            )
-                          }
-                          return null
-                        })()}
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        {filamentColors.map(({ id, name: n, hex }) => {
-                          const selected = (n === 'Any / Owner decides' ? currentPartColor === 'Any' : currentPartColor === n)
-                          return (
-                            <button key={id} type="button"
-                              onClick={() => {
-                                setUnitsConfig((prev) => {
-                                  const next = [...prev]
-                                  if (next[activeUnitIdx]) {
-                                    const newColors = [...next[activeUnitIdx].partColors]
-                                    const newHexes = [...next[activeUnitIdx].partColorHexes]
-                                    newColors[printableIndex] = (n === 'Any / Owner decides' ? 'Any' : n)
-                                    newHexes[printableIndex] = hex
-                                    next[activeUnitIdx].partColors = newColors
-                                    next[activeUnitIdx].partColorHexes = newHexes
-                                  }
-                                  return next
-                                })
-                              }}
-                              className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all duration-200 ${
-                                selected
-                                  ? 'border-orange-500 bg-orange-50 text-orange-700 ring-1 ring-orange-500/20 font-semibold'
-                                  : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200 hover:bg-slate-50'
-                              }`}>
-                              {n !== 'Any / Owner decides' && (
-                                <span className={`h-1.5 w-1.5 rounded-full border shrink-0 transition-transform ${
-                                  selected ? 'border-orange-500 scale-110 shadow-sm' : 'border-slate-350'
-                                }`} style={{ background: hex }} />
-                              )}
-                              {n === 'Any / Owner decides' ? 'Owner Decides' : n}
-                            </button>
-                          )
-                        })}
-                      </div>
+              {printableParts.length > 5 && (
+                <div className="space-y-3 border-b border-slate-250 pb-4 mb-4">
+                  <p className="text-xs font-bold text-slate-700">🎨 Bulk Color Customization:</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                        Primary Color (Odd Parts)
+                      </label>
+                      <select
+                        value={bulkPrimary}
+                        onChange={(e) => handleBulkPrimaryChange(e.target.value)}
+                        className={inputClass}
+                      >
+                        <option value="Any">Any / Owner decides</option>
+                        {filamentColors.filter(f => f.name !== 'Any / Owner decides').map((f) => (
+                          <option key={f.id} value={f.name}>{f.name}</option>
+                        ))}
+                      </select>
                     </div>
-                  )
-                })}
-              </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                        Secondary Color (Even Parts)
+                      </label>
+                      <select
+                        value={bulkSecondary}
+                        onChange={(e) => handleBulkSecondaryChange(e.target.value)}
+                        className={inputClass}
+                      >
+                        <option value="Any">Any / Owner decides</option>
+                        {filamentColors.filter(f => f.name !== 'Any / Owner decides').map((f) => (
+                          <option key={f.id} value={f.name}>{f.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    Choosing a bulk color automatically updates the corresponding parts. Expand individual parts below for fine-grained changes.
+                  </p>
+                </div>
+              )}
+
+              {printableParts.length > 5 ? (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setAdvancedOpen(!advancedOpen)}
+                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-55 transition shadow-sm"
+                  >
+                    <span>🛠️ Advanced Customization (Individual Parts)</span>
+                    <span className="text-slate-400 transition-transform duration-200" style={{ transform: advancedOpen ? 'rotate(90deg)' : 'none' }}>
+                      ▶
+                    </span>
+                  </button>
+
+                  {advancedOpen && (
+                    <div className="space-y-3 mt-3 border border-slate-200/60 bg-white p-3.5 rounded-xl max-h-[350px] overflow-y-auto scrollbar-thin animate-slide-down">
+                      {item.stl_urls.map((url, i) => {
+                        if (isPreviewFile(url)) return null
+                        const printableIndex = printableParts.indexOf(url)
+                        const cleanedName = formatPartName(url, printableIndex)
+                        const currentPartColor = partColors[printableIndex] || 'Any'
+                        return (
+                          <div key={url} className="space-y-1.5 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-slate-700 truncate max-w-[65%]" title={cleanedName}>
+                                {cleanedName}
+                              </span>
+                              {(() => {
+                                const ownerParts = item.color ? item.color.split('|') : []
+                                const ownerPartHex = item.color_hex ? item.color_hex.split('|') : []
+                                const ownerDef = ownerParts[i]
+                                if (ownerDef && ownerDef !== 'Any') {
+                                  return (
+                                    <span className="text-[10px] text-slate-400 italic flex items-center gap-1">
+                                      Default: <span className="h-1.5 w-1.5 rounded-full border border-slate-250 shrink-0" style={{ background: ownerPartHex[i] || '#888' }} /> {ownerDef}
+                                    </span>
+                                  )
+                                }
+                                return null
+                              })()}
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {filamentColors.map(({ id, name: n, hex }) => {
+                                const selected = (n === 'Any / Owner decides' ? currentPartColor === 'Any' : currentPartColor === n)
+                                return (
+                                  <button key={id} type="button"
+                                    onClick={() => {
+                                      setUnitsConfig((prev) => {
+                                        const next = [...prev]
+                                        if (next[activeUnitIdx]) {
+                                          const newColors = [...next[activeUnitIdx].partColors]
+                                          const newHexes = [...next[activeUnitIdx].partColorHexes]
+                                          newColors[printableIndex] = (n === 'Any / Owner decides' ? 'Any' : n)
+                                          newHexes[printableIndex] = hex
+                                          next[activeUnitIdx].partColors = newColors
+                                          next[activeUnitIdx].partColorHexes = newHexes
+                                        }
+                                        return next
+                                      })
+                                    }}
+                                    className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all duration-200 ${
+                                      selected
+                                        ? 'border-orange-500 bg-orange-50 text-orange-700 ring-1 ring-orange-500/20 font-semibold'
+                                        : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200 hover:bg-slate-50'
+                                    }`}>
+                                    {n !== 'Any / Owner decides' && (
+                                      <span className={`h-1.5 w-1.5 rounded-full border shrink-0 transition-transform ${
+                                        selected ? 'border-orange-500 scale-110 shadow-sm' : 'border-slate-350'
+                                      }`} style={{ background: hex }} />
+                                    )}
+                                    {n === 'Any / Owner decides' ? 'Owner Decides' : n}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-400">This product has multiple parts. Select colors for each part below:</p>
+                  {item.stl_urls.map((url, i) => {
+                    if (isPreviewFile(url)) return null
+                    const printableIndex = printableParts.indexOf(url)
+                    const cleanedName = formatPartName(url, printableIndex)
+                    const currentPartColor = partColors[printableIndex] || 'Any'
+                    return (
+                      <div key={url} className="space-y-1.5 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-700 truncate max-w-[65%]" title={cleanedName}>
+                            {cleanedName}
+                          </span>
+                          {(() => {
+                            const ownerParts = item.color ? item.color.split('|') : []
+                            const ownerPartHex = item.color_hex ? item.color_hex.split('|') : []
+                            const ownerDef = ownerParts[i]
+                            if (ownerDef && ownerDef !== 'Any') {
+                              return (
+                                <span className="text-[10px] text-slate-400 italic flex items-center gap-1">
+                                  Default: <span className="h-1.5 w-1.5 rounded-full border border-slate-250 shrink-0" style={{ background: ownerPartHex[i] || '#888' }} /> {ownerDef}
+                                </span>
+                              )
+                            }
+                            return null
+                          })()}
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {filamentColors.map(({ id, name: n, hex }) => {
+                            const selected = (n === 'Any / Owner decides' ? currentPartColor === 'Any' : currentPartColor === n)
+                            return (
+                              <button key={id} type="button"
+                                onClick={() => {
+                                  setUnitsConfig((prev) => {
+                                    const next = [...prev]
+                                    if (next[activeUnitIdx]) {
+                                      const newColors = [...next[activeUnitIdx].partColors]
+                                      const newHexes = [...next[activeUnitIdx].partColorHexes]
+                                      newColors[printableIndex] = (n === 'Any / Owner decides' ? 'Any' : n)
+                                      newHexes[printableIndex] = hex
+                                      next[activeUnitIdx].partColors = newColors
+                                      next[activeUnitIdx].partColorHexes = newHexes
+                                    }
+                                    return next
+                                  })
+                                }}
+                                className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all duration-200 ${
+                                  selected
+                                    ? 'border-orange-500 bg-orange-50 text-orange-700 ring-1 ring-orange-500/20 font-semibold'
+                                    : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200 hover:bg-slate-50'
+                                }`}>
+                                {n !== 'Any / Owner decides' && (
+                                  <span className={`h-1.5 w-1.5 rounded-full border shrink-0 transition-transform ${
+                                    selected ? 'border-orange-500 scale-110 shadow-sm' : 'border-slate-350'
+                                  }`} style={{ background: hex }} />
+                                )}
+                                {n === 'Any / Owner decides' ? 'Owner Decides' : n}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
