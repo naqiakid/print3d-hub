@@ -41,8 +41,9 @@ export const PRINT_ESTIMATES: Record<PrintSize, Record<PrintQuality, { weight_g:
   large:  { basic: { weight_g: 150, hours: 10  }, advanced: { weight_g: 260, hours: 28  } },
 }
 
-export const DEFAULT_MACHINE_RATE   = 1.5  // RM/hr — typical for mid-range FDM printer
+export const DEFAULT_MACHINE_RATE   = 6.00  // RM/hr — depreciation + wear (updated to 6.00)
 export const DEFAULT_WASTE_PERCENT  = 8    // % — consumables, failed prints, maintenance
+export const MINIMUM_ORDER_PRICE    = 15.00 // RM — minimum order floor price
 
 export type EstimateInput = {
   size: PrintSize
@@ -52,7 +53,7 @@ export type EstimateInput = {
   cost_per_kg: number
   electricity_rate?: number
   markup_percent?: number
-  machine_rate_per_hour?: number  // RM/hr depreciation + wear; default 1.5
+  machine_rate_per_hour?: number  // RM/hr depreciation + wear; default 6.00
   waste_percent?: number          // consumables + maintenance overhead; default 8%
   nozzle_mm?: number              // default 0.4 — affects print time
   custom_infill?: number          // overrides quality default — affects weight
@@ -62,6 +63,7 @@ export type EstimateInput = {
   known_hours?: number | null     // from real STL slicing — bypasses the size-bucket time guess
   affiliate_discount_pct?: number
   affiliate_commission_pct?: number
+  override_suggested_price?: number // bypasses internal cost calculation, sets direct suggested price
 }
 
 export type EstimateResult = {
@@ -117,17 +119,25 @@ export function calculateEstimate(input: EstimateInput): EstimateResult {
   const nozzle_mult = NOZZLE_TIME_MULTIPLIER[String(nozzle_mm)] ?? 1.0
   const hours = input.known_hours ?? (base.hours * nozzle_mult * (ironing ? 1.15 : 1))
 
+  const machine_hourly_rate = machine_rate_per_hour
   const filament_cost    = (weight_g / 1000) * cost_per_kg
   const electricity_cost = hours * (power_watts / 1000) * electricity_rate
-  const machine_cost     = hours * machine_rate_per_hour
+  const machine_cost     = hours * machine_hourly_rate
   const subtotal         = filament_cost + electricity_cost + machine_cost
   const waste_cost       = subtotal * (waste_percent / 100)
   const base_cost        = subtotal + waste_cost
-  const suggested_price  = base_cost * (1 + markup_percent / 100)
+
+  let suggested_price  = input.override_suggested_price ?? (base_cost * (1 + markup_percent / 100))
+  if (suggested_price < MINIMUM_ORDER_PRICE) {
+    suggested_price = MINIMUM_ORDER_PRICE
+  }
 
   const discount_amount = suggested_price * ((input.affiliate_discount_pct ?? 0) / 100)
   const commission_amount = suggested_price * ((input.affiliate_commission_pct ?? 0) / 100)
-  const final_price = suggested_price - discount_amount
+  let final_price = suggested_price - discount_amount
+  if (final_price < MINIMUM_ORDER_PRICE) {
+    final_price = MINIMUM_ORDER_PRICE
+  }
 
   const r = (n: number) => Math.round(n * 100) / 100
   return {

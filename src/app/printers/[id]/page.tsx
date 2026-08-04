@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { Shop, Printer, Filament, PrintProfile, CatalogItem, Review, RequestPrinterView } from '@/lib/types'
 import PrinterProfileView from '@/components/PrinterProfileView'
 import { PRINTER_MODELS } from '@/lib/printer-models'
+import { DEFAULT_MACHINE_RATE } from '@/lib/pricing'
 
 // Match a saved printer_model string to a preset
 function findPreset(printerModel: string) {
@@ -124,7 +125,7 @@ export default async function ShopDetailPage({
     printer_model_id: heroPrinter?.printer_model_id ?? null,
     filament_costs: heroPrinter?.filament_costs ?? {},
     power_watts: heroPrinter?.power_watts ?? 350,
-    machine_rate_per_hour: heroPrinter?.machine_rate_per_hour ?? 1.5,
+    machine_rate_per_hour: heroPrinter?.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE,
     bed_type: heroPrinter?.bed_type ?? [],
     grams_per_roll: heroPrinter?.grams_per_roll ?? 1000,
   }

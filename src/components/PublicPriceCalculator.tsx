@@ -4,10 +4,11 @@ import { useState, useRef, useEffect } from 'react'
 import { Upload, FileCode2, Info, ChevronRight, HelpCircle, Loader2, Sparkles, Check, AlertCircle, Trash2, Plus } from 'lucide-react'
 import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
+import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js'
 import { useRouter } from 'next/navigation'
 import type { RequestPrinterView, Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS } from '@/lib/types'
-import { calculateEstimate, DEFAULT_ELECTRICITY_RATE } from '@/lib/pricing'
+import { calculateEstimate, DEFAULT_ELECTRICITY_RATE, DEFAULT_MACHINE_RATE } from '@/lib/pricing'
 import { verifyAffiliateCode } from '@/lib/actions'
 
 interface Props {
@@ -47,12 +48,12 @@ function calculateSTLVolume(geometry: THREE.BufferGeometry): number {
   return Math.abs(volume)
 }
 
-function ModelPreview({ geometry }: { geometry: THREE.BufferGeometry }) {
+function ModelPreview({ geometry, group }: { geometry: THREE.BufferGeometry | null; group: THREE.Group | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || !geometry) return
+    if (!canvas || (!geometry && !group)) return
 
     const width = canvas.clientWidth || 300
     const height = canvas.clientHeight || 200
@@ -65,10 +66,43 @@ function ModelPreview({ geometry }: { geometry: THREE.BufferGeometry }) {
     renderer.setSize(width, height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-    geometry.center()
-    const material = new THREE.MeshNormalMaterial()
-    const mesh = new THREE.Mesh(geometry, material)
-    scene.add(mesh)
+    let activeObject: THREE.Object3D | null = null
+    let maxDim = 100
+
+    if (geometry) {
+      geometry.center()
+      const material = new THREE.MeshNormalMaterial()
+      const mesh = new THREE.Mesh(geometry, material)
+      scene.add(mesh)
+      activeObject = mesh
+
+      geometry.computeBoundingBox()
+      const box = geometry.boundingBox
+      if (box) {
+        const size = new THREE.Vector3()
+        box.getSize(size)
+        maxDim = Math.max(size.x, size.y, size.z)
+      }
+    } else if (group) {
+      // Clone group to avoid modifying original reference in case of multiple mounts
+      const groupClone = group.clone()
+      const box = new THREE.Box3().setFromObject(groupClone)
+      const center = new THREE.Vector3()
+      box.getCenter(center)
+      groupClone.position.sub(center)
+
+      groupClone.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.material = new THREE.MeshNormalMaterial()
+        }
+      })
+      scene.add(groupClone)
+      activeObject = groupClone
+
+      const size = new THREE.Vector3()
+      box.getSize(size)
+      maxDim = Math.max(size.x, size.y, size.z)
+    }
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.8)
     scene.add(ambientLight)
@@ -77,22 +111,16 @@ function ModelPreview({ geometry }: { geometry: THREE.BufferGeometry }) {
     dirLight.position.set(10, 10, 10)
     scene.add(dirLight)
 
-    geometry.computeBoundingBox()
-    const box = geometry.boundingBox
-    let distance = 100
-    if (box) {
-      const size = new THREE.Vector3()
-      box.getSize(size)
-      const maxDim = Math.max(size.x, size.y, size.z)
-      distance = maxDim * 1.8
-    }
+    const distance = maxDim * 1.8
     camera.position.set(distance, distance, distance)
     camera.lookAt(0, 0, 0)
 
     let animationFrameId: number
     const animate = () => {
-      mesh.rotation.y += 0.015
-      mesh.rotation.x += 0.008
+      if (activeObject) {
+        activeObject.rotation.y += 0.015
+        activeObject.rotation.x += 0.008
+      }
       renderer.render(scene, camera)
       animationFrameId = requestAnimationFrame(animate)
     }
@@ -113,7 +141,7 @@ function ModelPreview({ geometry }: { geometry: THREE.BufferGeometry }) {
       resizeObserver.disconnect()
       renderer.dispose()
     }
-  }, [geometry])
+  }, [geometry, group])
 
   return (
     <div className="relative w-full aspect-square md:aspect-video rounded-xl overflow-hidden border border-slate-200 bg-slate-50 shadow-inner">
@@ -131,6 +159,7 @@ interface SlicedItem {
   dimensions: { x: number; y: number; z: number }
   volumeCc: number
   geometry: THREE.BufferGeometry | null
+  group: THREE.Group | null
 }
 
 export default function PublicPriceCalculator({ printer, filaments }: Props) {
@@ -236,16 +265,59 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
       const ext = f.name.toLowerCase().split('.').pop()
       const newId = crypto.randomUUID()
 
-      if (ext === 'obj' || ext === '3mf') {
-        // Fallback mock stats for OBJ/3MF files
+      if (ext === 'obj') {
+        // Fallback mock stats for OBJ files
         const newItem: SlicedItem = {
           id: newId,
           file: f,
           dimensions: { x: 75, y: 75, z: 75 },
           volumeCc: 50,
           geometry: null,
+          group: null,
         }
         setSlicedItems((prev) => [...prev, newItem])
+        setActivePreviewId((prev) => prev ?? newId)
+      } else if (ext === '3mf') {
+        try {
+          const arrayBuffer = await f.arrayBuffer()
+          const loader = new ThreeMFLoader()
+          const group = loader.parse(arrayBuffer)
+
+          // Calculate dimensions
+          const box = new THREE.Box3().setFromObject(group)
+          const size = new THREE.Vector3()
+          box.getSize(size)
+          const dims = {
+            x: Math.round(size.x * 10) / 10,
+            y: Math.round(size.y * 10) / 10,
+            z: Math.round(size.z * 10) / 10,
+          }
+
+          // Calculate volume
+          let totalVolumeMm3 = 0
+          group.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.geometry) {
+              let vol = calculateSTLVolume(child.geometry)
+              vol *= Math.abs(child.scale.x * child.scale.y * child.scale.z)
+              totalVolumeMm3 += vol
+            }
+          })
+          const volumeCc = totalVolumeMm3 / 1000
+
+          const newItem: SlicedItem = {
+            id: newId,
+            file: f,
+            dimensions: dims,
+            volumeCc: volumeCc || 50, // fallback if 0
+            geometry: null,
+            group: group,
+          }
+          setSlicedItems((prev) => [...prev, newItem])
+          setActivePreviewId((prev) => prev ?? newId)
+        } catch (err) {
+          console.error(`Failed to parse 3MF file "${f.name}":`, err)
+          alert(`Error parsing 3MF file "${f.name}". Ensure it is not corrupted.`)
+        }
       } else {
         // Parse STL
         try {
@@ -273,6 +345,7 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
             dimensions: dims,
             volumeCc: volumeMm3 / 1000,
             geometry,
+            group: null,
           }
           setSlicedItems((prev) => [...prev, newItem])
           setActivePreviewId((prev) => prev ?? newId)
@@ -345,7 +418,7 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
       cost_per_kg: filamentCostPerKg,
       electricity_rate: DEFAULT_ELECTRICITY_RATE,
       markup_percent: printer.markup_percent ?? 30,
-      machine_rate_per_hour: printer.machine_rate_per_hour ?? 1.5,
+      machine_rate_per_hour: printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE,
       waste_percent: printer.waste_percent ?? 8,
       known_weight_g: totalWeightG,
       known_hours: totalHours,
@@ -476,14 +549,14 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
             {/* Left Column: Active 3D Preview */}
             <div>
-              {activePreviewItem?.geometry ? (
-                <ModelPreview geometry={activePreviewItem.geometry} />
+              {(activePreviewItem?.geometry || activePreviewItem?.group) ? (
+                <ModelPreview geometry={activePreviewItem.geometry} group={activePreviewItem.group} />
               ) : (
                 <div className="w-full aspect-square md:aspect-video rounded-xl border border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-center p-4">
                   <FileCode2 className="h-8 w-8 text-slate-350 mb-2" />
                   <p className="text-xs font-bold text-slate-600">3D Preview Unavailable</p>
                   <p className="text-[10px] text-slate-400 mt-1 max-w-[200px] mx-auto">
-                    Instant 3D rendering is active for STL files. Click any STL file above to preview it.
+                    Instant 3D rendering is active for STL and 3MF files. Click any file above to preview it.
                   </p>
                 </div>
               )}
@@ -648,6 +721,12 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
                   </div>
                   <span className="text-[9px] font-semibold text-slate-400">Excludes delivery</span>
                 </div>
+
+                {estimate.price === 15.00 && (
+                  <div className="text-[10px] text-amber-600 font-semibold mt-1 bg-amber-50 rounded-lg px-2 py-1 flex items-center gap-1 border border-amber-100/70">
+                    <Info className="h-3 w-3 shrink-0 text-amber-500" /> Note: RM 15.00 minimum order price applied.
+                  </div>
+                )}
               </div>
 
               {/* Proceed to Order Button */}

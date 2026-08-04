@@ -155,16 +155,35 @@ export default function RequestCard({ request, printer, onCardDragStart }: { req
     const machineRate       = printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE
     const wastePct          = printer.waste_percent         ?? DEFAULT_WASTE_PERCENT
     const totalFilamentCost = perPlate.reduce((s, p) => s + p.cost, 0)
-    const electricityCost   = totalHours > 0 ? totalHours * (powerWatts / 1000) * elecRate : 0
-    const machineCost       = totalHours > 0 ? totalHours * machineRate : 0
-    const subtotal          = totalFilamentCost + electricityCost + machineCost
-    const wasteCost         = subtotal * (wastePct / 100)
-    const baseCost          = subtotal + wasteCost
-    const markup            = baseCost * (markupPct / 100)
-    const total             = baseCost + markup
 
-    setBreakdown({ perPlate, electricityCost, machineCost, wasteCost, baseCost, markup, total, powerWatts, electricityRate: elecRate, markupPct })
-    if (!updatingFromPrice.current) setQuotePrice(total.toFixed(2))
+    const cpkg = totalWeight > 0 ? (totalFilamentCost / (totalWeight / 1000)) : 0
+    const est = calculateEstimate({
+      size: 'medium',
+      quality: 'basic',
+      material: gcodeItems[0]?.material ?? 'pla',
+      power_watts: powerWatts,
+      cost_per_kg: cpkg,
+      electricity_rate: elecRate,
+      markup_percent: markupPct,
+      machine_rate_per_hour: machineRate,
+      waste_percent: wastePct,
+      known_weight_g: totalWeight,
+      known_hours: totalHours,
+    })
+
+    setBreakdown({
+      perPlate,
+      electricityCost: est.electricity_cost,
+      machineCost: est.machine_cost,
+      wasteCost: est.waste_cost,
+      baseCost: est.base_cost,
+      markup: est.suggested_price - est.base_cost,
+      total: est.suggested_price,
+      powerWatts,
+      electricityRate: elecRate,
+      markupPct
+    })
+    if (!updatingFromPrice.current) setQuotePrice(est.suggested_price.toFixed(2))
     updatingFromPrice.current = false
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gcodeItems, quoteMarkup, anyStats, totalHours])
@@ -172,8 +191,20 @@ export default function RequestCard({ request, printer, onCardDragStart }: { req
   // For estimate path (no gcode): sync quotePrice when markup changes
   useEffect(() => {
     if (updatingFromPrice.current || anyStats || !estimate) return
-    const total = estimate.base_cost * (1 + quoteMarkup / 100)
-    setQuotePrice(total.toFixed(2))
+    const est = calculateEstimate({
+      size: request.size,
+      quality: request.quality,
+      material: defaultMaterial,
+      power_watts: modelPowerWatts,
+      cost_per_kg: printer.filament_costs?.[defaultMaterial] ?? 50,
+      electricity_rate:      printer.electricity_rate      ?? DEFAULT_ELECTRICITY_RATE,
+      markup_percent:        quoteMarkup,
+      machine_rate_per_hour: printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE,
+      waste_percent:         printer.waste_percent         ?? DEFAULT_WASTE_PERCENT,
+      known_weight_g: request.weight_g,
+      known_hours:    request.print_hours,
+    })
+    setQuotePrice(est.suggested_price.toFixed(2))
     updatingFromPrice.current = false
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quoteMarkup, anyStats])

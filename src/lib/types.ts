@@ -176,6 +176,8 @@ export type Filament = {
   created_at: string
 }
 
+export type PermissionStatus = 'not_required' | 'pending_permission' | 'approved' | 'denied'
+
 export type CatalogItem = {
   id: string
   owner_id: string
@@ -202,6 +204,7 @@ export type CatalogItem = {
   category: string | null
   sort_order: number
   is_active: boolean
+  permission_status?: PermissionStatus
   created_at: string
 }
 
@@ -362,6 +365,7 @@ export interface DesignerMetadata {
   tipUrl?: string
   license?: string
   commercialAllowed?: boolean
+  permissionStatus?: PermissionStatus
 }
 
 export function parseDesignerMetadata(description: string | null | undefined): DesignerMetadata | null {

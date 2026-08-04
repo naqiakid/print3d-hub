@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { parseDesignerMetadata } from '@/lib/types'
 import type { Shop, Printer, CatalogItem, PrintProfile, Filament, RequestPrinterView } from '@/lib/types'
 import CatalogOrderForm from '@/components/CatalogOrderFormWrapper'
 import STLViewer from '@/components/STLViewerWrapper'
@@ -52,6 +53,45 @@ export default async function CatalogOrderPage({
 
   // Verify item belongs to this shop
   if (item.owner_id !== shop.id) notFound()
+
+  // Verify commercial permission
+  const designer = parseDesignerMetadata(item.description)
+  const isUnverified = (designer?.license ?? '').includes('License Unverified') || (designer?.license ?? '').includes('Check Manually')
+  const commercialAllowed = designer?.commercialAllowed ?? true
+  
+  let permissionStatus = item.permission_status || designer?.permissionStatus
+  if (!permissionStatus) {
+    if (!commercialAllowed || isUnverified) {
+      permissionStatus = 'pending_permission'
+    } else {
+      permissionStatus = 'not_required'
+    }
+  }
+
+  const isUnapproved = permissionStatus === 'pending_permission' || permissionStatus === 'denied'
+
+  if (isUnapproved) {
+    return (
+      <div className="mx-auto max-w-xl px-4 py-16 sm:px-6 text-center">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-6 md:p-8 space-y-4 shadow-sm">
+          <span className="text-4xl block">⚠️</span>
+          <h2 className="text-xl font-bold text-slate-800">Ordering Unavailable</h2>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            This catalog product is currently pending licensing approval from the original creator.
+            The printer owner cannot print or sell this design commercially until permission is granted.
+          </p>
+          <div className="pt-2">
+            <Link
+              href={`/printers/${ownerId}`}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 px-4 py-2 text-sm font-semibold text-white transition shadow-sm"
+            >
+              <ArrowLeft className="h-4 w-4" /> Back to Printer Shop
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const { data: printerRows } = await supabase
     .from('printers')

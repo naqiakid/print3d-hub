@@ -76,6 +76,20 @@ export default function CatalogGrid({
           const inStock = isInStock(item, filaments)
           const designer = parseDesignerMetadata(item.description)
 
+          const isUnverified = (designer?.license ?? '').includes('License Unverified') || (designer?.license ?? '').includes('Check Manually')
+          const commercialAllowed = designer?.commercialAllowed ?? true
+          
+          let permissionStatus = item.permission_status || designer?.permissionStatus
+          if (!permissionStatus) {
+            if (!commercialAllowed || isUnverified) {
+              permissionStatus = 'pending_permission'
+            } else {
+              permissionStatus = 'not_required'
+            }
+          }
+
+          const isUnapproved = permissionStatus === 'pending_permission' || permissionStatus === 'denied'
+
           return (
             <div
               key={item.id}
@@ -103,11 +117,17 @@ export default function CatalogGrid({
                     {item.category}
                   </span>
                 )}
-                {!inStock && (
+                {isUnapproved ? (
+                  <span className={`absolute right-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-bold text-white shadow-sm ${
+                    permissionStatus === 'pending_permission' ? 'bg-amber-600/90' : 'bg-red-600/90'
+                  }`}>
+                    {permissionStatus === 'pending_permission' ? '⚠️ Pending' : '❌ Denied'}
+                  </span>
+                ) : !inStock ? (
                   <span className="absolute right-2 top-2 rounded-full bg-slate-800/90 px-2 py-0.5 text-[11px] font-semibold text-white">
                     Out of stock
                   </span>
-                )}
+                ) : null}
               </div>
 
               {/* Info */}
@@ -207,7 +227,23 @@ export default function CatalogGrid({
                     </div>
                   )}
 
-                  {inStock ? (
+                  {permissionStatus === 'pending_permission' ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="block w-full cursor-not-allowed rounded-xl bg-amber-500/10 border border-amber-200 py-2 text-center text-sm font-semibold text-amber-700"
+                    >
+                      ⚠️ Pending Creator Permission
+                    </button>
+                  ) : permissionStatus === 'denied' ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="block w-full cursor-not-allowed rounded-xl bg-red-500/10 border border-red-200 py-2 text-center text-sm font-semibold text-red-700"
+                    >
+                      ❌ Permission Denied
+                    </button>
+                  ) : inStock ? (
                     <Link
                       href={`/order/${printerId}/${item.id}`}
                       className="block w-full rounded-xl bg-orange-500 py-2 text-center text-sm font-semibold text-white transition hover:bg-orange-600"

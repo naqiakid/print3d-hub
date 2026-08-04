@@ -3,8 +3,8 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from './supabase/server'
-import type { RequestStatus, PrintType, FilamentMaterial, PrintSize, FilamentCosts } from './types'
-import { calculatePriceRange, calculateEstimate } from './pricing'
+import type { RequestStatus, PrintType, FilamentMaterial, PrintSize, FilamentCosts, PermissionStatus } from './types'
+import { calculatePriceRange, calculateEstimate, DEFAULT_MACHINE_RATE } from './pricing'
 import { parseGcodeStats } from './types'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://print3d-hub.vercel.app'
@@ -563,6 +563,8 @@ export async function submitRequest(data: {
       const scaleMultiplier = Math.pow((scale_pct ?? 100) / 100, 3)
       let unitPrice = 0
 
+      let estResult = null
+
       if (gcodeStats) {
         // Auto-pricing calculation based on G-code stats + maker settings
         const [{ data: printer }, { data: filaments }] = await Promise.all([
@@ -574,45 +576,47 @@ export async function submitRequest(data: {
         const currentWeight = gcodeStats.weight_g * scaleMultiplier
         const currentHours = gcodeStats.hours * ((scale_pct ?? 100) / 100)
 
-        const est = calculateEstimate({
+        estResult = calculateEstimate({
           size: 'medium',
           quality: 'basic',
           material: data.material as FilamentMaterial,
           power_watts: printer?.power_watts ?? 350,
           cost_per_kg: costPerKg,
-          machine_rate_per_hour: printer?.machine_rate_per_hour ?? 1.5,
+          machine_rate_per_hour: printer?.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE,
           known_weight_g: currentWeight,
           known_hours: currentHours,
           markup_percent: printer?.markup_percent ?? 30,
           waste_percent: printer?.waste_percent ?? 8,
+          affiliate_discount_pct: activePromoData?.discount_pct ?? 0,
+          affiliate_commission_pct: activePromoData?.commission_pct ?? 0,
         })
-        unitPrice = est.suggested_price
       } else {
         const baseMatPrice = (item.allow_material_choice && item.material_prices?.[data.material])
           ? Number(item.material_prices[data.material])
           : null
-        unitPrice = baseMatPrice !== null ? baseMatPrice : (item.base_price ?? 0)
-        unitPrice = unitPrice * scaleMultiplier
+        const rawUnitPrice = (baseMatPrice !== null ? baseMatPrice : (item.base_price ?? 0)) * scaleMultiplier
+
+        estResult = calculateEstimate({
+          size: 'medium',
+          quality: 'basic',
+          material: data.material as FilamentMaterial,
+          power_watts: 0,
+          cost_per_kg: 0,
+          override_suggested_price: rawUnitPrice,
+          affiliate_discount_pct: activePromoData?.discount_pct ?? 0,
+          affiliate_commission_pct: activePromoData?.commission_pct ?? 0,
+        })
       }
 
-      if (unitPrice > 0) {
+      if (estResult && estResult.suggested_price > 0) {
         const qty = quantity && quantity > 0 ? quantity : 1
-        let discountAmount = 0
-        let commissionAmount = 0
-
-        if (activePromoData) {
-          discountAmount = unitPrice * (Number(activePromoData.discount_pct) / 100)
-          commissionAmount = unitPrice * (Number(activePromoData.commission_pct) / 100)
-          unitPrice = Math.max(0, unitPrice - discountAmount)
-        }
-
         catalogPricing = {
-          quoted_price: Math.round(unitPrice * qty * 100) / 100,
+          quoted_price: Math.round(estResult.final_price * qty * 100) / 100,
           status: 'quoted', // Automatically transition status to pre-quoted
           ...(validatedPromoCode ? {
             affiliate_code: validatedPromoCode,
-            affiliate_discount_amount: Math.round(discountAmount * qty * 100) / 100,
-            affiliate_commission_amount: Math.round(commissionAmount * qty * 100) / 100,
+            affiliate_discount_amount: Math.round(estResult.discount_amount * qty * 100) / 100,
+            affiliate_commission_amount: Math.round(estResult.commission_amount * qty * 100) / 100,
           } : {})
         }
       }
@@ -1270,6 +1274,7 @@ type CatalogItemData = {
   color_hex?: string | null
   base_price?: number | null
   category?: string | null
+  permission_status?: PermissionStatus
 }
 
 export async function createCatalogItem(

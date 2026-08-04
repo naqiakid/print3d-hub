@@ -15,8 +15,8 @@ export async function GET(req: NextRequest) {
       fallback: true,
       title: '',
       designer: '',
-      license: 'CC BY (Attribution)',
-      commercialAllowed: true
+      license: 'License Unverified - Check Manually',
+      commercialAllowed: false
     })
   }
 
@@ -37,8 +37,8 @@ export async function GET(req: NextRequest) {
         fallback: true,
         title: '',
         designer: '',
-        license: 'CC BY (Attribution)',
-        commercialAllowed: true
+        license: 'License Unverified - Check Manually',
+        commercialAllowed: false
       })
     }
 
@@ -83,12 +83,15 @@ export async function GET(req: NextRequest) {
     }
 
     // 3. Parse License Type
-    let license = 'CC BY (Attribution)'
-    let commercialAllowed = true
+    let license = 'License Unverified - Check Manually'
+    let commercialAllowed = false
 
     const lowerHtml = html.toLowerCase()
 
-    if (lowerHtml.includes('non-commercial') || lowerHtml.includes('nc') || lowerHtml.includes('creative commons - attribution - non-commercial') || lowerHtml.includes('by-nc')) {
+    if (lowerHtml.includes('standard digital file license')) {
+      commercialAllowed = false
+      license = 'Standard Digital File License (Non-Commercial)'
+    } else if (lowerHtml.includes('non-commercial') || lowerHtml.includes('nc') || lowerHtml.includes('creative commons - attribution - non-commercial') || lowerHtml.includes('by-nc')) {
       commercialAllowed = false
       if (lowerHtml.includes('by-nc-sa')) {
         license = 'CC BY-NC-SA (Attribution-NonCommercial-ShareAlike)'
@@ -124,8 +127,8 @@ export async function GET(req: NextRequest) {
       fallback: true,
       title: '',
       designer: '',
-      license: 'CC BY (Attribution)',
-      commercialAllowed: true
+      license: 'License Unverified - Check Manually',
+      commercialAllowed: false
     })
   }
 }

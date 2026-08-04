@@ -231,3 +231,30 @@ CREATE POLICY "print_profiles_owner_all"
 
 -- INSERT INTO storage.buckets (id, name, public)
 -- VALUES ('printer-photos', 'printer-photos', true);
+
+
+-- ── 8. CATALOG ITEMS ──────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS catalog_items (
+  id                    uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+  printer_id            uuid        NOT NULL REFERENCES printers(id) ON DELETE CASCADE,
+  name                  text        NOT NULL,
+  description           text        NOT NULL DEFAULT '',
+  photo_url             text,
+  model_url             text,
+  stl_urls              text[]      NOT NULL DEFAULT '{}',
+  allow_custom_text     boolean     NOT NULL DEFAULT false,
+  text_prompt           text        NOT NULL DEFAULT 'Text to add',
+  allow_color_choice    boolean     NOT NULL DEFAULT true,
+  allow_resize          boolean     NOT NULL DEFAULT false,
+  resize_min_pct        integer     NOT NULL DEFAULT 80,
+  resize_max_pct        integer     NOT NULL DEFAULT 150,
+  allow_material_choice boolean     NOT NULL DEFAULT false,
+  available_materials   text[]      NOT NULL DEFAULT '{}',
+  base_price            decimal(10,2),
+  sort_order            integer     NOT NULL DEFAULT 0,
+  is_active             boolean     NOT NULL DEFAULT true,
+  permission_status     text        NOT NULL DEFAULT 'not_required' CHECK (permission_status IN ('not_required', 'pending_permission', 'approved', 'denied')),
+  created_at            timestamptz NOT NULL DEFAULT now()
+);
+

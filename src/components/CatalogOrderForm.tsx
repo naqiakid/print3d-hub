@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic'
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 import type { CatalogItem, RequestPrinterView, PrintProfile, Filament, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, MATERIAL_DESCRIPTIONS, parseAssemblyMetadata, parseMeshMapping, parseAllowedFilaments, parseTextMeshIndex, cleanDescription, isPreviewFile, COLOR_PRESETS, parseGcodeStats, parseDesignerMetadata } from '@/lib/types'
-import { calculateEstimate } from '@/lib/pricing'
+import { calculateEstimate, DEFAULT_MACHINE_RATE } from '@/lib/pricing'
 import Navbar from '@/components/Navbar'
 import { submitRequest, verifyAffiliateCode } from '@/lib/actions'
 import PhoneInput, { isValidMyPhoneDigits } from '@/components/PhoneInput'
@@ -198,18 +198,20 @@ export default function CatalogOrderForm({
   let isAutoCalculated = false
   let calculatedBreakdown: any = null
 
+  let estResult: any = null
+
   if (gcodeStats) {
     isAutoCalculated = true
     const currentWeight = gcodeStats.weight_g * scaleMultiplier
     const currentHours = gcodeStats.hours * (scalePct / 100)
 
-    calculatedBreakdown = calculateEstimate({
+    estResult = calculateEstimate({
       size: 'medium',
       quality: 'basic',
-      material,
+      material: material as FilamentMaterial,
       power_watts: printer.power_watts ?? 350,
       cost_per_kg: costPerKg,
-      machine_rate_per_hour: printer.machine_rate_per_hour ?? 1.5,
+      machine_rate_per_hour: printer.machine_rate_per_hour ?? DEFAULT_MACHINE_RATE,
       known_weight_g: currentWeight,
       known_hours: currentHours,
       markup_percent: printer.markup_percent ?? 30,
@@ -217,18 +219,29 @@ export default function CatalogOrderForm({
       affiliate_discount_pct: activePromo?.discount_pct ?? 0,
       affiliate_commission_pct: activePromo?.commission_pct ?? 0,
     })
-    baseUnitPrice = calculatedBreakdown.suggested_price
-    finalUnitPrice = calculatedBreakdown.final_price
-    discountAmountPerUnit = calculatedBreakdown.discount_amount
   } else {
     const baseMatPrice = (item.allow_material_choice && item.material_prices?.[material])
       ? Number(item.material_prices[material])
       : null
     const baseItemPrice = baseMatPrice !== null ? baseMatPrice : (item.base_price ?? 0)
-    baseUnitPrice = baseItemPrice * scaleMultiplier
-    discountAmountPerUnit = baseUnitPrice * ((activePromo?.discount_pct ?? 0) / 100)
-    finalUnitPrice = baseUnitPrice - discountAmountPerUnit
+    const rawUnitPrice = baseItemPrice * scaleMultiplier
+
+    estResult = calculateEstimate({
+      size: 'medium',
+      quality: 'basic',
+      material: material as FilamentMaterial,
+      power_watts: 0,
+      cost_per_kg: 0,
+      override_suggested_price: rawUnitPrice,
+      affiliate_discount_pct: activePromo?.discount_pct ?? 0,
+      affiliate_commission_pct: activePromo?.commission_pct ?? 0,
+    })
   }
+
+  baseUnitPrice = estResult.suggested_price
+  finalUnitPrice = estResult.final_price
+  discountAmountPerUnit = estResult.discount_amount
+  calculatedBreakdown = estResult
 
   const orderTotalPrice = finalUnitPrice * quantity
   const totalDiscountAmount = discountAmountPerUnit * quantity

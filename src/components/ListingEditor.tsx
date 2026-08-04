@@ -4,6 +4,7 @@ import { useState, useTransition, useRef, useEffect, useCallback, lazy, Suspense
 import { Pencil, Check, X, MapPin, Truck, Search, Loader2, Map } from 'lucide-react'
 import type { Shop } from '@/lib/types'
 import { updateListing } from '@/lib/actions'
+import { DEFAULT_MACHINE_RATE } from '@/lib/pricing'
 
 const MapPicker = lazy(() => import('./MapPicker'))
 
@@ -151,7 +152,7 @@ export default function ListingEditor({
   const [contactPhone, setContactPhone] = useState(shop.whatsapp)
   const [electricityRate, setElectricityRate] = useState(String(shop.electricity_rate ?? 0.516))
   const [markupPercent, setMarkupPercent]     = useState(String(shop.markup_percent ?? 30))
-  const [machineRate, setMachineRate]         = useState(String(machineRatePerHour ?? 1.5))
+  const [machineRate, setMachineRate]         = useState(String(machineRatePerHour ?? DEFAULT_MACHINE_RATE))
   const [wastePercent, setWastePercent]       = useState(String(shop.waste_percent ?? 8))
   const [unitNo, setUnitNo]           = useState('')
   const [streetAddress, setStreetAddress] = useState(shop.pickup_address ?? '')
@@ -173,7 +174,7 @@ export default function ListingEditor({
     setContactPhone(shop.whatsapp)
     setElectricityRate(String(shop.electricity_rate ?? 0.516))
     setMarkupPercent(String(shop.markup_percent ?? 30))
-    setMachineRate(String(machineRatePerHour ?? 1.5))
+    setMachineRate(String(machineRatePerHour ?? DEFAULT_MACHINE_RATE))
     setWastePercent(String(shop.waste_percent ?? 8))
     setUnitNo('')
     setStreetAddress(shop.pickup_address ?? '')
@@ -195,7 +196,7 @@ export default function ListingEditor({
         contact_phone: contactPhone.trim(),
         electricity_rate: parseFloat(electricityRate) || 0.516,
         markup_percent: parseFloat(markupPercent) || 30,
-        machine_rate_per_hour: parseFloat(machineRate) || 1.5,
+        machine_rate_per_hour: parseFloat(machineRate) || DEFAULT_MACHINE_RATE,
         waste_percent: parseFloat(wastePercent) || 8,
         pickup_address: fullAddress,
         lat: lat ?? null,
@@ -388,7 +389,7 @@ export default function ListingEditor({
             min="0"
             value={machineRate}
             onChange={(e) => setMachineRate(e.target.value)}
-            placeholder="1.50"
+            placeholder={DEFAULT_MACHINE_RATE.toFixed(2)}
             className={inputClass}
           />
         </div>

@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import { Plus, Package, Upload, FileBox, X, FileCode2, Loader2, ChevronUp, Image as ImageIcon, Video, ArrowLeft, Pencil, Trash2 } from 'lucide-react'
 
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
-import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView, PartAssembly } from '@/lib/types'
+import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView, PartAssembly, PermissionStatus } from '@/lib/types'
 import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation, parseUrlTranslation, COLOR_PRESETS, parseGcodeStats, serializeGcodeStats, parseDesignerMetadata } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
@@ -19,6 +19,7 @@ import {
   DEFAULT_MACHINE_RATE,
   DEFAULT_WASTE_PERCENT,
   DEFAULT_FILAMENT_COST_PER_KG,
+  calculateEstimate,
 } from '@/lib/pricing'
 
 const inputClass =
@@ -106,6 +107,7 @@ type FormState = {
   designer_tip_url: string
   license_type: string
   commercial_allowed: boolean
+  permission_status: PermissionStatus
 }
 
 const BLANK: FormState = {
@@ -136,6 +138,7 @@ const BLANK: FormState = {
   designer_tip_url: '',
   license_type: 'CC BY 4.0 (Default)',
   commercial_allowed: true,
+  permission_status: 'not_required',
 }
 
 function itemToForm(item: CatalogItem): FormState {
@@ -145,6 +148,19 @@ function itemToForm(item: CatalogItem): FormState {
   }
   const stats = parseGcodeStats(item.description)
   const designer = parseDesignerMetadata(item.description)
+  
+  const isUnverified = (designer?.license ?? 'CC BY 4.0 (Default)').includes('License Unverified') || (designer?.license ?? 'CC BY 4.0 (Default)').includes('Check Manually')
+  const commercialAllowed = designer?.commercialAllowed ?? true
+  
+  let resolvedPermissionStatus = item.permission_status || designer?.permissionStatus
+  if (!resolvedPermissionStatus) {
+    if (!commercialAllowed || isUnverified) {
+      resolvedPermissionStatus = 'pending_permission'
+    } else {
+      resolvedPermissionStatus = 'not_required'
+    }
+  }
+
   return {
     name: item.name,
     description: cleanDescription(item.description),
@@ -172,7 +188,8 @@ function itemToForm(item: CatalogItem): FormState {
     designer_name: designer?.name ?? '',
     designer_tip_url: designer?.tipUrl ?? '',
     license_type: designer?.license ?? 'CC BY 4.0 (Default)',
-    commercial_allowed: designer?.commercialAllowed ?? true,
+    commercial_allowed: commercialAllowed,
+    permission_status: resolvedPermissionStatus,
   }
 }
 
@@ -246,7 +263,8 @@ Message me to request a custom print!`
         setForm(prev => ({
           ...prev,
           designer_name: prev.designer_name || 'Original Creator',
-          license_type: prev.license_type || 'CC BY (Attribution)',
+          license_type: prev.license_type || 'License Unverified - Check Manually',
+          commercial_allowed: false,
         }))
         return
       }
@@ -334,6 +352,7 @@ Message me to request a custom print!`
       tipUrl: form.designer_tip_url.trim(),
       license: form.license_type,
       commercialAllowed: form.commercial_allowed,
+      permissionStatus: form.permission_status,
     }
     if (designerMeta.name || designerMeta.tipUrl || designerMeta.license) {
       finalDescription += `\n\n<!-- DESIGNER_METADATA: ${JSON.stringify(designerMeta)} -->`
@@ -361,6 +380,7 @@ Message me to request a custom print!`
       resize_min_pct: form.resize_min_pct,
       resize_max_pct: form.resize_max_pct,
       base_price: basePriceNum,
+      permission_status: form.permission_status,
     }
 
     startTransition(async () => {
@@ -380,12 +400,13 @@ Message me to request a custom print!`
           color: data.color ?? null,
           color_hex: data.color_hex ?? null,
           base_price: data.base_price ?? null,
+          permission_status: data.permission_status,
         }
         setItems((prev) => [newItem, ...prev])
       } else if (editing) {
         const res = await updateCatalogItem(editing, data)
         if ('error' in res) { setError(res.error); return }
-        setItems((prev) => prev.map((i) => i.id === editing ? { ...i, ...data, material: data.material ?? null, color: data.color ?? null, color_hex: data.color_hex ?? null, base_price: data.base_price ?? null } : i))
+        setItems((prev) => prev.map((i) => i.id === editing ? { ...i, ...data, material: data.material ?? null, color: data.color ?? null, color_hex: data.color_hex ?? null, base_price: data.base_price ?? null, permission_status: data.permission_status } : i))
       }
       closeForm()
     })
@@ -465,9 +486,32 @@ Message me to request a custom print!`
                 </div>
               </div>
               {item.description && <p className="mt-1 text-xs text-slate-500 line-clamp-2">{cleanDescription(item.description)}</p>}
-              <div className="mt-2 flex flex-wrap gap-1">
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 {item.allow_custom_text && <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[11px] font-medium text-orange-600">Custom text</span>}
                 {item.allow_resize && <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[11px] font-medium text-orange-600">Resize</span>}
+                {(() => {
+                  const designer = parseDesignerMetadata(item.description)
+                  const isUnverified = (designer?.license ?? '').includes('License Unverified') || (designer?.license ?? '').includes('Check Manually')
+                  const commercialAllowed = designer?.commercialAllowed ?? true
+                  let permissionStatus = item.permission_status || designer?.permissionStatus
+                  if (!permissionStatus) {
+                    if (!commercialAllowed || isUnverified) {
+                      permissionStatus = 'pending_permission'
+                    } else {
+                      permissionStatus = 'not_required'
+                    }
+                  }
+                  if (permissionStatus === 'pending_permission') {
+                    return <span className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[11px] font-bold text-amber-700">⚠️ Pending Permission</span>
+                  }
+                  if (permissionStatus === 'approved') {
+                    return <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-bold text-emerald-700">✅ Permission Approved</span>
+                  }
+                  if (permissionStatus === 'denied') {
+                    return <span className="rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[11px] font-bold text-red-700">❌ Permission Denied</span>
+                  }
+                  return null
+                })()}
               </div>
             </div>
           </div>
@@ -597,14 +641,32 @@ function GcodeCalculator({
       const costPerKg = printer.filament_costs?.[i.material] ?? DEFAULT_FILAMENT_COST_PER_KG[i.material] ?? 55
       return { label: `Plate ${idx + 1} — ${w}g ${MATERIAL_LABELS[i.material]} @ RM${costPerKg}/kg`, cost: (w / 1000) * costPerKg }
     })
-    const filamentCost    = perPlate.reduce((s, p) => s + p.cost, 0)
-    const electricityCost = totalHours > 0 ? totalHours * (modelPowerWatts / 1000) * elecRate : 0
-    const machineCost     = totalHours > 0 ? totalHours * machRate : 0
-    const subtotal        = filamentCost + electricityCost + machineCost
-    const wasteCost       = subtotal * (wastePct / 100)
-    const baseCost        = subtotal + wasteCost
-    const markupAmt       = baseCost * (markup / 100)
-    setBreakdown({ perPlate, electricityCost, machineCost, wasteCost, baseCost, markup: markupAmt, total: baseCost + markupAmt })
+    const filamentCost = perPlate.reduce((s, p) => s + p.cost, 0)
+
+    const cpkg = totalWeight > 0 ? (filamentCost / (totalWeight / 1000)) : 0
+    const est = calculateEstimate({
+      size: 'medium',
+      quality: 'basic',
+      material: items[0]?.material ?? 'pla',
+      power_watts: modelPowerWatts,
+      cost_per_kg: cpkg,
+      electricity_rate: elecRate,
+      markup_percent: markup,
+      machine_rate_per_hour: machRate,
+      waste_percent: wastePct,
+      known_weight_g: totalWeight,
+      known_hours: totalHours,
+    })
+
+    setBreakdown({
+      perPlate,
+      electricityCost: est.electricity_cost,
+      machineCost: est.machine_cost,
+      wasteCost: est.waste_cost,
+      baseCost: est.base_cost,
+      markup: est.suggested_price - est.base_cost,
+      total: est.suggested_price
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, markup, anyStats, totalHours])
 
@@ -818,6 +880,7 @@ function CatalogForm({
   const [photoUploadError, setPhotoUploadError] = useState('')
   const [linkInput, setLinkInput] = useState('')
   const [linkError, setLinkError] = useState('')
+  const [copied, setCopied] = useState(false)
 
   const handleAddLink = () => {
     setLinkError('')
@@ -1409,7 +1472,15 @@ function CatalogForm({
               </span>
               <button
                 type="button"
-                onClick={() => set('commercial_allowed', !form.commercial_allowed)}
+                onClick={() => {
+                  const nextVal = !form.commercial_allowed
+                  set('commercial_allowed', nextVal)
+                  if (nextVal) {
+                    set('permission_status', 'not_required')
+                  } else {
+                    set('permission_status', 'pending_permission')
+                  }
+                }}
                 className="text-[10px] text-slate-500 underline font-medium hover:text-slate-700"
               >
                 Override: Toggle commercial permission
@@ -1443,7 +1514,19 @@ function CatalogForm({
                 </label>
                 <select
                   value={form.license_type}
-                  onChange={(e) => set('license_type', e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    set('license_type', val)
+                    const isUnverified = val.includes('License Unverified') || val.includes('Check Manually')
+                    const isNonCommercial = val.includes('NC') || val.includes('Non-Commercial') || val.includes('NonCommercial')
+                    if (isUnverified || isNonCommercial) {
+                      set('commercial_allowed', false)
+                      set('permission_status', 'pending_permission')
+                    } else {
+                      set('commercial_allowed', true)
+                      set('permission_status', 'not_required')
+                    }
+                  }}
                   className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 focus:border-orange-500 focus:outline-none transition text-xs"
                 >
                   <option value="CC BY (Attribution)">CC BY (Attribution)</option>
@@ -1454,6 +1537,8 @@ function CatalogForm({
                   <option value="CC BY-NC-ND (Attribution-NonCommercial-NoDerivatives)">CC BY-NC-ND</option>
                   <option value="CC0 (Public Domain)">CC0 (Public Domain)</option>
                   <option value="Commercial License">Commercial License</option>
+                  <option value="Standard Digital File License (Non-Commercial)">Standard Digital File License (Non-Commercial)</option>
+                  <option value="License Unverified - Check Manually">License Unverified - Check Manually</option>
                 </select>
               </div>
             </div>
@@ -1470,6 +1555,80 @@ function CatalogForm({
                 className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 focus:border-orange-500 focus:outline-none transition text-xs"
               />
             </div>
+
+            {/* Mark as Approved Toggle */}
+            {(!form.commercial_allowed || form.license_type.includes('License Unverified') || form.license_type.includes('Check Manually')) && (
+              <div className="flex items-center gap-2 pt-2.5 border-t border-slate-200/40">
+                <input
+                  type="checkbox"
+                  id="mark-approved"
+                  checked={form.permission_status === 'approved'}
+                  onChange={(e) => {
+                    set('permission_status', e.target.checked ? 'approved' : 'pending_permission')
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500 transition cursor-pointer"
+                />
+                <label htmlFor="mark-approved" className="text-xs font-semibold text-slate-700 select-none cursor-pointer">
+                  Mark as Approved (Permission Granted by Designer)
+                </label>
+              </div>
+            )}
+
+            {/* One-Click License Request Assistant */}
+            {(!form.commercial_allowed || form.license_type.includes('License Unverified') || form.license_type.includes('Check Manually')) && (
+              <div className="mt-3 rounded-xl border border-orange-200/60 bg-orange-50/15 p-3.5 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">📋</span>
+                  <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wide">License Request Assistant</span>
+                </div>
+                <p className="text-slate-500 text-[10px] leading-relaxed">
+                  Need permission? Use our polite message template below to message the designer on MakerWorld or Printables. Click copy to copy the template and open their link to request permission.
+                </p>
+                <div className="relative">
+                  <textarea
+                    readOnly
+                    value={`Hi ${form.designer_name || 'there'},
+
+I really love your "${form.name || 'this 3D model'}" design! I run a local 3D printing service named "${printer.name || 'my 3D printing shop'}" and would love to add it to my catalog so customers can order physical prints directly.
+
+Since your model is listed under a non-commercial or unverified license, I wanted to reach out and ask for your permission to print and sell physical copies of your design. ${form.designer_tip_url ? `I'd be happy to support you via your tip link (${form.designer_tip_url}) or arrange other credit/royalties.` : `I'm happy to support you, link back to your profile, or credit/royalty share if you'd like.`}
+
+Thanks so much for your amazing work!
+
+Best regards,
+${printer.name || 'my 3D printing shop'}`}
+                    className="w-full h-32 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[10px] text-slate-600 font-mono focus:outline-none resize-none leading-normal"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const requestMsg = `Hi ${form.designer_name || 'there'},
+
+I really love your "${form.name || 'this 3D model'}" design! I run a local 3D printing service named "${printer.name || 'my 3D printing shop'}" and would love to add it to my catalog so customers can order physical prints directly.
+
+Since your model is listed under a non-commercial or unverified license, I wanted to reach out and ask for your permission to print and sell physical copies of your design. ${form.designer_tip_url ? `I'd be happy to support you via your tip link (${form.designer_tip_url}) or arrange other credit/royalties.` : `I'm happy to support you, link back to your profile, or credit/royalty share if you'd like.`}
+
+Thanks so much for your amazing work!
+
+Best regards,
+${printer.name || 'my 3D printing shop'}`
+                    navigator.clipboard.writeText(requestMsg)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 2500)
+                    const targetLink = form.designer_tip_url || form.model_url
+                    if (targetLink) {
+                      window.open(targetLink, '_blank')
+                    }
+                  }}
+                  className={`w-full inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold text-white shadow-sm transition transform active:scale-95 ${
+                    copied ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700'
+                  }`}
+                >
+                  <span>{copied ? '✅ Message Copied to Clipboard!' : '📋 Copy Message & Open Designer Link'}</span>
+                </button>
+              </div>
+            )}
 
             </div>
         )}

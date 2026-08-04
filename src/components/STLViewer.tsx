@@ -286,6 +286,7 @@ export default function STLViewer({
   const textMeshIndexRef = useRef<number | null | undefined>(null)
   textMeshIndexRef.current = textMeshIndex
 
+  const resolvedFileNames = fileNamesProp ?? (file ? [file.name] : [])
   const baseUrlsKey = (urlsProp ?? []).map(url => url.split('#')[0]).join(',')
 
   // ── Scene setup (re-runs only when base URLs or file names change) ────
@@ -297,7 +298,7 @@ export default function STLViewer({
     let blobUrl: string | null = null
     const activeUrls = subTab === 'assembled' ? previewUrls : printableUrls
     const urls      = file ? ((blobUrl = URL.createObjectURL(file)), [blobUrl]) : activeUrls
-    const fileNames = fileNamesProp ?? []
+    const fileNames = resolvedFileNames
 
     if (!mount || urls.length === 0) return
 
@@ -818,7 +819,7 @@ export default function STLViewer({
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
-  }, [file, baseUrlsKey, (fileNamesProp ?? []).join(','), subTab])
+  }, [file, baseUrlsKey, resolvedFileNames.join(','), subTab])
 
   // ── Live position and rotation updates (no scene rebuild) ────────
   useEffect(() => {
@@ -1007,7 +1008,7 @@ export default function STLViewer({
     if (objects.length === 0) return
 
     objects.forEach((obj, i) => {
-      const name = (fileNamesProp ?? [])[i] ?? (urlsProp ?? [])[i] ?? ''
+      const name = resolvedFileNames[i] ?? (urlsProp ?? [])[i] ?? ''
       
       if (obj instanceof THREE.Group) {
         const meshes: THREE.Mesh[] = []
@@ -1087,7 +1088,7 @@ export default function STLViewer({
     const s = sceneRef.current
     const c = cameraRef.current
     if (r && s && c) r.render(s, c)
-  }, [customText, textMeshIndex, (urlsProp ?? []).join(','), (fileNamesProp ?? []).join(',')])
+  }, [customText, textMeshIndex, (urlsProp ?? []).join(','), resolvedFileNames.join(',')])
 
   // ── Live scale updates (no scene rebuild) ──────────────────────────
   useEffect(() => {
