@@ -61,19 +61,13 @@ export default async function CatalogPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mb-8">
+      <div className="mb-6">
         <Link
           href="/dashboard"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
+          className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
         </Link>
-        <h1 className="text-2xl font-bold text-slate-900">My Products</h1>
-        <p className="mt-1 text-sm text-slate-500">{shop.name}</p>
-        <p className="mt-3 text-sm text-slate-500 max-w-lg">
-          Showcase your best prints. Customers can browse these on your listing page and order
-          directly with their customisations — text engraving, color, size, and material.
-        </p>
       </div>
 
       <CatalogManager

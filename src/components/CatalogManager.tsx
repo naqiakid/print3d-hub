@@ -2,11 +2,12 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { Plus, Package, Upload, FileBox, X, FileCode2, Loader2, ChevronUp, Image as ImageIcon, Video, ArrowLeft, Pencil, Trash2 } from 'lucide-react'
 
 const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
 import type { CatalogItem, FilamentMaterial, Filament, RequestPrinterView, PartAssembly, PermissionStatus } from '@/lib/types'
-import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation, parseUrlTranslation, COLOR_PRESETS, parseGcodeStats, serializeGcodeStats, parseDesignerMetadata } from '@/lib/types'
+import { MATERIAL_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, cleanDescription, serializeAssemblyMetadata, isPreviewFile, getDirectDownloadUrl, parseUrlRotation, parseUrlTranslation, COLOR_PRESETS, parseGcodeStats, serializeGcodeStats, parseDesignerMetadata, stripHtml, getExcerpt } from '@/lib/types'
 import { createCatalogItem, updateCatalogItem, deleteCatalogItem } from '@/lib/actions'
 import { createClient } from '@/lib/supabase/client'
 import MarkdownDescription from '@/components/MarkdownDescription'
@@ -432,90 +433,146 @@ Message me to request a custom print!`
     : [[null, items]]
 
   function renderItem(item: CatalogItem) {
+    const colorList = item.color ? item.color.split('|').filter(Boolean) : []
+    const hexList = item.color_hex ? item.color_hex.split('|').filter(Boolean) : []
+    const colorPairs: { name: string; hex?: string }[] = []
+    const seenColors = new Set<string>()
+
+    colorList.forEach((c, idx) => {
+      const name = c.trim()
+      if (name && !seenColors.has(name)) {
+        seenColors.add(name)
+        colorPairs.push({
+          name,
+          hex: hexList[idx]?.trim()
+        })
+      }
+    })
+
     return (
-        <div key={item.id} className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          <div className="flex gap-4 p-4">
-            <div className="h-20 w-20 shrink-0 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center">
-              {(item.photo_urls?.[0] ?? item.photo_url)
-                ? <img src={(item.photo_urls?.[0] ?? item.photo_url) as string} alt={item.name} className="h-full w-full object-cover" />
-                : <Package className="h-8 w-8 text-slate-300" />}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-900">{item.name}</p>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    {/* Material + color badges */}
-                    {item.allow_material_choice ? (
-                      <span className="text-xs text-slate-500">
-                        {item.available_materials.map((m) => MATERIAL_LABELS[m as FilamentMaterial] ?? m).join(' / ')}
-                        {item.base_price ? ` · from RM ${item.base_price.toFixed(2)}` : ''}
-                      </span>
-                    ) : (
-                      <>
-                        {item.material && <span className="text-xs text-slate-500">{MATERIAL_LABELS[item.material as FilamentMaterial] ?? item.material}</span>}
-                        {item.color && item.color_hex && (
-                          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                            <span className="h-2.5 w-2.5 rounded-full border border-slate-300 shrink-0" style={{ background: item.color_hex }} />
-                            {item.color}
+      <div key={item.id} className="rounded-2xl border border-slate-200 bg-white overflow-hidden h-full flex flex-col justify-between relative shadow-sm hover:shadow-md transition">
+        <div className="flex gap-4 p-4 flex-1">
+          <div className="h-20 w-20 shrink-0 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center relative">
+            {(item.photo_urls?.[0] ?? item.photo_url)
+              ? <img src={(item.photo_urls?.[0] ?? item.photo_url) as string} alt={item.name} className="h-full w-full object-cover" />
+              : <Package className="h-8 w-8 text-slate-300" />}
+          </div>
+          <div className="flex-1 min-w-0 flex flex-col justify-between">
+            <div>
+              <div className="pr-20">
+                <p className="font-semibold text-slate-900 leading-snug line-clamp-1">{item.name}</p>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                {/* Material + color badges */}
+                {item.allow_material_choice ? (
+                  <span className="text-xs text-slate-500">
+                    {item.available_materials.map((m) => MATERIAL_LABELS[m as FilamentMaterial] ?? m).join(' / ')}
+                    {item.base_price ? ` · from RM ${item.base_price.toFixed(2)}` : ''}
+                  </span>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 w-full">
+                    {item.material && <span className="text-xs text-slate-500">{MATERIAL_LABELS[item.material as FilamentMaterial] ?? item.material}</span>}
+                    {colorPairs.length > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                        {colorPairs.length === 1 ? (
+                          <>
+                            {colorPairs[0].hex && (
+                              <span className="h-2.5 w-2.5 rounded-full border border-slate-300 shrink-0" style={{ background: colorPairs[0].hex }} />
+                            )}
+                            {colorPairs[0].name}
+                          </>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-500" title={colorPairs.map(p => p.name).join(', ')}>
+                            <span className="flex -space-x-1 mr-1 shrink-0">
+                              {colorPairs.slice(0, 3).map((p, idx) => p.hex && (
+                                <span key={idx} className="h-2.5 w-2.5 rounded-full border border-white shadow-sm ring-1 ring-slate-200/40 shrink-0" style={{ background: p.hex }} />
+                              ))}
+                              {colorPairs.length > 3 && (
+                                <span className="flex items-center justify-center h-2.5 w-2.5 rounded-full border border-white bg-slate-100 text-[6px] font-bold text-slate-500 ring-1 ring-slate-200/40 shrink-0">
+                                  +{colorPairs.length - 3}
+                                </span>
+                              )}
+                            </span>
+                            <span>{colorPairs.length} Colors</span>
                           </span>
                         )}
-                        {item.allow_color_choice && <span className="text-xs text-slate-400 italic">color by customer</span>}
-                        {item.base_price && <span className="text-xs text-orange-600 font-medium">RM {item.base_price.toFixed(2)}</span>}
-                      </>
+                      </span>
                     )}
+                    {item.allow_color_choice && <span className="text-xs text-slate-400 italic">color by customer</span>}
+                    {item.base_price && <span className="text-xs text-orange-600 font-semibold ml-auto">RM {item.base_price.toFixed(2)}</span>}
                   </div>
-                </div>
-                <div className="flex gap-1.5 shrink-0 items-center">
-                  <button
-                    type="button"
-                    onClick={() => handleCopyMarketplaceListing(item)}
-                    title="Copy listing description and links for Carousell/Facebook Marketplace"
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-orange-200 hover:text-orange-600 hover:bg-orange-50/20 transition shadow-sm"
-                  >
-                    📋 Copy Listing
-                  </button>
-                  <button type="button" onClick={() => openEdit(item)}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button type="button" onClick={() => handleDelete(item)}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                )}
               </div>
-              {item.description && <p className="mt-1 text-xs text-slate-500 line-clamp-2">{cleanDescription(item.description)}</p>}
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {item.allow_custom_text && <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[11px] font-medium text-orange-600">Custom text</span>}
-                {item.allow_resize && <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[11px] font-medium text-orange-600">Resize</span>}
-                {(() => {
-                  const designer = parseDesignerMetadata(item.description)
-                  const isUnverified = (designer?.license ?? '').includes('License Unverified') || (designer?.license ?? '').includes('Check Manually')
-                  const commercialAllowed = designer?.commercialAllowed ?? true
-                  let permissionStatus = item.permission_status || designer?.permissionStatus
-                  if (!permissionStatus) {
-                    if (!commercialAllowed || isUnverified) {
-                      permissionStatus = 'pending_permission'
-                    } else {
-                      permissionStatus = 'not_required'
-                    }
-                  }
-                  if (permissionStatus === 'pending_permission') {
-                    return <span className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[11px] font-bold text-amber-700">⚠️ Pending Permission</span>
-                  }
-                  if (permissionStatus === 'approved') {
-                    return <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-bold text-emerald-700">✅ Permission Approved</span>
-                  }
-                  if (permissionStatus === 'denied') {
-                    return <span className="rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[11px] font-bold text-red-700">❌ Permission Denied</span>
-                  }
-                  return null
-                })()}
+              {item.description && <p className="mt-2 text-xs text-slate-500 line-clamp-2 leading-relaxed">{getExcerpt(item.description, 150)}</p>}
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {item.allow_custom_text && <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[10px] font-medium text-orange-600">Custom text</span>}
+                {item.allow_resize && <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[10px] font-medium text-orange-600">Resize</span>}
               </div>
             </div>
           </div>
         </div>
+
+        {/* Absolute Permission Badge */}
+        <div className="absolute top-4 right-4">
+          {(() => {
+            const designer = parseDesignerMetadata(item.description)
+            const isUnverified = (designer?.license ?? '').includes('License Unverified') || (designer?.license ?? '').includes('Check Manually')
+            const commercialAllowed = designer?.commercialAllowed ?? true
+            let permissionStatus = item.permission_status || designer?.permissionStatus
+            if (!permissionStatus) {
+              if (!commercialAllowed || isUnverified) {
+                permissionStatus = 'pending_permission'
+              } else {
+                permissionStatus = 'not_required'
+              }
+            }
+            if (permissionStatus === 'pending_permission') {
+              return (
+                <span className="rounded-full bg-amber-500 text-white px-2 py-0.5 text-[10px] font-bold shadow-sm border border-amber-400" title="Pending creator permission">
+                  ⚠️ Pending
+                </span>
+              )
+            }
+            if (permissionStatus === 'approved') {
+              return (
+                <span className="rounded-full bg-emerald-500 text-white px-2 py-0.5 text-[10px] font-bold shadow-sm border border-emerald-400" title="Approved for commercial print">
+                  ✅ Approved
+                </span>
+              )
+            }
+            if (permissionStatus === 'denied') {
+              return (
+                <span className="rounded-full bg-red-500 text-white px-2 py-0.5 text-[10px] font-bold shadow-sm border border-red-400" title="Permission denied by creator">
+                  ❌ Denied
+                </span>
+              )
+            }
+            return null
+          })()}
+        </div>
+
+        {/* Action Footer */}
+        <div className="border-t border-slate-100 px-4 py-2.5 bg-slate-50/50 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => handleCopyMarketplaceListing(item)}
+            title="Copy listing description and links for Carousell/Facebook Marketplace"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-650 hover:border-orange-200 hover:text-orange-600 transition shadow-sm"
+          >
+            📋 Copy Listing
+          </button>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => openEdit(item)}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition">
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => handleDelete(item)}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-red-55 hover:text-red-500 transition">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
     )
   }
 
@@ -562,7 +619,29 @@ Message me to request a custom print!`
   }
 
   return (
-    <div className="space-y-4 relative">
+    <div className="space-y-6 relative">
+      {editing === null && (
+        <div className="mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-5">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">My Products</h1>
+              <p className="mt-1 text-sm text-slate-500">{printer.name || 'Your Shop'}</p>
+              <p className="mt-3 text-xs text-slate-400 max-w-xl">
+                Showcase your best prints. Customers can browse these on your listing page and order
+                directly with their customisations — text engraving, color, size, and material.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={openNew}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 shadow-sm shrink-0 self-start sm:self-center"
+            >
+              <Plus className="h-4 w-4" /> Add Product
+            </button>
+          </div>
+        </div>
+      )}
+
       {toast && (
         <div className="fixed top-6 right-6 z-50 animate-slide-in-right max-w-sm rounded-2xl border border-emerald-100 bg-emerald-50 p-4 shadow-lg flex items-start gap-3">
           <span className="text-emerald-500 text-lg">✅</span>
@@ -595,13 +674,6 @@ Message me to request a custom print!`
           </div>
         </div>
       ))}
-
-      {editing === null && (
-        <button type="button" onClick={openNew}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 py-4 text-sm font-medium text-slate-500 hover:border-orange-300 hover:text-orange-600 transition">
-          <Plus className="h-4 w-4" /> Add product
-        </button>
-      )}
     </div>
   )
 }
