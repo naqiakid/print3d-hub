@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { parseDesignerMetadata } from '@/lib/types'
 import type { Shop, Printer, Filament, PrintProfile, CatalogItem, Review, RequestPrinterView } from '@/lib/types'
 import PrinterProfileView from '@/components/PrinterProfileView'
 import { PRINTER_MODELS } from '@/lib/printer-models'
@@ -95,7 +96,21 @@ export default async function ShopDetailPage({
 
   const filaments = (filamentData ?? []) as unknown as Filament[]
   const profiles  = (profileData  ?? []) as unknown as PrintProfile[]
-  const catalog   = (catalogData  ?? []) as unknown as CatalogItem[]
+  const catalog   = ((catalogData  ?? []) as unknown as CatalogItem[]).filter((item) => {
+    const designer = parseDesignerMetadata(item.description)
+    const isUnverified = (designer?.license ?? '').includes('License Unverified') || (designer?.license ?? '').includes('Check Manually')
+    const commercialAllowed = designer?.commercialAllowed ?? true
+    
+    let permissionStatus = item.permission_status || designer?.permissionStatus
+    if (!permissionStatus) {
+      if (!commercialAllowed || isUnverified) {
+        permissionStatus = 'pending_permission'
+      } else {
+        permissionStatus = 'not_required'
+      }
+    }
+    return permissionStatus === 'approved' || permissionStatus === 'not_required'
+  })
   const reviews   = (reviewData   ?? []) as unknown as Review[]
 
   // Hero visual takes its brand/image from the first (oldest) machine —

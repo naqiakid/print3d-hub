@@ -40,10 +40,26 @@ export default function CatalogGrid({
   filaments: Filament[]
   printerId: string
 }) {
-  const categories = [...new Set(catalog.map((i) => i.category).filter((c): c is string => !!c))].sort()
+  const approvedCatalog = catalog.filter((item) => {
+    const designer = parseDesignerMetadata(item.description)
+    const isUnverified = (designer?.license ?? '').includes('License Unverified') || (designer?.license ?? '').includes('Check Manually')
+    const commercialAllowed = designer?.commercialAllowed ?? true
+    
+    let permissionStatus = item.permission_status || designer?.permissionStatus
+    if (!permissionStatus) {
+      if (!commercialAllowed || isUnverified) {
+        permissionStatus = 'pending_permission'
+      } else {
+        permissionStatus = 'not_required'
+      }
+    }
+    return permissionStatus === 'approved' || permissionStatus === 'not_required'
+  })
+
+  const categories = [...new Set(approvedCatalog.map((i) => i.category).filter((c): c is string => !!c))].sort()
   const [active, setActive] = useState('All')
 
-  const visible = active === 'All' ? catalog : catalog.filter((i) => (i.category ?? 'Uncategorized') === active)
+  const visible = active === 'All' ? approvedCatalog : approvedCatalog.filter((i) => (i.category ?? 'Uncategorized') === active)
 
   return (
     <div>

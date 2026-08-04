@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { parseDesignerMetadata } from '@/lib/types'
 import type { CatalogItem, Shop } from '@/lib/types'
 import type { CatalogItemWithShop } from '@/components/CatalogBrowse'
 
@@ -35,7 +36,22 @@ export async function fetchCatalogBrowseItems(
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: false })
 
-  const allItems = (itemRows ?? []) as unknown as CatalogItem[]
+  const allItems = ((itemRows ?? []) as unknown as CatalogItem[]).filter((item) => {
+    const designer = parseDesignerMetadata(item.description)
+    const isUnverified = (designer?.license ?? '').includes('License Unverified') || (designer?.license ?? '').includes('Check Manually')
+    const commercialAllowed = designer?.commercialAllowed ?? true
+    
+    let permissionStatus = item.permission_status || designer?.permissionStatus
+    if (!permissionStatus) {
+      if (!commercialAllowed || isUnverified) {
+        permissionStatus = 'pending_permission'
+      } else {
+        permissionStatus = 'not_required'
+      }
+    }
+    return permissionStatus === 'approved' || permissionStatus === 'not_required'
+  })
+
   const filtered = applyFilter(allItems, filter)
 
   const ownerIds = [...new Set(filtered.map((i) => i.owner_id))]
