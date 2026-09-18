@@ -19,12 +19,13 @@ export default function PaymentModal({
   amount,
   printPrice,
   deliveryCost,
-  studioName = 'Qid3D Studio',
-  whatsapp = '+60123456789',
+  studioName = '3MF Studio',
+  whatsapp = '+6017-358 7894',
   onPaymentSuccess
 }: PaymentModalProps) {
   const [copiedRef, setCopiedRef] = useState(false)
   const [copiedPhone, setCopiedPhone] = useState(false)
+  const [copiedAcc, setCopiedAcc] = useState(false)
   const [receiptSent, setReceiptSent] = useState(false)
   const [isGatewayLoading, setIsGatewayLoading] = useState(false)
   const [gatewayError, setGatewayError] = useState('')
@@ -84,6 +85,12 @@ export default function PaymentModal({
     navigator.clipboard.writeText(displayPhone.replace(/[-\s]/g, ''))
     setCopiedPhone(true)
     setTimeout(() => setCopiedPhone(false), 2000)
+  }
+
+  const handleCopyAcc = () => {
+    navigator.clipboard.writeText('12261020024818')
+    setCopiedAcc(true)
+    setTimeout(() => setCopiedAcc(false), 2000)
   }
 
   const waUrl = `https://wa.me/${cleanWhatsApp}?text=${encodeURIComponent(
@@ -177,13 +184,13 @@ export default function PaymentModal({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h4 className="text-sm font-bold text-slate-900">DuitNow QR &amp; Instant Transfer</h4>
+                <h4 className="text-sm font-bold text-slate-900">DuitNow QR &amp; Instant Bank Transfer</h4>
                 <span className="rounded-full bg-pink-100 px-2 py-0.5 text-[9px] font-bold text-pink-700 uppercase tracking-wider">
                   Zero Fee
                 </span>
               </div>
               <p className="text-[11px] text-slate-500">
-                Maybank MAE, CIMB OCTO, Touch &apos;n Go eWallet, Bank Islam, etc.
+                Bank Islam, Maybank MAE, CIMB OCTO, Touch &apos;n Go eWallet, etc.
               </p>
             </div>
           </div>
@@ -192,22 +199,20 @@ export default function PaymentModal({
         {/* Content Box */}
         <div className="flex flex-col sm:flex-row items-center gap-5 bg-white p-4 rounded-xl border border-pink-200/60 shadow-2xs">
           {/* DuitNow QR Visual */}
-          <div className="flex flex-col items-center justify-center p-3 rounded-xl border-2 border-dashed border-pink-300 bg-pink-50/50 shrink-0 w-36 h-36 text-center shadow-inner">
-            <div className="relative">
-              <QrCode className="h-16 w-16 text-pink-600 mb-1" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="h-4 w-4 rounded-full bg-white flex items-center justify-center font-bold text-[9px] text-pink-600 shadow-xs">
-                  D
-                </span>
-              </div>
-            </div>
-            <span className="text-[10px] font-extrabold text-pink-700 uppercase tracking-wider">
-              Scan DuitNow QR
+          <div className="flex flex-col items-center justify-center p-2 rounded-xl border-2 border-pink-200 bg-white shrink-0 w-44 shadow-xs">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/duitnow-qr.png"
+              alt="Bank Islam DuitNow QR - Encik Muhammad Naqiyuddin"
+              className="w-40 h-auto rounded-lg object-contain shadow-2xs"
+            />
+            <span className="text-[10px] font-extrabold text-pink-700 uppercase tracking-wider mt-1.5 flex items-center gap-1">
+              <QrCode className="h-3 w-3" /> Scan with Any Banking App
             </span>
           </div>
 
           {/* Transfer Details & Reference */}
-          <div className="space-y-3 text-xs text-slate-600 flex-1 w-full">
+          <div className="space-y-2.5 text-xs text-slate-600 flex-1 w-full">
             {/* Payment Reference */}
             <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200/70">
               <div className="flex items-center justify-between">
@@ -223,7 +228,7 @@ export default function PaymentModal({
                   {copiedRef ? 'Copied' : 'Copy'}
                 </button>
               </div>
-              <div className="mt-1 font-mono font-bold text-slate-900 text-sm tracking-wide">
+              <div className="mt-0.5 font-mono font-bold text-slate-900 text-sm tracking-wide">
                 {orderRef}
               </div>
               <p className="text-[10px] text-slate-400 mt-0.5">
@@ -231,7 +236,31 @@ export default function PaymentModal({
               </p>
             </div>
 
-            {/* DuitNow Phone ID / Bank Details */}
+            {/* Bank Account Details */}
+            <div className="rounded-lg bg-pink-50/50 p-2.5 border border-pink-200/70">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-pink-700">
+                  Bank Islam Malaysia
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyAcc}
+                  className="inline-flex items-center gap-1 rounded-md bg-white border border-pink-200 hover:bg-pink-100 px-2 py-0.5 text-[11px] font-bold text-pink-700 shadow-2xs transition"
+                >
+                  {copiedAcc ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3 text-pink-600" />}
+                  {copiedAcc ? 'Copied' : 'Copy Account'}
+                </button>
+              </div>
+              <div className="mt-1 font-mono font-extrabold text-slate-900 text-base tracking-wider">
+                1226 1020 0248 18
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-600 mt-1">
+                <span>Beneficiary:</span>
+                <span className="font-semibold text-slate-900">Muhammad Naqiyuddin Bin Azmi</span>
+              </div>
+            </div>
+
+            {/* DuitNow Phone ID & Studio */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
               <div className="rounded-lg bg-slate-50/80 p-2 border border-slate-200/50">
                 <span className="text-[10px] font-medium text-slate-400 block">DuitNow ID (Phone)</span>
@@ -248,8 +277,8 @@ export default function PaymentModal({
               </div>
 
               <div className="rounded-lg bg-slate-50/80 p-2 border border-slate-200/50">
-                <span className="text-[10px] font-medium text-slate-400 block">Beneficiary</span>
-                <span className="font-bold text-slate-800 truncate block mt-0.5">{studioName}</span>
+                <span className="text-[10px] font-medium text-slate-400 block">Studio Pickup Landmark</span>
+                <span className="font-bold text-slate-800 truncate block mt-0.5">SK Ampang</span>
               </div>
             </div>
           </div>

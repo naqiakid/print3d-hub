@@ -7,6 +7,13 @@ export interface StudioConfig {
   pickupAddress: string
   whatsappNumber: string
   whatsappLink: string
+  bankDetails: {
+    bankName: string
+    accountNumber: string
+    accountHolder: string
+    duitnowId: string
+    qrCodeImage: string
+  }
   printer: {
     brand: string
     model: string
@@ -29,14 +36,21 @@ export interface StudioConfig {
 }
 
 export const STUDIO_CONFIG: StudioConfig = {
-  name: 'Qid3D Studio',
+  name: '3MF Studio',
   tagline: 'Custom 3D Printing & 3MF Fabrication · Ampang, Selangor',
   city: 'Ampang',
   state: 'Selangor',
   country: 'Malaysia',
-  pickupAddress: 'Ampang, Selangor (Near Pandan Indah / Ampang Point)',
-  whatsappNumber: '60123456789',
-  whatsappLink: 'https://wa.me/60123456789',
+  pickupAddress: 'Sekolah Kebangsaan Ampang, Ampang, Selangor',
+  whatsappNumber: '60173587894',
+  whatsappLink: 'https://wa.me/60173587894',
+  bankDetails: {
+    bankName: 'Bank Islam',
+    accountNumber: '12261020024818',
+    accountHolder: 'Muhammad Naqiyuddin Bin Azmi',
+    duitnowId: '12261020024818',
+    qrCodeImage: '/duitnow-qr.png',
+  },
   printer: {
     brand: 'Creality',
     model: 'Ender-3 V3 SE',
