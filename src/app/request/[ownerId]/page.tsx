@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { Shop, Printer, PrintProfile, Filament, RequestPrinterView } from '@/lib/types'
 import { PRINTER_MODELS } from '@/lib/printer-models'
@@ -18,7 +18,7 @@ export default async function RequestPage({
     .eq('id', ownerId)
     .maybeSingle()
 
-  if (!shopData) notFound()
+  if (!shopData) redirect('/request')
   const shop = shopData as unknown as Shop
 
   const { data: printerRows } = await supabase
@@ -27,7 +27,7 @@ export default async function RequestPage({
     .eq('owner_id', ownerId)
     .order('created_at', { ascending: true })
   const printers = (printerRows ?? []) as unknown as Printer[]
-  if (printers.length === 0) notFound()
+  if (printers.length === 0) redirect('/request')
   const primaryPrinter = printers[0]
 
   const buildVolume = primaryPrinter.printer_model_id

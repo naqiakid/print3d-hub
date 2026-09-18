@@ -1,7 +1,7 @@
 import type { PrintSize, PrintQuality, FilamentMaterial, FilamentCosts } from './types'
 
 export const DEFAULT_ELECTRICITY_RATE = 0.516
-export const DEFAULT_MARKUP_PERCENT   = 30
+export const DEFAULT_MARKUP_PERCENT   = 35
 
 export const DEFAULT_INFILL: Record<string, number> = {
   basic:    15,
@@ -41,9 +41,9 @@ export const PRINT_ESTIMATES: Record<PrintSize, Record<PrintQuality, { weight_g:
   large:  { basic: { weight_g: 150, hours: 10  }, advanced: { weight_g: 260, hours: 28  } },
 }
 
-export const DEFAULT_MACHINE_RATE   = 6.00  // RM/hr — depreciation + wear (updated to 6.00)
+export const DEFAULT_MACHINE_RATE   = 1.50  // RM/hr — calibrated machine wear & depreciation for Malaysian desktop 3D printing
 export const DEFAULT_WASTE_PERCENT  = 8    // % — consumables, failed prints, maintenance
-export const MINIMUM_ORDER_PRICE    = 15.00 // RM — minimum order floor price
+export const MINIMUM_ORDER_PRICE    = 1.00  // RM — minimum order floor price (RM 1 floor)
 
 export type EstimateInput = {
   size: PrintSize

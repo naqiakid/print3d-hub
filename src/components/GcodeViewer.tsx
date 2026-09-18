@@ -76,9 +76,10 @@ type Props = {
   colors?: string[]
   className?: string
   baseHeight?: string   // overrides the default collapsed height (e.g. 'h-56' for compact layouts)
+  autoStart?: boolean
 }
 
-export default function GcodeViewer({ urls, colors, className, baseHeight }: Props) {
+export default function GcodeViewer({ urls, colors, className, baseHeight, autoStart = false }: Props) {
   const mountRef     = useRef<HTMLDivElement>(null)
   const fullViewRef  = useRef<RenderedView | null>(null)
   const modelViewRef = useRef<RenderedView | null>(null)
@@ -86,7 +87,7 @@ export default function GcodeViewer({ urls, colors, className, baseHeight }: Pro
   const viewModeRef  = useRef<ViewMode>('full')
 
   const [activeIdx,   setActiveIdx]   = useState(0)
-  const [started,     setStarted]     = useState(false)
+  const [started,     setStarted]     = useState(autoStart)
   const [loading,     setLoading]     = useState(false)
   const [status,      setStatus]      = useState('')
   const [error,       setError]       = useState('')

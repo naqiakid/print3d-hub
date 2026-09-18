@@ -140,6 +140,8 @@ export type PrintRequest = {
   affiliate_code: string | null
   affiliate_commission_amount: number | null
   affiliate_discount_amount: number | null
+  payment_status?: 'pending' | 'paid' | 'unpaid' | 'refunded' | null
+  payment_method?: string | null
   created_at: string
 }
 
@@ -263,7 +265,7 @@ export const QUALITY_LABELS: Record<PrintQuality, string> = {
 export const STATUS_LABELS: Record<RequestStatus, string> = {
   new: 'New Request',
   quoted: 'Quote Sent',
-  accepted: 'Accepted',
+  accepted: 'Confirmed · Awaiting Payment',
   printing: 'Printing',
   done: 'Ready for Pickup',
   shipping: 'Shipped',

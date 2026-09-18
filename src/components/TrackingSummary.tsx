@@ -1,12 +1,30 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
-import dynamic from 'next/dynamic'
-import type { PrintRequest } from '@/lib/types'
-import { MATERIAL_LABELS, QUALITY_LABELS, parseAssemblyMetadata, parseMeshMapping, parseTextMeshIndex, isPreviewFile, cleanDescription, getExcerpt, getColorHexByName } from '@/lib/types'
-
-const STLViewer = dynamic(() => import('@/components/STLViewerWrapper'), { ssr: false })
+import {
+  Box,
+  Layers,
+  Maximize2,
+  CheckCircle2,
+  Sparkles,
+  Truck,
+  MapPin,
+  Download,
+  FileCode,
+  ShieldCheck,
+  Palette,
+  FileText,
+} from 'lucide-react'
+import type { PrintRequest, FilamentMaterial } from '@/lib/types'
+import {
+  MATERIAL_LABELS,
+  QUALITY_LABELS,
+  getColorHexByName,
+} from '@/lib/types'
+import { formatRM } from '@/lib/pricing'
+import Ender3BedViewerWrapper from '@/components/configurator/Ender3BedViewerFromUrlsWrapper'
+import GcodeViewerWrapper from '@/components/GcodeViewerWrapper'
+import QuotePriceBreakdown from '@/components/QuotePriceBreakdown'
 
 interface TrackingSummaryProps {
   request: PrintRequest
@@ -15,15 +33,34 @@ interface TrackingSummaryProps {
 }
 
 export default function TrackingSummary({ request, pickupAddress, catalogItemStlUrls }: TrackingSummaryProps) {
-  const [activeIdx, setActiveIdx] = useState(0)
+  const [activeTab, setActiveTab] = useState<'specs' | 'breakdown' | 'fulfillment' | 'files'>('specs')
 
-  const sourceUrls = catalogItemStlUrls && catalogItemStlUrls.length > 0
-    ? catalogItemStlUrls
-    : (request.stl_urls ?? [])
+  // ── 1. Robust URL Resolution (catalogItemStlUrls -> stl_urls -> stl_url -> file_url) ──
+  const extractUrls = (val: unknown): string[] => {
+    if (!val) return []
+    if (Array.isArray(val)) return val.filter((u) => typeof u === 'string' && u.trim().length > 0)
+    if (typeof val === 'string') {
+      const trimmed = val.trim()
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed)
+          if (Array.isArray(parsed)) return parsed.filter((u) => typeof u === 'string' && u.trim().length > 0)
+        } catch {}
+      }
+      return [trimmed]
+    }
+    return []
+  }
 
-  const printableParts = sourceUrls.filter((url) => !isPreviewFile(url))
+  const rawUrls = [
+    ...(catalogItemStlUrls && catalogItemStlUrls.length > 0 ? catalogItemStlUrls : []),
+    ...extractUrls(request.stl_urls),
+    ...extractUrls(request.stl_url),
+    ...extractUrls(request.file_url),
+  ]
+  const sourceUrls = Array.from(new Set(rawUrls)).filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
 
-  // Parser helper
+  // ── 2. Parse Multiple Copies Customizations ──
   const parsed = (() => {
     const notesStr = request.notes ?? ''
     if (!notesStr.includes('Item Customisations (Multiple Copies):')) {
@@ -33,7 +70,6 @@ export default function TrackingSummary({ request, pickupAddress, catalogItemStl
     const copies: { name?: string; color?: string; partColors?: { partName: string; color: string }[] }[] = []
     let customerNotes = ''
 
-    // Split by "Copy #"
     const parts = notesStr.split(/Copy #\d+:/g)
     for (let i = 1; i < parts.length; i++) {
       const part = parts[i] || ''
@@ -51,8 +87,8 @@ export default function TrackingSummary({ request, pickupAddress, catalogItemStl
           if (match) {
             nameVal = match[1]
           } else {
-            const parts = trimmed.split(':')
-            nameVal = parts[1]?.trim()
+            const spl = trimmed.split(':')
+            nameVal = spl[1]?.trim()
           }
         } else if (trimmed.startsWith('-') && trimmed.includes(':')) {
           const cleanLine = trimmed.slice(1).trim()
@@ -81,284 +117,470 @@ export default function TrackingSummary({ request, pickupAddress, catalogItemStl
     return { copies, customerNotes }
   })()
 
-  const cleanNotes = parsed ? parsed.customerNotes : (request.notes ?? '')
+  // ── 3. Parse Specifications from Notes & Request Fields ──
+  const notesStr = request.notes ?? ''
 
-  // Assembly metadata parsing
-  const assemblyOffsets = parseAssemblyMetadata(request.description)
-  const meshMapping = parseMeshMapping(request.description)
-  const textMeshIndex = parseTextMeshIndex(request.description)
+  // Dimensions
+  const dimsMatch =
+    notesStr.match(/\[Dims:\s*([\d\.]+)×([\d\.]+)×([\d\.]+)mm\]/i) ||
+    notesStr.match(/\[([\d\.]+)×([\d\.]+)×([\d\.]+)mm\]/i)
+  const dimensions = dimsMatch
+    ? { x: parseFloat(dimsMatch[1]), y: parseFloat(dimsMatch[2]), z: parseFloat(dimsMatch[3]) }
+    : null
 
-  // Compute active colors for 3D preview
-  const activeColors = sourceUrls.map((url, idx) => {
-    const isPreview = isPreviewFile(url)
-    if (isPreview) return '#ffffff' // preview file fallback color
+  // Quantity
+  const qtyMatch =
+    notesStr.match(/\[Quantity:\s*([^\]]+)\]/i) || notesStr.match(/Quantity:\s*([^\n]+)/i)
+  const quantityLabel = qtyMatch ? qtyMatch[1].trim() : '1 piece'
 
-    const printableIdx = printableParts.indexOf(url)
-    if (printableIdx === -1) return '#ffffff'
+  // Infill
+  const infillMatch = notesStr.match(/Infill:\s*(\d+)%/i)
+  const infillPct = request.custom_infill ?? (infillMatch ? parseInt(infillMatch[1], 10) : 20)
 
-    if (parsed && parsed.copies[activeIdx]) {
-      const copy = parsed.copies[activeIdx]
-      if (copy.partColors && copy.partColors[printableIdx]) {
-        return getColorHexByName(copy.partColors[printableIdx].color)
-      }
-      if (copy.color) {
-        return getColorHexByName(copy.color)
-      }
+  // Nozzle
+  const nozzleMatch = notesStr.match(/Nozzle:\s*(\d+\.?\d*)mm/i)
+  const nozzleMm = nozzleMatch ? parseFloat(nozzleMatch[1]) : 0.4
+
+  // Weight & Hours
+  const weightVal =
+    request.weight_g ??
+    (() => {
+      const m = notesStr.match(/\[Est\. Weight:\s*~?(\d+\.?\d*)g\]/i)
+      return m ? parseFloat(m[1]) : null
+    })()
+
+  const hoursVal =
+    request.print_hours ??
+    (() => {
+      const m = notesStr.match(/\[Est\. Print Time:\s*~?(\d+\.?\d*)h\]/i)
+      return m ? parseFloat(m[1]) : null
+    })()
+
+  // Clean Customer Notes
+  let cleanNotes = parsed ? parsed.customerNotes : notesStr
+  cleanNotes = cleanNotes
+    .replace(/\[Dims:[^\]]+\]/gi, '')
+    .replace(/\[Quantity:[^\]]+\]/gi, '')
+    .replace(/Spec:[^\n]+/gi, '')
+    .replace(/Infill:\s*\d+%/gi, '')
+    .replace(/Nozzle:\s*[\d\.]+mm/gi, '')
+    .replace(/\[Est\. Weight:[^\]]+\]/gi, '')
+    .replace(/\[Est\. Print Time:[^\]]+\]/gi, '')
+    .replace(/\[(?:Instant Estimate|Customer Est\. Price|Customer Est\. Total):[^\]]+\]/gi, '')
+    .replace(/Customer Notes:\s*/gi, '')
+    .replace(/Parts Breakdown \([^\)]*\):[\s\S]*?(?=\n\n|$)/gi, '')
+    .trim()
+
+  // Material Details
+  const materialKey = (request.material?.toLowerCase() || 'pla') as FilamentMaterial
+  const materialLabel = MATERIAL_LABELS[materialKey] || request.material?.toUpperCase() || 'PLA'
+  const materialDescriptions: Record<string, string> = {
+    pla: 'Rigid & High-Detail FDM',
+    petg: 'Tough & Impact Resistant (Heat to 75°C)',
+    abs: 'Durable & Structural (Heat to 95°C)',
+    tpu: 'Flexible 95A Rubber-like Shockproof',
+    nylon: 'High Tensile & Friction Resistant',
+    pc: 'High-Temp Industrial Grade',
+  }
+  const materialSubtext = materialDescriptions[materialKey] || 'Direct-drive FDM Printing'
+
+  // Color Details
+  const activeColorName = request.color && request.color !== 'Any' ? request.color : 'Maker Decides'
+  const activeColorHex =
+    request.color_hex && request.color_hex.startsWith('#')
+      ? request.color_hex
+      : getColorHexByName(activeColorName)
+
+  // Surface text
+  const activeText =
+    parsed && parsed.copies[0]
+      ? (parsed.copies[0].name ?? '')
+      : (() => {
+          const surfaceTextMatch = notesStr.match(/Surface text: "([^"]+)"/i) || notesStr.match(/text: "([^"]+)"/i)
+          return surfaceTextMatch?.[1] ?? ''
+        })()
+
+  // Primary file name
+  const primaryFileName = (() => {
+    if (sourceUrls.length > 0) {
+      const u = sourceUrls[0]
+      const raw = u.split('/').pop()?.split('?')[0] || '3D Model'
+      return raw.replace(/^\d+_/, '')
     }
-    
-    // Fallback to request base colors
-    const baseColors = request.color ? request.color.split('|') : []
-    const baseHexes = request.color_hex ? request.color_hex.split('|') : []
-    
-    if (printableParts.length > 1) {
-      return baseHexes[printableIdx] || getColorHexByName(baseColors[printableIdx] || 'Any')
-    }
-    return request.color_hex || getColorHexByName(request.color || 'Any')
-  })
+    return request.description?.replace(/Custom 3D print: /i, '').split('(')[0]?.trim() || 'Custom 3D Model'
+  })()
 
-  // Compute custom text for 3D preview
-  const activeText = parsed && parsed.copies[activeIdx]
-    ? (parsed.copies[activeIdx].name ?? '')
-    : (() => {
-        const surfaceTextMatch = (request.notes ?? '').match(/Surface text: "([^"]+)"/) || (request.notes ?? '').match(/text: "([^"]+)"/)
-        return surfaceTextMatch?.[1] ?? ''
-      })()
+  // ── Sliced G-code Setup ──
+  const gcodeUrls = (request.gcode_urls ?? []).filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+  const hasGcode = gcodeUrls.length > 0
+  const [viewerMode, setViewerMode] = useState<'model' | 'gcode'>(hasGcode && request.status !== 'new' ? 'gcode' : 'model')
 
-  const viewerUrls = catalogItemStlUrls && catalogItemStlUrls.length > 0
-    ? catalogItemStlUrls
-    : (request.stl_urls?.length > 0 ? request.stl_urls : [request.stl_url!])
+  const gcodeColors = (request.plate_filaments ?? []).map(
+    (p) => p.color_hex || getColorHexByName(p.color) || '#e07820'
+  )
+  if (gcodeColors.length === 0) {
+    gcodeColors.push(activeColorHex || '#e07820')
+  }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-700">Order summary</h2>
-          <p className="text-sm text-slate-655 mt-1">{getExcerpt(request.description?.replace(/Catalog order: /, ''), 120)}</p>
-        </div>
-      </div>
+    <div className="space-y-4">
 
-      {/* 3D Preview Panel */}
-      {viewerUrls.length > 0 && (
-        <div className="relative aspect-square w-full rounded-2xl overflow-hidden border border-slate-100 bg-slate-900 shadow-inner flex flex-col justify-end" style={{ height: 260 }}>
-          <STLViewer
-            urls={viewerUrls}
-            colors={activeColors}
-            assemblyOffsets={assemblyOffsets}
-            meshMapping={meshMapping}
-            textMeshIndex={textMeshIndex}
-            customText={activeText || undefined}
-            className="h-full w-full"
-          />
-          <div className="absolute top-2 left-2 pointer-events-none bg-slate-950/60 rounded-xl px-2.5 py-1 text-[10px] font-semibold text-white/90 backdrop-blur-sm shadow-sm">
-            Interactive 3D Preview
+      {/* ── 1. Authentic 3D Viewer (Ender-3 Bed Mesh + Sliced Machine Toolpaths) ── */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+        {/* Viewport Top Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-150 px-4 py-2.5 bg-slate-50/80">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600 font-bold">
+              {viewerMode === 'gcode' ? <FileCode className="h-3.5 w-3.5" /> : <Box className="h-3.5 w-3.5" />}
+            </span>
+            <div className="truncate">
+              <h2 className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5">
+                <span>{primaryFileName}</span>
+                <span className="text-[10px] font-normal text-slate-400">
+                  · {viewerMode === 'gcode' ? 'Machine Toolpath Preview' : 'Ender-3 V3 SE Bed (220×220mm)'}
+                </span>
+              </h2>
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* Copy Tabs Selector */}
-      {parsed && parsed.copies.length > 1 && (
-        <div className="space-y-2 border-b border-slate-100 pb-3">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Select Copy to Preview:</p>
-          <div className="flex flex-wrap gap-1.5">
-            {parsed.copies.map((copy, idx) => {
-              const label = copy.name ? `Copy #${idx + 1} (${copy.name})` : `Copy #${idx + 1}`
-              
-              // Get color hex for this tab
-              const tabColorName = copy.color || copy.partColors?.[0]?.color || 'Any'
-              const tabColorHex = getColorHexByName(tabColorName)
-              const hasColor = tabColorName !== 'Any'
-
-              return (
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Model vs Sliced G-code Switcher */}
+            {hasGcode ? (
+              <div className="inline-flex rounded-lg bg-slate-200/80 p-0.5 text-[11px] font-semibold shadow-2xs">
                 <button
-                  key={idx}
                   type="button"
-                  onClick={() => setActiveIdx(idx)}
-                  className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
-                    activeIdx === idx
-                      ? 'border-orange-500 bg-orange-500 text-white shadow-sm'
-                      : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200'
+                  onClick={() => setViewerMode('model')}
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 transition ${
+                    viewerMode === 'model'
+                      ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  {hasColor && (
-                    <span className={`h-2.5 w-2.5 rounded-full border shrink-0 shadow-sm transition ${
-                      activeIdx === idx ? 'border-white/50' : 'border-slate-200'
-                    }`} style={{ background: tabColorHex }} />
-                  )}
-                  {label}
+                  <Box className="h-3 w-3" />
+                  <span>3D Model</span>
                 </button>
-              )
-            })}
+                <button
+                  type="button"
+                  onClick={() => setViewerMode('gcode')}
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 transition ${
+                    viewerMode === 'gcode'
+                      ? 'bg-orange-500 text-white shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
+                  </span>
+                  <span>Sliced G-code</span>
+                </button>
+              </div>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                <FileCode className="h-2.5 w-2.5" />
+                {primaryFileName.toLowerCase().endsWith('.3mf') ? '3MF Package' : 'STL Model'}
+              </span>
+            )}
+
+            {sourceUrls.length > 0 && (
+              <a
+                href={sourceUrls[0]}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600 hover:text-orange-600 transition shadow-2xs"
+                title="Download source 3D file"
+              >
+                <Download className="h-2.5 w-2.5" />
+                <span className="hidden sm:inline">Download</span>
+              </a>
+            )}
           </div>
         </div>
-      )}
 
-      {/* active configuration display */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-        <div>
-          <span className="text-slate-400 block mb-0.5">Material</span>
-          <span className="font-semibold text-slate-850">{MATERIAL_LABELS[request.material]}</span>
-        </div>
+        {/* The Viewport: Either Ender3BedViewerWrapper or GcodeViewerWrapper */}
+        {viewerMode === 'gcode' && hasGcode ? (
+          <GcodeViewerWrapper
+            urls={gcodeUrls}
+            colors={gcodeColors}
+            autoStart={true}
+            baseHeight="h-[300px] sm:h-[340px] lg:h-[370px]"
+            className="border-0 shadow-none rounded-none"
+          />
+        ) : (
+          <Ender3BedViewerWrapper
+            urls={sourceUrls}
+            colorHex={activeColorHex}
+            materialType={materialKey}
+            fileName={primaryFileName}
+            dimensions={dimensions}
+            volumeCc={weightVal ? Math.max(0.5, weightVal / 1.25) : undefined}
+            quantity={parsed?.copies.length || 1}
+            className="border-0 shadow-none rounded-none"
+            canvasHeight="h-[300px] sm:h-[340px] lg:h-[370px]"
+          />
+        )}
+      </div>
 
-        <div>
-          <span className="text-slate-400 block mb-0.5">Quality</span>
-          <span className="font-semibold text-slate-855">{QUALITY_LABELS[request.quality] ?? 'Basic'}</span>
-        </div>
-
-        {/* Color customisation display */}
-        {(() => {
-          if (parsed && parsed.copies[activeIdx]) {
-            const copy = parsed.copies[activeIdx]
-            if (copy.partColors && copy.partColors.length > 0) {
-              return (
-                <div className="col-span-2 bg-slate-50/50 border border-slate-100 p-3 rounded-xl space-y-2">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Part Colors (Copy #{activeIdx + 1}):</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                    {copy.partColors.map((pc, i) => (
-                      <div key={i} className="flex items-center gap-1.5">
-                        <span className="text-slate-400 font-medium truncate max-w-[60%]">{pc.partName}:</span>
-                        <span className="font-semibold text-slate-700">{pc.color}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            } else if (copy.color) {
-              return (
-                <div>
-                  <span className="text-slate-400 block mb-0.5">Color</span>
-                  <span className="font-semibold text-slate-855">{copy.color}</span>
-                </div>
-              )
-            }
-          } else {
-            // Legacy/Single part colors
-            if (request.color && request.color.includes('|')) {
-              const colors = request.color.split('|')
-              return (
-                <div className="col-span-2 bg-slate-50/50 border border-slate-100 p-3 rounded-xl space-y-2">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Part Colors:</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                    {printableParts.map((url, i) => {
-                      const filename = url.split('/').pop()?.replace(/^\d+-/, '') || `Part ${i + 1}`
-                      return (
-                        <div key={url} className="flex items-center gap-1.5">
-                          <span className="text-slate-400 font-medium truncate max-w-[60%]">{filename}:</span>
-                          <span className="font-semibold text-slate-700">{colors[i] || 'Any'}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            } else if (request.color) {
-              return (
-                <div>
-                  <span className="text-slate-400 block mb-0.5">Color</span>
-                  <span className="font-semibold text-slate-855">{request.color}</span>
-                </div>
-              )
-            }
-          }
-          return null
-        })()}
-
-        {/* Text engraving display */}
-        {(() => {
-          if (parsed && parsed.copies[activeIdx]) {
-            const copy = parsed.copies[activeIdx]
-            if (copy.name) {
-              return (
-                <div className="col-span-2 bg-indigo-50/50 border border-indigo-100 px-3 py-2 rounded-xl text-[11px]">
-                  <span className="font-semibold text-indigo-700">✏️ Custom Engraving:</span>{' '}
-                  <span className="font-bold text-indigo-900">&ldquo;{copy.name}&rdquo;</span>
-                </div>
-              )
-            }
-          } else {
-            // Legacy / Single text
-            const surfaceTextMatch = (request.notes ?? '').match(/Surface text: "([^"]+)"/) || (request.notes ?? '').match(/text: "([^"]+)"/) || (request.notes ?? '').match(/: "([^"]+)"/)
-            const surfaceText = surfaceTextMatch?.[1]
-            if (surfaceText) {
-              return (
-                <div className="col-span-2 bg-indigo-50/50 border border-indigo-100 px-3 py-2 rounded-xl text-[11px]">
-                  <span className="font-semibold text-indigo-700">✏️ Custom Engraving:</span>{' '}
-                  <span className="font-bold text-indigo-900">&ldquo;{surfaceText}&rdquo;</span>
-                </div>
-              )
-            }
-          }
-          return null
-        })()}
-
-        {/* Size */}
-        {(() => {
-          const m = request.notes?.match(/^\[(\d+\.?\d*)×(\d+\.?\d*)×(\d+\.?\d*)mm\]/)
-          if (!m) return null
-          return (
+      {/* ── 2. Compact & Dynamic Print Verification Card (Segmented Tabs) ── */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+        {/* Card Header & Tab Switcher */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+              <ShieldCheck className="h-4 w-4" />
+            </span>
             <div>
-              <span className="text-slate-400 block mb-0.5">Size</span>
-              <span className="font-semibold text-slate-855">{m[1]} × {m[2]} × {m[3]} mm</span>
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Print Verification Specs
+              </h3>
             </div>
-          )
-        })()}
+          </div>
 
-        <div>
-          <span className="text-slate-400 block mb-0.5">Deadline</span>
-          <span className="font-semibold text-slate-855">
-            {new Date(request.deadline).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })}
-          </span>
+          {/* Segmented Control Tabs */}
+          <div className="inline-flex flex-wrap rounded-xl bg-slate-100 p-0.5 text-xs font-semibold text-slate-600">
+            {request.quoted_price && request.status !== 'new' ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab('breakdown')}
+                className={`rounded-lg px-2.5 py-1 text-[11px] transition ${
+                  activeTab === 'breakdown'
+                    ? 'bg-amber-500 text-white shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                💰 Price Breakdown ({formatRM((request.quoted_price ?? 0) + (request.delivery_cost ?? 0))})
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setActiveTab('specs')}
+              className={`rounded-lg px-2.5 py-1 text-[11px] transition ${
+                activeTab === 'specs'
+                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              Specs
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('fulfillment')}
+              className={`rounded-lg px-2.5 py-1 text-[11px] transition ${
+                activeTab === 'fulfillment'
+                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              Fulfillment
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('files')}
+              className={`rounded-lg px-2.5 py-1 text-[11px] transition ${
+                activeTab === 'files'
+                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              Files ({sourceUrls.length + gcodeUrls.length})
+            </button>
+          </div>
         </div>
 
-        <div className="col-span-2 border-t border-slate-50 pt-2 mt-1">
-          <span className="text-slate-400 block mb-0.5">Fulfillment</span>
-          <span className="font-semibold text-slate-855">
-            {request.fulfillment === 'delivery'
-              ? `🚚 Delivery${request.delivery_address ? ` to ${request.delivery_address}` : ''}`
-              : `🏠 Pickup${pickupAddress ? ` at ${pickupAddress}` : ''}`}
-          </span>
-        </div>
-
-        {request.weight_g && (
-          <div>
-            <span className="text-slate-400 block mb-0.5">Weight</span>
-            <span className="font-semibold text-slate-855">~{request.weight_g}g</span>
+        {/* TAB 0: Transparent Price Breakdown (When Quoted) */}
+        {activeTab === 'breakdown' && (
+          <div className="pt-1 animate-fade-in">
+            <QuotePriceBreakdown request={request} defaultExpanded={true} />
           </div>
         )}
 
-        {request.print_hours && (
-          <div>
-            <span className="text-slate-400 block mb-0.5">Print time</span>
-            <span className="font-semibold text-slate-855">~{request.print_hours}h</span>
+        {/* TAB 1: Core Parameters (High-Density 4-Quadrant Grid) */}
+        {activeTab === 'specs' && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 animate-fade-in">
+            {/* Box A: Material & Color */}
+            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 space-y-1.5">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <Palette className="h-3 w-3 text-orange-500" />
+                Material &amp; Color
+              </div>
+              <div className="flex items-center gap-2">
+                <span
+                  className="h-5 w-5 rounded-md border border-slate-300 shadow-2xs shrink-0"
+                  style={{ background: activeColorHex }}
+                />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900 leading-none truncate">{materialLabel}</p>
+                  <p className="text-[10px] text-slate-500 truncate mt-0.5">{activeColorName}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Box B: Infill Density */}
+            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 space-y-1.5">
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <span className="flex items-center gap-1.5">
+                  <Layers className="h-3 w-3 text-blue-500" />
+                  Infill
+                </span>
+                <span className="text-blue-600 font-bold">{infillPct}%</span>
+              </div>
+              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className="bg-blue-600 h-full rounded-full"
+                  style={{ width: `${Math.min(100, Math.max(5, infillPct))}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-slate-500 truncate">
+                {infillPct <= 15 ? 'Light Prototype' : infillPct <= 35 ? 'Standard Rigid' : 'Heavy-Duty Solid'}
+              </p>
+            </div>
+
+            {/* Box C: Bounding Box & Qty */}
+            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 space-y-1">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <Maximize2 className="h-3 w-3 text-teal-500" />
+                Size &amp; Qty
+              </div>
+              <p className="text-xs font-bold text-slate-900 font-mono leading-none">
+                {dimensions ? `${dimensions.x}×${dimensions.y}×${dimensions.z}mm` : request.size || 'Standard'}
+              </p>
+              <p className="text-[10px] text-orange-600 font-semibold mt-0.5">
+                Quantity: {quantityLabel}
+              </p>
+            </div>
+
+            {/* Box D: Nozzle & Quality */}
+            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 space-y-1">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <Sparkles className="h-3 w-3 text-amber-500" />
+                Nozzle &amp; Layer
+              </div>
+              <p className="text-xs font-bold text-slate-900 leading-none">
+                {nozzleMm}mm Nozzle
+              </p>
+              <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                {QUALITY_LABELS[request.quality] || '0.2mm Standard'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: Fulfillment & Notes */}
+        {activeTab === 'fulfillment' && (
+          <div className="space-y-2.5 pt-1 animate-fade-in text-xs">
+            <div className="flex items-start gap-2.5 rounded-xl bg-slate-50/80 p-3 border border-slate-150">
+              {request.fulfillment === 'delivery' ? (
+                <Truck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+              ) : (
+                <MapPin className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">
+                  {request.fulfillment === 'delivery' ? 'Delivery Address' : 'Studio Self-Pickup Point'}
+                </p>
+                <p className="text-slate-700 mt-0.5 leading-relaxed font-medium">
+                  {request.fulfillment === 'delivery'
+                    ? request.delivery_address || 'Address provided to studio maker'
+                    : pickupAddress || 'Ampang, Selangor, Malaysia (Near LRT Ampang)'}
+                </p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Recipient: {request.customer_name} ({request.customer_phone})
+                </p>
+              </div>
+            </div>
+
+            {cleanNotes && (
+              <div className="rounded-xl bg-slate-50/80 p-3 border border-slate-150 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <FileText className="h-3 w-3" />
+                  Customer Instructions
+                </span>
+                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap text-xs">
+                  {cleanNotes}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: Parts & File Downloads */}
+        {activeTab === 'files' && (
+          <div className="space-y-3 pt-1 animate-fade-in text-xs">
+            {activeText && (
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-2.5 flex items-center gap-2 text-xs">
+                <span className="font-bold text-indigo-900">Custom Surface Engraving:</span>
+                <span className="font-mono text-indigo-700">&ldquo;{activeText}&rdquo;</span>
+              </div>
+            )}
+
+            {/* Sliced Machine G-code Files (If available) */}
+            {hasGcode && (
+              <div className="rounded-xl border border-teal-200 bg-teal-50/70 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <FileCode className="h-4 w-4 text-teal-600" />
+                    <span className="font-bold text-teal-950">
+                      Machine Sliced G-code ({gcodeUrls.length} plate{gcodeUrls.length > 1 ? 's' : ''})
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full">
+                    Ready for Ender-3
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {gcodeUrls.map((url, i) => {
+                    const fname = url.split('/').pop()?.split('?')[0]?.replace(/^\d+_/, '') || `plate_${i + 1}.gcode`
+                    const plateInfo = request.plate_filaments?.[i]
+                    return (
+                      <a
+                        key={url}
+                        href={url}
+                        download={fname}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-white border border-teal-200 px-3 py-1.5 text-xs font-semibold text-teal-800 hover:bg-teal-100 transition shadow-2xs"
+                      >
+                        <Download className="h-3 w-3 text-teal-600" />
+                        <span>Plate {i + 1}: {fname}</span>
+                        {plateInfo?.weight_g ? (
+                          <span className="text-[10px] text-teal-600 font-normal">({plateInfo.weight_g}g)</span>
+                        ) : null}
+                      </a>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Source 3D CAD Model Files */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Source 3D Model Files ({sourceUrls.length})
+              </span>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {sourceUrls.map((url, i) => {
+                  const fname = url.split('/').pop()?.split('?')[0]?.replace(/^\d+_/, '') || `File ${i + 1}`
+                  return (
+                    <a
+                      key={url}
+                      href={url}
+                      download
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-slate-50 hover:bg-orange-50 hover:text-orange-600 border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition shadow-2xs"
+                    >
+                      <Download className="h-3 w-3" />
+                      <span>{sourceUrls.length > 1 ? `Part ${i + 1} (${fname})` : fname}</span>
+                    </a>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         )}
       </div>
 
-      {/* STL File Links */}
-      {(request.stl_urls?.length > 0 || request.stl_url) && (
-        <div className="border-t border-slate-100 pt-2.5 flex flex-wrap gap-3">
-          {(request.stl_urls?.length > 0 ? request.stl_urls : [request.stl_url!]).map((url, i) => (
-            <Link
-              key={url}
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-semibold text-orange-500 hover:text-orange-600 transition"
-            >
-              {request.stl_urls?.length > 1 ? `View Part File ${i + 1}` : 'View Model STL'} ↗
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {/* Customer notes */}
-      {cleanNotes && cleanNotes.trim() && (
-        <div className="border-t border-slate-100 pt-2.5">
-          <span className="text-slate-400 block mb-0.5 text-xs font-medium">Customer Notes:</span>
-          <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 border border-slate-100 p-2.5 rounded-xl whitespace-pre-wrap">
-            {cleanNotes}
-          </p>
-        </div>
-      )}
     </div>
   )
 }

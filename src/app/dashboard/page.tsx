@@ -136,28 +136,35 @@ export default async function DashboardPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href="/dashboard/price-calculator"
+            href="/dashboard/materials"
+            className="rounded-lg border border-orange-200 bg-orange-50/50 px-3 py-1.5 text-sm font-bold text-orange-700 hover:bg-orange-100/70 transition text-center flex-1 sm:flex-initial"
+          >
+            🧵 Materials &amp; Spools
+          </Link>
+          <Link
+            href="/dashboard/catalog"
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition text-center flex-1 sm:flex-initial"
           >
-            Price Calculator
+            🛍️ Catalog
           </Link>
           <Link
             href="/dashboard/equipment"
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition text-center flex-1 sm:flex-initial"
           >
-            Equipment
+            ⚙️ Machine Specs
           </Link>
           <Link
             href="/dashboard/affiliates"
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition text-center flex-1 sm:flex-initial"
           >
-            Affiliates
+            🏷️ Promo Codes
           </Link>
           <Link
-            href="/dashboard/listing"
+            href="/request"
+            target="_blank"
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition text-center flex-1 sm:flex-initial"
           >
-            Edit listing
+            View Request Page ↗
           </Link>
         </div>
       </div>
@@ -209,8 +216,8 @@ export default async function DashboardPage() {
         <span className="text-lg font-bold text-slate-900">{shop.rating}</span>
         <span className="text-sm text-slate-500">({shop.review_count} reviews)</span>
         <span className="ml-auto text-sm text-slate-400">
-          <Link href={`/printers/${shop.id}`} className="hover:text-orange-500">
-            View public listing →
+          <Link href="/request" target="_blank" className="hover:text-orange-500 font-medium">
+            View studio request page →
           </Link>
         </span>
       </div>

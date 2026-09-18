@@ -516,24 +516,77 @@ export async function submitRequest(data: {
   quantity?: number
   scale_pct?: number | null
   affiliate_code?: string | null
+  quoted_price?: number | null
 }): Promise<{ error: string } | { id: string }> {
   const supabase = await createClient()
 
-  // Strip optional columns that may not exist yet if migrations haven't run
-  const { color_preferences, fulfillment, delivery_address, declined_addons, catalog_item_id, custom_infill, custom_wall_count, quantity, scale_pct, affiliate_code, ...baseData } = data
+  // Safely resolve owner_id if not a valid UUID
+  let resolvedOwnerId = data.owner_id
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedOwnerId || '')
+  if (!isUuid) {
+    const { data: firstProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    if (firstProfile?.id) {
+      resolvedOwnerId = firstProfile.id
+    }
+  }
+
+  // Whitelist of columns that actually exist in the Postgres 'requests' table
+  const ALLOWED_REQUEST_COLUMNS = new Set([
+    'owner_id',
+    'printer_id',
+    'customer_name',
+    'customer_email',
+    'customer_phone',
+    'description',
+    'file_url',
+    'stl_urls',
+    'weight_g',
+    'print_hours',
+    'print_type',
+    'material',
+    'color',
+    'size',
+    'quality',
+    'deadline',
+    'notes',
+    'status',
+    'quoted_price',
+    'quoted_by_date',
+    'quote_message',
+    'fulfillment',
+    'delivery_address',
+    'delivery_cost',
+    'shipping_address',
+    'shipping_state',
+    'shipping_cost',
+    'payment_method',
+    'payment_status',
+    'quote_model_url',
+    'gcode_urls',
+    'catalog_item_id',
+    'color_preferences',
+    'selected_addons',
+    'confirmed_addons',
+    'declined_addons',
+  ])
 
   // Verify and record valid affiliate code if provided
   let validatedPromoCode = null
   let activePromoData: any = null
-  if (affiliate_code) {
+  if (data.affiliate_code) {
     const { data: promo } = await supabase
       .from('affiliates')
       .select('code, discount_pct, commission_pct, is_active, owner_id')
-      .eq('code', affiliate_code.trim().toUpperCase())
+      .eq('code', data.affiliate_code.trim().toUpperCase())
       .eq('is_active', true)
       .maybeSingle()
 
-    if (promo && (!promo.owner_id || promo.owner_id === data.owner_id)) {
+    if (promo && (!promo.owner_id || promo.owner_id === resolvedOwnerId)) {
       validatedPromoCode = promo.code
       activePromoData = promo
     }
@@ -551,16 +604,16 @@ export async function submitRequest(data: {
     affiliate_commission_amount?: number
   } | Record<string, never> = {}
 
-  if (catalog_item_id) {
+  if (data.catalog_item_id) {
     const { data: item } = await supabase
       .from('catalog_items')
       .select('base_price, material_prices, allow_material_choice, description, owner_id')
-      .eq('id', catalog_item_id)
+      .eq('id', data.catalog_item_id)
       .maybeSingle()
 
     if (item) {
       const gcodeStats = parseGcodeStats(item.description)
-      const scaleMultiplier = Math.pow((scale_pct ?? 100) / 100, 3)
+      const scaleMultiplier = Math.pow((data.scale_pct ?? 100) / 100, 3)
       let unitPrice = 0
 
       let estResult = null
@@ -574,7 +627,7 @@ export async function submitRequest(data: {
 
         const costPerKg = filaments?.cost_per_kg ?? 55
         const currentWeight = gcodeStats.weight_g * scaleMultiplier
-        const currentHours = gcodeStats.hours * ((scale_pct ?? 100) / 100)
+        const currentHours = gcodeStats.hours * ((data.scale_pct ?? 100) / 100)
 
         estResult = calculateEstimate({
           size: 'medium',
@@ -609,10 +662,10 @@ export async function submitRequest(data: {
       }
 
       if (estResult && estResult.suggested_price > 0) {
-        const qty = quantity && quantity > 0 ? quantity : 1
+        const qty = data.quantity && data.quantity > 0 ? data.quantity : 1
         catalogPricing = {
           quoted_price: Math.round(estResult.final_price * qty * 100) / 100,
-          status: 'quoted', // Automatically transition status to pre-quoted
+          status: 'quoted' as RequestStatus,
           ...(validatedPromoCode ? {
             affiliate_code: validatedPromoCode,
             affiliate_discount_amount: Math.round(estResult.discount_amount * qty * 100) / 100,
@@ -623,17 +676,60 @@ export async function submitRequest(data: {
     }
   }
 
-  const insertPayload = {
-    ...baseData,
-    ...(color_preferences?.length ? { color_preferences } : {}),
-    ...(fulfillment ? { fulfillment } : {}),
-    ...(delivery_address ? { delivery_address } : {}),
-    ...(declined_addons?.length ? { declined_addons } : {}),
-    ...(catalog_item_id ? { catalog_item_id } : {}),
-    ...(custom_infill != null ? { custom_infill } : {}),
-    ...(custom_wall_count != null ? { custom_wall_count } : {}),
-    ...(validatedPromoCode ? { affiliate_code: validatedPromoCode } : {}),
+  // Preserve all job configuration metadata into notes
+  let fullNotes = (data.notes || '').trim()
+  if (data.weight_g && !fullNotes.includes('Weight:')) {
+    fullNotes += `\n[Est. Weight: ~${data.weight_g}g]`
+  }
+  if (data.print_hours && !fullNotes.includes('Print Time:')) {
+    fullNotes += `\n[Est. Print Time: ~${data.print_hours}h]`
+  }
+  if (data.custom_infill && !fullNotes.includes('Infill:')) {
+    fullNotes += `\n[Infill: ${data.custom_infill}%]`
+  }
+  if (data.quoted_price && !fullNotes.includes('Estimate:') && !fullNotes.includes('Est. Price:')) {
+    fullNotes += `\n[Customer Est. Price: RM ${data.quoted_price.toFixed(2)}]`
+  }
+
+  let deadlineDateStr = data.deadline
+  if (!deadlineDateStr || isNaN(Date.parse(deadlineDateStr))) {
+    const d = new Date()
+    d.setDate(d.getDate() + 2)
+    deadlineDateStr = d.toISOString().split('T')[0]
+  } else {
+    try {
+      deadlineDateStr = new Date(deadlineDateStr).toISOString().split('T')[0]
+    } catch {
+      const d = new Date()
+      d.setDate(d.getDate() + 2)
+      deadlineDateStr = d.toISOString().split('T')[0]
+    }
+  }
+
+  const rawInsert: Record<string, any> = {
+    ...data,
+    owner_id: resolvedOwnerId,
+    file_url: data.stl_url || data.stl_urls?.[0] || data.model_url || (data as any).file_url || null,
+    stl_urls: data.stl_urls?.length ? data.stl_urls : (data.stl_url ? [data.stl_url] : null),
+    weight_g: data.weight_g ?? null,
+    print_hours: data.print_hours ?? null,
+    fulfillment: data.fulfillment ?? 'pickup',
+    delivery_address: data.delivery_address || (data as any).shipping_address || null,
+    shipping_address: data.delivery_address || (data as any).shipping_address || null,
+    color_preferences: data.color_preferences ? JSON.stringify(data.color_preferences) : null,
+    notes: fullNotes,
+    deadline: deadlineDateStr,
+    status: (catalogPricing.status || 'new') as RequestStatus,
     ...catalogPricing,
+    quoted_price: catalogPricing.quoted_price ?? null,
+  }
+
+  // Filter so ONLY valid database columns are sent to Postgres
+  const insertPayload: Record<string, any> = {}
+  for (const [k, v] of Object.entries(rawInsert)) {
+    if (ALLOWED_REQUEST_COLUMNS.has(k) && v !== undefined) {
+      insertPayload[k] = v
+    }
   }
 
   const { data: inserted, error } = await supabase
@@ -647,7 +743,7 @@ export async function submitRequest(data: {
   supabase
     .from('profiles')
     .select('name')
-    .eq('id', data.owner_id)
+    .eq('id', resolvedOwnerId)
     .single()
     .then(({ data: shop }) => {
       const printerName = shop?.name ?? 'your printer'
@@ -764,9 +860,14 @@ export async function updateRequestStatus(
   } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' }
 
+  const updatePayload: Record<string, unknown> = { status }
+  if (status === 'printing') {
+    updatePayload.payment_status = 'paid'
+  }
+
   const { error } = await supabase
     .from('requests')
-    .update({ status })
+    .update(updatePayload)
     .eq('id', requestId)
 
   if (error) return { error: error.message }
@@ -833,6 +934,27 @@ export async function updateRequestStatus(
   }
 
   revalidatePath('/dashboard')
+}
+
+export async function updatePaymentStatus(
+  requestId: string,
+  paymentStatus: 'pending' | 'paid' | 'unpaid' | 'refunded',
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('requests')
+    .update({ payment_status: paymentStatus })
+    .eq('id', requestId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/dashboard')
+  revalidatePath(`/track/${requestId}`)
 }
 
 export async function confirmDeliveryReceived(
@@ -942,24 +1064,32 @@ export async function sendQuote(
   } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' }
 
-  const { error } = await supabase
+  const updatePayload: Record<string, unknown> = {
+    status: 'quoted' as RequestStatus,
+    quoted_price: price,
+    quoted_by_date: byDate,
+    quote_message: message,
+    ...(gcodeUrls !== undefined         && { gcode_urls: gcodeUrls }),
+    ...(weightG != null                 && { weight_g: weightG }),
+    ...(printHours != null              && { print_hours: printHours }),
+    ...(material                        && { material }),
+    ...(plateFilaments?.length          && { plate_filaments: plateFilaments }),
+    ...(confirmedAddons                 && { confirmed_addons: confirmedAddons }),
+    ...(deliveryCost != null            && { delivery_cost: deliveryCost }),
+    ...(stlUrlsToMerge?.length          && { stl_urls: stlUrlsToMerge }),
+    ...(quoteModelUrl                   && { quote_model_url: quoteModelUrl }),
+  }
+
+  let { error } = await supabase
     .from('requests')
-    .update({
-      status: 'quoted' as RequestStatus,
-      quoted_price: price,
-      quoted_by_date: byDate,
-      quote_message: message,
-      ...(gcodeUrls !== undefined         && { gcode_urls: gcodeUrls }),
-      ...(weightG != null                 && { weight_g: weightG }),
-      ...(printHours != null              && { print_hours: printHours }),
-      ...(material                        && { material }),
-      ...(plateFilaments?.length          && { plate_filaments: plateFilaments }),
-      ...(confirmedAddons                 && { confirmed_addons: confirmedAddons }),
-      ...(deliveryCost != null            && { delivery_cost: deliveryCost }),
-      ...(stlUrlsToMerge?.length          && { stl_urls: stlUrlsToMerge }),
-      ...(quoteModelUrl                   && { quote_model_url: quoteModelUrl }),
-    })
+    .update(updatePayload)
     .eq('id', requestId)
+
+  if (error && error.message.includes('plate_filaments')) {
+    delete updatePayload.plate_filaments
+    const retry = await supabase.from('requests').update(updatePayload).eq('id', requestId)
+    error = retry.error
+  }
 
   if (error) return { error: error.message }
 
@@ -1052,7 +1182,11 @@ export async function acceptQuote(
 
   const { error } = await supabase
     .from('requests')
-    .update({ status: 'accepted' as RequestStatus })
+    .update({
+      status: 'accepted' as RequestStatus,
+      payment_status: 'pending',
+      payment_method: 'duitnow',
+    })
     .eq('id', requestId)
 
   if (error) return { error: error.message }

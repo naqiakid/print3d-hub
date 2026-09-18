@@ -1,181 +1,416 @@
 import Link from 'next/link'
-import { ArrowRight, Upload, Sliders, ShoppingBag, Search, Printer, Package } from 'lucide-react'
+import {
+  ArrowRight,
+  Upload,
+  ShoppingBag,
+  Printer,
+  Package,
+  ShieldCheck,
+  Zap,
+  Layers,
+  Sparkles,
+  Truck,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  Sliders
+} from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import type { Shop } from '@/lib/types'
+import type { Shop, Printer as PrinterType, Filament, RequestPrinterView } from '@/lib/types'
 import { fetchCatalogBrowseItems } from '@/lib/catalog-browse'
 import { ProductCard } from '@/components/CatalogBrowse'
-import PrintersNearYou from '@/components/PrintersNearYou'
+import PublicPriceCalculatorWrapper from '@/components/configurator/PriceConfiguratorWrapper'
+import { STUDIO_CONFIG } from '@/config/studio'
+import { getStudioFilamentsAsFilaments } from '@/config/materials'
+
+const fallbackPrinter: RequestPrinterView = {
+  id: 'qid-primary',
+  name: STUDIO_CONFIG.name,
+  description: `${STUDIO_CONFIG.tagline} based in ${STUDIO_CONFIG.city}, ${STUDIO_CONFIG.state}.`,
+  whatsapp: STUDIO_CONFIG.whatsappNumber,
+  print_types: ['everyday', 'strong'],
+  materials: ['pla', 'petg', 'tpu'],
+  max_size: 'large',
+  price_min: 15,
+  price_max: 200,
+  turnaround: '24-48 Hours',
+  sample_photos: [],
+  lat: 3.1499,
+  lng: 101.7617,
+  available: true,
+  rating: 5.0,
+  review_count: 12,
+  pickup_address: STUDIO_CONFIG.pickupAddress,
+  delivery_available: true,
+  delivery_rate_per_km: STUDIO_CONFIG.shipping.runner.ratePerKm,
+  electricity_rate: 0.57,
+  markup_percent: 30,
+  waste_percent: 8,
+  advanced_available: true,
+  created_at: new Date().toISOString(),
+  printer_model: `${STUDIO_CONFIG.printer.brand} ${STUDIO_CONFIG.printer.model}`,
+  printer_model_id: 'creality-ender3-v3-se',
+  filament_costs: { pla: 55, petg: 65, tpu: 85 },
+  power_watts: STUDIO_CONFIG.printer.powerWatts,
+  machine_rate_per_hour: 1.5,
+  bed_type: ['textured_pei'],
+  grams_per_roll: 1000,
+}
+
+const fallbackFilaments: Filament[] = getStudioFilamentsAsFilaments('qid-primary')
 
 export default async function HomePage() {
   const supabase = await createClient()
 
-  const { data: printerRows } = await supabase.from('printers').select('owner_id')
-  const ownerIds = [...new Set((printerRows ?? []).map((p) => p.owner_id))]
+  // 1. Fetch Primary Studio Shop & Printer details
+  const { data: shopData } = await supabase
+    .from('profiles')
+    .select('*')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
 
-  const [allPrinters, trendingProducts, { count: completedCount }] = await Promise.all([
-    ownerIds.length
-      ? supabase
-          .from('profiles')
-          .select('*')
-          .eq('available', true)
-          .in('id', ownerIds)
-          .order('created_at', { ascending: false })
-          .then(({ data }) => (data ?? []) as unknown as Shop[])
-      : Promise.resolve([] as Shop[]),
-    fetchCatalogBrowseItems('custom').then((items) => items.slice(0, 3)),
-    supabase
-      .from('requests')
-      .select('*', { count: 'exact', head: true })
-      .in('status', ['collected', 'reviewed']),
-  ])
+  const shop = (shopData as unknown as Shop) || null
+  let primaryPrinter: PrinterType | null = null
+  let filaments: Filament[] = fallbackFilaments
 
-  const totalPrinters = ownerIds.length
-  const totalCompleted = completedCount ?? 0
+  if (shop) {
+    const [{ data: printerRows }, { data: filamentsData }] = await Promise.all([
+      supabase.from('printers').select('*').eq('owner_id', shop.id).limit(1),
+      supabase.from('filaments').select('*').eq('owner_id', shop.id).eq('in_stock', true),
+    ])
+
+    if (printerRows && printerRows.length > 0) {
+      primaryPrinter = printerRows[0] as unknown as PrinterType
+    }
+    if (filamentsData && filamentsData.length > 0) {
+      filaments = filamentsData as unknown as Filament[]
+    }
+  }
+
+  const requestPrinter: RequestPrinterView = (shop && primaryPrinter)
+    ? {
+        ...shop,
+        printer_model: primaryPrinter.printer_model,
+        printer_model_id: primaryPrinter.printer_model_id,
+        filament_costs: primaryPrinter.filament_costs,
+        power_watts: primaryPrinter.power_watts,
+        machine_rate_per_hour: primaryPrinter.machine_rate_per_hour,
+        bed_type: primaryPrinter.bed_type,
+        grams_per_roll: primaryPrinter.grams_per_roll,
+      }
+    : fallbackPrinter
+
+  // 2. Fetch Catalog Items for Ready-to-Buy Section
+  const trendingProducts = await fetchCatalogBrowseItems('all')
+    .then((items) => items.slice(0, 3))
+    .catch(() => [])
 
   return (
     <div className="flex flex-col">
 
-      {/* ── Hero ── */}
-      <section className="relative overflow-hidden bg-slate-950 py-24 lg:py-32 text-white">
+      {/* ── Hero Section ── */}
+      <section className="relative overflow-hidden bg-slate-950 py-20 lg:py-28 text-white">
         <style>{`
           @keyframes float {
             0%, 100% { transform: translateY(0px) rotate(0deg); }
-            50% { transform: translateY(-12px) rotate(0.5deg); }
+            50% { transform: translateY(-10px) rotate(0.5deg); }
           }
           .animate-float {
             animation: float 6s ease-in-out infinite;
           }
         `}</style>
 
-        {/* Faint Background Grid Pattern & Radial Glows */}
+        {/* Background Grid & Glows */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,#000_80%,transparent_100%)] pointer-events-none" />
-        <div className="absolute -left-1/4 top-0 h-96 w-96 rounded-full bg-orange-600/10 blur-[120px] pointer-events-none" />
+        <div className="absolute -left-1/4 top-0 h-96 w-96 rounded-full bg-orange-600/15 blur-[120px] pointer-events-none" />
         <div className="absolute -right-1/4 bottom-0 h-96 w-96 rounded-full bg-blue-600/10 blur-[120px] pointer-events-none" />
 
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
-            {/* Left Column: Text & CTAs */}
+            
+            {/* Left Column: Studio Pitch */}
             <div className="lg:col-span-7 flex flex-col justify-center text-center lg:text-left">
               <div className="mb-6 inline-flex self-center lg:self-start items-center gap-2 rounded-full border border-orange-500/30 bg-orange-500/10 px-3.5 py-1.5 text-xs font-semibold tracking-wide text-orange-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-orange-400 animate-pulse" />
-                Local 3D Printing Network
+                <span className="h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
+                📍 Ampang, Selangor · Creality Ender-3 V3 SE Studio
               </div>
 
-              <h1 className="mb-6 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl bg-clip-text bg-gradient-to-r from-white via-slate-100 to-slate-350">
-                Get anything{' '}
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-orange-400 to-amber-400 drop-shadow-sm">3D printed</span>
-                {' '}near you
+              <h1 className="mb-6 text-4xl font-black leading-tight tracking-tight sm:text-5xl lg:text-6xl text-white">
+                Precision <span className="bg-clip-text text-transparent bg-gradient-to-r from-orange-400 to-amber-400">3D Printing</span> &amp; Custom Models
               </h1>
 
               <p className="mb-8 max-w-xl text-base sm:text-lg leading-relaxed text-slate-300 mx-auto lg:mx-0">
-                Connect with vetted local 3D printer owners. Choose a design or bring your own,
-                and pick up locally—no 3D printer required.
+                Welcome to <strong>Qid3D Studio</strong>. We fabricate your digital 3D models into durable, physical prototypes and figures. Specializing in crisp <strong>PLA</strong>, high-strength <strong>PETG</strong>, and flexible <strong>TPU</strong>.
               </p>
 
               <div className="flex flex-col gap-3 sm:flex-row justify-center lg:justify-start">
-                <Link
-                  href="/printers"
+                <a
+                  href="#quote"
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-orange-500/20 transition duration-200 hover:bg-orange-600 hover:shadow-orange-500/35 hover:-translate-y-0.5 active:translate-y-0"
                 >
-                  Find a Printer Near Me <ArrowRight className="h-4 w-4" />
-                </Link>
+                  <Upload className="h-4 w-4" /> Instant 3D Quote &amp; Preview
+                </a>
                 <Link
-                  href="/register"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/50 px-6 py-3.5 text-sm font-semibold text-slate-250 transition duration-200 hover:border-slate-500 hover:bg-slate-800 hover:-translate-y-0.5 active:translate-y-0"
+                  href="/browse/products"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-6 py-3.5 text-sm font-semibold text-slate-200 transition duration-200 hover:border-slate-500 hover:bg-slate-800 hover:-translate-y-0.5 active:translate-y-0"
                 >
-                  List Your Printer
+                  <ShoppingBag className="h-4 w-4" /> Browse Shop Catalog
                 </Link>
               </div>
 
-              {/* Social Proof Block */}
-              <div className="mt-8 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 animate-fade-in">
-                <div className="flex -space-x-2.5">
-                  <img className="inline-block h-8 w-8 rounded-full ring-2 ring-slate-950 object-cover" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=100&h=100&q=80" alt="User face" />
-                  <img className="inline-block h-8 w-8 rounded-full ring-2 ring-slate-950 object-cover" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&h=100&q=80" alt="User face" />
-                  <img className="inline-block h-8 w-8 rounded-full ring-2 ring-slate-950 object-cover" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&h=100&q=80" alt="User face" />
-                  <img className="inline-block h-8 w-8 rounded-full ring-2 ring-slate-950 object-cover" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=100&h=100&q=80" alt="User face" />
-                </div>
-                <p className="text-slate-400 text-sm font-medium tracking-tight text-center sm:text-left">
-                  <span className="text-amber-400 mr-1.5">⭐⭐⭐⭐⭐</span>
-                  Join 50+ locals printing in Ampang & KL
-                </p>
+              {/* Machine Highlights Chips */}
+              <div className="mt-10 flex flex-wrap items-center justify-center lg:justify-start gap-2.5 text-xs font-medium text-slate-400">
+                <span className="rounded-lg bg-slate-900/80 border border-slate-800 px-3 py-1.5 flex items-center gap-1.5">
+                  <Zap className="h-3.5 w-3.5 text-orange-400" /> Direct-Drive Sprite Extruder
+                </span>
+                <span className="rounded-lg bg-slate-900/80 border border-slate-800 px-3 py-1.5 flex items-center gap-1.5">
+                  <Layers className="h-3.5 w-3.5 text-orange-400" /> 220 × 220 × 250 mm Volume
+                </span>
+                <span className="rounded-lg bg-slate-900/80 border border-slate-800 px-3 py-1.5 flex items-center gap-1.5">
+                  <Truck className="h-3.5 w-3.5 text-orange-400" /> Local Pickup &amp; Courier
+                </span>
               </div>
             </div>
 
-            {/* Right Column: Floating Showcase (Wow Factor) */}
+            {/* Right Column: Visual Showcase Badge */}
             <div className="hidden lg:block lg:col-span-5 relative pl-6">
-              {/* Outer Glow container */}
               <div className="relative mx-auto max-w-[340px] animate-float">
-                {/* Floating Badge 1 (Live Quote) */}
-                <div className="absolute -top-4 -left-10 z-20 rounded-xl border border-teal-500/30 bg-slate-950/85 px-3.5 py-2 text-[11px] font-bold text-teal-400 shadow-xl backdrop-blur-md flex items-center gap-1.5 animate-pulse">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500" />
-                  </span>
-                  <span>Live Quote: RM 25.00</span>
+                {/* Floating Badge 1 */}
+                <div className="absolute -top-4 -left-8 z-20 rounded-xl border border-teal-500/30 bg-slate-950/90 px-3.5 py-2 text-[11px] font-bold text-teal-300 shadow-xl backdrop-blur-md flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-teal-400 animate-ping" />
+                  <span>TPU Flexible Printing Ready</span>
                 </div>
 
-                {/* Floating Badge 2 (Pickup) */}
-                <div className="absolute -bottom-4 -right-6 z-20 rounded-xl border border-orange-500/30 bg-slate-950/85 px-3.5 py-2 text-[11px] font-bold text-orange-400 shadow-xl backdrop-blur-md flex items-center gap-1.5">
-                  <span>📍 Pickup in Ampang</span>
+                {/* Floating Badge 2 */}
+                <div className="absolute -bottom-4 -right-6 z-20 rounded-xl border border-orange-500/30 bg-slate-950/90 px-3.5 py-2 text-[11px] font-bold text-orange-400 shadow-xl backdrop-blur-md flex items-center gap-1.5">
+                  <span>📍 Pickup in Ampang, KL</span>
                 </div>
 
-                {/* Main Card Grid */}
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md shadow-2xl space-y-4">
-                  {/* Window Controls chrome */}
-                  <div className="flex items-center gap-1.5 border-b border-white/5 pb-3">
-                    <div className="h-2.5 w-2.5 rounded-full bg-red-500/60" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/60" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-green-500/60" />
-                    <span className="text-[10px] font-bold text-slate-500 ml-1.5 tracking-wide uppercase">Print Preview</span>
+                {/* Main Card */}
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-md shadow-2xl space-y-4">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-2.5 w-2.5 rounded-full bg-red-500/80" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/80" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-green-500/80" />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">
+                      Creality Ender-3 V3 SE
+                    </span>
                   </div>
 
-                  {/* 3D Print Time-Lapse Image */}
-                  <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-white/10 bg-slate-950 shadow-inner">
-                    <img 
-                      src="https://images.unsplash.com/photo-1615840287214-7fe58a8b668f?auto=format&fit=crop&w=600&q=80" 
-                      alt="3D printer in progress" 
-                      className="h-full w-full object-cover opacity-85 hover:scale-105 transition duration-500"
+                  <div className="relative aspect-video w-full rounded-2xl overflow-hidden border border-white/10 bg-slate-950 shadow-inner">
+                    <img
+                      src="https://images.unsplash.com/photo-1615840287214-7fe58a8b668f?auto=format&fit=crop&w=600&q=80"
+                      alt="3D printer in action"
+                      className="h-full w-full object-cover opacity-90 hover:scale-105 transition duration-500"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 to-transparent" />
+                    <div className="absolute bottom-3 left-3 text-xs font-bold text-white">
+                      CR Touch Auto-Bed Leveling
+                    </div>
                   </div>
 
-                  {/* Settings specs summary bar */}
-                  <div className="flex items-center justify-between text-[9px] font-bold tracking-wider text-slate-450 uppercase border-t border-white/5 pt-3">
-                    <span className="bg-white/5 border border-white/5 px-2 py-0.5 rounded">Layer: 0.2mm</span>
-                    <span className="bg-white/5 border border-white/5 px-2 py-0.5 rounded">Infill: 15%</span>
-                    <span className="bg-white/5 border border-white/5 px-2 py-0.5 rounded">Time: 2h 45m</span>
+                  <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-bold tracking-wider text-slate-300 uppercase border-t border-white/10 pt-3">
+                    <div className="rounded-lg bg-white/5 p-2">
+                      <p className="text-orange-400">PLA</p>
+                      <p className="text-[9px] text-slate-400">Crisp Detail</p>
+                    </div>
+                    <div className="rounded-lg bg-white/5 p-2">
+                      <p className="text-orange-400">PETG</p>
+                      <p className="text-[9px] text-slate-400">Durable</p>
+                    </div>
+                    <div className="rounded-lg bg-white/5 p-2">
+                      <p className="text-orange-400">TPU</p>
+                      <p className="text-[9px] text-slate-400">Flexible 95A</p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+
           </div>
         </div>
       </section>
 
-      {/* ── Top Trending Products ── */}
-      <section className="py-20 bg-slate-50 border-b border-slate-200/50">
+      {/* ── Instant Price Estimator & 3D WebGL Canvas Section ── */}
+      <section id="quote" className="py-20 bg-slate-100/70 border-b border-slate-200">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3.5 py-1 text-xs font-bold text-orange-700 mb-3">
+              <Sparkles className="h-3.5 w-3.5" /> Instant Slicing &amp; Quote Engine
+            </div>
+            <h2 className="text-3xl font-extrabold text-slate-900 sm:text-4xl tracking-tight">
+              Upload Your 3D File for an Instant Estimate
+            </h2>
+            <p className="mt-2 text-sm sm:text-base text-slate-500 max-w-2xl mx-auto">
+              Drop your STL, 3MF, or OBJ file. Inspect your model in interactive 3D, toggle materials &amp; infill presets, and submit your request directly to our queue.
+            </p>
+          </div>
+
+          {/* Interactive Calculator */}
+          <PublicPriceCalculatorWrapper printer={requestPrinter} filaments={filaments} />
+
+          <div className="mt-6 text-center">
+            <p className="text-xs text-slate-500">
+              Need custom CAD design assistance or batch commercial discounts?{' '}
+              <a
+                href={requestPrinter.whatsapp ? `https://wa.me/${requestPrinter.whatsapp.replace(/\D/g, '')}?text=Hi%20Qid3D%20Studio,%20I%20have%20a%20question%20about%20a%20custom%20print` : '/#contact'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-orange-600 hover:text-orange-700 underline underline-offset-2"
+              >
+                Chat directly with our studio on WhatsApp →
+              </a>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Machine & Materials Showcase ── */}
+      <section id="materials" className="py-20 bg-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl">
+              Machine Capabilities &amp; Supported Filaments
+            </h2>
+            <p className="mt-2 text-sm sm:text-base text-slate-500 max-w-xl mx-auto">
+              We tune our Creality Ender-3 V3 SE profiles specifically for optimal layer adhesion, tensile strength, and clean tolerances.
+            </p>
+          </div>
+
+          {/* Machine Banner */}
+          <div className="mb-12 rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 to-slate-950 p-8 text-white shadow-xl">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+              <div className="md:col-span-2 space-y-3">
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/20 px-3 py-1 text-xs font-bold text-orange-400 border border-orange-500/30">
+                  <Printer className="h-3.5 w-3.5" /> Our Primary Workhorse
+                </div>
+                <h3 className="text-2xl font-black tracking-tight">Creality Ender-3 V3 SE</h3>
+                <p className="text-sm text-slate-300 leading-relaxed max-w-xl">
+                  Equipped with a Sprite direct-drive extruder, dual Z-axis leadscrews, and CR Touch bed leveling. Capable of printing high-detail aesthetic miniatures as well as elastomeric, flexible TPU parts that bowden printers struggle with.
+                </p>
+                <div className="flex flex-wrap gap-4 pt-2 text-xs font-semibold text-slate-300">
+                  <span>📐 <strong>Build Volume:</strong> 220 × 220 × 250 mm</span>
+                  <span>⚙️ <strong>Nozzle:</strong> 0.4 mm Hardened Brass</span>
+                  <span>⚡ <strong>Speed:</strong> Up to 250 mm/s</span>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center space-y-2">
+                <p className="text-xs text-slate-400 uppercase tracking-wider font-bold">Standard Tolerance</p>
+                <p className="text-3xl font-black text-orange-400">±0.2 mm</p>
+                <p className="text-[11px] text-slate-400">Accurate fitment for snap-fit joints and bolt holes</p>
+              </div>
+            </div>
+          </div>
+
+          {/* 3 Material Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            
+            {/* PLA */}
+            <div className="rounded-3xl border border-slate-200 bg-slate-50/50 p-8 space-y-4 hover:border-orange-300 hover:shadow-lg transition">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-100 text-orange-600 font-black text-base">
+                PLA
+              </div>
+              <h4 className="text-xl font-bold text-slate-900">PLA (Polylactic Acid)</h4>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                The gold standard for aesthetic accuracy, figurines, cosplay accessories, and rapid visual prototyping.
+              </p>
+              <ul className="space-y-2 text-xs text-slate-600 pt-2 border-t border-slate-200/60">
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" /> Crisp surface detail &amp; vibrant colors
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" /> Eco-friendly corn-starch derivative
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" /> Best for indoor decor, figures &amp; desk organizers
+                </li>
+              </ul>
+            </div>
+
+            {/* PETG */}
+            <div className="rounded-3xl border border-slate-200 bg-slate-50/50 p-8 space-y-4 hover:border-orange-300 hover:shadow-lg transition">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-600 font-black text-base">
+                PETG
+              </div>
+              <h4 className="text-xl font-bold text-slate-900">PETG (Engineering Tough)</h4>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Combines ease of printing with superior impact resistance, chemical resistance, and heat tolerance up to 75°C.
+              </p>
+              <ul className="space-y-2 text-xs text-slate-600 pt-2 border-t border-slate-200/60">
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" /> UV &amp; water-resistant for outdoor exposure
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" /> Heat resistant inside parked cars
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" /> Best for drone brackets, car mounts &amp; functional parts
+                </li>
+              </ul>
+            </div>
+
+            {/* TPU */}
+            <div className="rounded-3xl border border-slate-200 bg-slate-50/50 p-8 space-y-4 hover:border-orange-300 hover:shadow-lg transition">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-100 text-purple-600 font-black text-base">
+                TPU
+              </div>
+              <h4 className="text-xl font-bold text-slate-900">TPU (Flexible Rubber 95A)</h4>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Elastomeric filament with rubber-like flexibility, high tear resistance, and shock absorption.
+              </p>
+              <ul className="space-y-2 text-xs text-slate-600 pt-2 border-t border-slate-200/60">
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" /> Bends and recovers shape without cracking
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" /> Direct-drive Sprite ensures flawless feed
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" /> Best for phone cases, gaskets, dampeners &amp; bumpers
+                </li>
+              </ul>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      {/* ── Ready-to-Buy Catalog Section ── */}
+      <section className="py-20 bg-slate-50 border-y border-slate-200/60">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-10 flex items-end justify-between">
             <div>
-              <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Top Trending Products</h2>
-              <p className="mt-1 text-slate-500">Popular customizable items ready to print near you</p>
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700 mb-2">
+                <span>Direct Purchase</span>
+              </div>
+              <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+                Ready-to-Print Shop Catalog
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Browse pre-calibrated 3D models and figures ready to order with customizable colors
+              </p>
             </div>
             <Link
-              href="/browse/custom"
-              className="hidden items-center gap-1 text-sm font-semibold text-orange-500 hover:text-orange-600 sm:flex transition"
+              href="/browse/products"
+              className="hidden items-center gap-1 text-sm font-semibold text-orange-600 hover:text-orange-700 sm:flex transition"
             >
-              See all designs <ArrowRight className="h-4 w-4" />
+              View full catalog <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
 
           {trendingProducts.length === 0 ? (
-            <div className="flex flex-col items-center py-16 text-center bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
-              <Package className="h-10 w-10 text-slate-300 mb-3" />
-              <p className="text-slate-500 text-sm">No customisable items listed yet.</p>
-              <Link href="/dashboard/catalog" className="mt-3 text-sm font-semibold text-orange-500 hover:text-orange-600 transition">
-                Add products to catalog →
-              </Link>
+            <div className="flex flex-col items-center py-16 text-center bg-white border border-slate-200 rounded-3xl p-8 shadow-sm">
+              <Package className="h-12 w-12 text-slate-300 mb-3" />
+              <h3 className="text-base font-bold text-slate-800">Catalog Collection Incoming</h3>
+              <p className="text-slate-500 text-xs mt-1 max-w-sm">
+                Have a 3D model you want printed right now? Use our instant file uploader above to request an instant quote.
+              </p>
+              <a href="#quote" className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-4 py-2 text-xs font-bold text-white hover:bg-orange-600 transition">
+                <Upload className="h-3.5 w-3.5" /> Upload 3D File
+              </a>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -185,191 +420,104 @@ export default async function HomePage() {
             </div>
           )}
 
-          {trendingProducts.length > 0 && (
-            <div className="mt-8 text-center sm:hidden">
-              <Link href="/browse/custom" className="inline-flex items-center gap-1 text-sm font-semibold text-orange-500">
-                See all designs <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          )}
+          <div className="mt-8 text-center sm:hidden">
+            <Link href="/browse/products" className="inline-flex items-center gap-1 text-sm font-semibold text-orange-600">
+              View all products <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </section>
 
-      {/* ── Three ways to order ── */}
-      <section className="py-20 bg-white">
+      {/* ── How it works (3 Steps) ── */}
+      <section className="bg-white py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-12 text-center">
-            <h2 className="mb-3 text-3xl font-bold text-slate-900">Three ways to order</h2>
-            <p className="mx-auto max-w-md text-slate-500">
-              Whether you have a design ready or just know what you want, there is an option for you.
+          <div className="mb-14 text-center">
+            <h2 className="mb-3 text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl">
+              How Ordering Works
+            </h2>
+            <p className="mx-auto max-w-md text-sm sm:text-base text-slate-500">
+              Three seamless steps from digital 3D model to physical delivery.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-
-            {/* 1 — Fully custom */}
-            <div className="group relative flex flex-col rounded-3xl border border-slate-200 bg-slate-50/40 p-8 shadow-sm hover:bg-white hover:border-orange-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300">
-              <span className="absolute right-6 top-5 text-5xl font-black text-slate-100/60 select-none group-hover:text-orange-50/70 transition-colors duration-300">01</span>
-              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 group-hover:bg-orange-500 transition-all duration-300 shadow-sm shadow-orange-100 group-hover:shadow-orange-500/20">
-                <Upload className="h-5 w-5 text-orange-600 group-hover:text-white transition-colors duration-300" />
-              </div>
-              <h3 className="mb-2 text-lg font-bold text-slate-900">Fully custom print</h3>
-              <p className="mb-6 flex-1 text-sm leading-relaxed text-slate-500">
-                Have your own design? Upload an STL file or share a link from Printables,
-                MakerWorld, or Thingiverse. The owner gives you a quote and prints it exactly as you want.
-              </p>
-              <Link
-                href="/printers"
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-500 hover:text-orange-600 transition"
-              >
-                Find a printer <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-
-            {/* 2 — Semi-custom */}
-            <div className="group relative flex flex-col rounded-3xl border-2 border-orange-400 bg-orange-50/20 p-8 shadow-md hover:bg-orange-50/40 hover:border-orange-500 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-              <span className="absolute right-6 top-5 text-5xl font-black text-orange-200/50 select-none group-hover:text-orange-300/40 transition-colors duration-300">02</span>
-              <div className="mb-1 self-start rounded-full bg-orange-500 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                Most popular
-              </div>
-              <div className="mb-4 mt-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500 transition-all duration-300 shadow-sm shadow-orange-100 group-hover:shadow-orange-500/20">
-                <Sliders className="h-5 w-5 text-white" />
-              </div>
-              <h3 className="mb-2 text-lg font-bold text-slate-900">Semi-custom</h3>
-              <p className="mb-6 flex-1 text-sm leading-relaxed text-slate-500">
-                Browse ready-to-print designs listed by local makers. Personalise with
-                your own text, pick a color, choose a material, or resize — whatever
-                options the owner has made available.
-              </p>
-              <Link
-                href="/browse/custom"
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-500 hover:text-orange-600 transition"
-              >
-                Browse designs <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-
-            {/* 3 — Ready-made */}
-            <div className="group relative flex flex-col rounded-3xl border border-slate-200 bg-slate-50/40 p-8 shadow-sm hover:bg-white hover:border-orange-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300">
-              <span className="absolute right-6 top-5 text-5xl font-black text-slate-100/60 select-none group-hover:text-orange-50/70 transition-colors duration-300">03</span>
-              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 group-hover:bg-orange-500 transition-all duration-300 shadow-sm shadow-orange-100 group-hover:shadow-orange-500/20">
-                <ShoppingBag className="h-5 w-5 text-orange-600 group-hover:text-white transition-colors duration-300" />
-              </div>
-              <h3 className="mb-2 text-lg font-bold text-slate-900">Ready-made product</h3>
-              <p className="mb-6 flex-1 text-sm leading-relaxed text-slate-500">
-                Just want the thing? Some makers list finished products at a fixed price —
-                no decisions needed. Order it and collect it.
-              </p>
-              <Link
-                href="/browse/ready"
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-500 hover:text-orange-600 transition"
-              >
-                See what&apos;s available <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* ── Printers Near You ── */}
-      <section className="py-20 bg-slate-50 border-y border-slate-200/50">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <PrintersNearYou initialPrinters={allPrinters} />
-        </div>
-      </section>
-
-      {/* ── How it works ── */}
-      <section className="bg-white py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-12 text-center">
-            <h2 className="mb-3 text-3xl font-bold text-slate-900">How it works</h2>
-            <p className="mx-auto max-w-md text-slate-500">Three simple steps. No account needed.</p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
             {[
               {
-                icon: Search,
                 step: '01',
-                title: 'Find a printer near you',
-                desc: 'Browse local 3D printer owners. See their materials, turnaround time, and price range.',
+                title: 'Upload or Select Model',
+                desc: 'Upload your own STL/3MF/OBJ file, or choose from our ready-to-order catalog with custom color selections.',
               },
               {
-                icon: Package,
                 step: '02',
-                title: 'Choose how you want to order',
-                desc: 'Upload your own design, personalise a listed product, or order something ready-made.',
+                title: 'Precision Slicing & Fabrication',
+                desc: 'We inspect geometry, orientation, and infill before printing on our calibrated Ender-3 V3 SE with genuine filaments.',
               },
               {
-                icon: Printer,
                 step: '03',
-                title: 'Pick it up locally',
-                desc: 'The owner prints your order and you collect it nearby. Pay directly at pickup or on delivery.',
+                title: 'Collect or Courier Delivery',
+                desc: 'Pick up in Ampang, Selangor or receive nationwide by courier with tracking link and our 100% reprint guarantee.',
               },
-            ].map(({ icon: Icon, step, title, desc }, idx) => (
+            ].map(({ step, title, desc }) => (
               <div
                 key={step}
-                className="group relative rounded-3xl border border-slate-200 bg-white p-8 shadow-sm hover:border-orange-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between"
+                className="group relative rounded-3xl border border-slate-200 bg-slate-50/40 p-8 shadow-sm hover:border-orange-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300"
               >
-                <div>
-                  <span className="absolute right-6 top-5 text-5xl font-black text-slate-100/70 select-none group-hover:text-orange-50/70 transition-colors duration-300">
-                    {step}
-                  </span>
-                  <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 group-hover:bg-orange-500 transition-all duration-300 shadow-sm shadow-orange-100 group-hover:shadow-orange-500/20">
-                    <Icon className="h-5 w-5 text-orange-600 group-hover:text-white transition-colors duration-300" />
-                  </div>
-                  <h3 className="mb-2.5 text-base font-bold text-slate-900 tracking-tight">{title}</h3>
-                  <p className="text-sm leading-relaxed text-slate-500">{desc}</p>
+                <span className="absolute right-6 top-5 text-5xl font-black text-slate-200/70 select-none group-hover:text-orange-200/50 transition-colors">
+                  {step}
+                </span>
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500 text-white font-black text-sm shadow-md shadow-orange-500/20">
+                  {step}
                 </div>
+                <h3 className="mb-2.5 text-lg font-bold text-slate-900 tracking-tight">{title}</h3>
+                <p className="text-sm leading-relaxed text-slate-500">{desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Trust Benefits Bar ── */}
-      <section className="border-b border-slate-200/50 bg-slate-50/50 py-10">
+      {/* ── Malaysian E-Commerce Trust Bar ── */}
+      <section className="border-t border-slate-200/60 bg-slate-50 py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100/60 text-lg">
+            <div className="flex items-center gap-3.5 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-xl">
                 📍
               </div>
               <div>
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Local Pickup</h4>
-                <p className="text-[11px] text-slate-500 mt-0.5">Collect prints nearby &amp; save on shipping fees</p>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Ampang Pickup</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">Free self-collection in Ampang, Selangor</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100/60 text-lg">
-                💰
+            <div className="flex items-center gap-3.5 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-xl">
+                📦
               </div>
               <div>
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Upfront Pricing</h4>
-                <p className="text-[11px] text-slate-500 mt-0.5">Instant quotes with zero hidden processing costs</p>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Nationwide Courier</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">J&amp;T &amp; Pos Laju dispatch with live tracking</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100/60 text-lg">
-                ⚙️
+            <div className="flex items-center gap-3.5 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-xl">
+                🛡️
               </div>
               <div>
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Verified Makers</h4>
-                <p className="text-[11px] text-slate-500 mt-0.5">Vetted local print hubs ensuring print quality</p>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Reprint Guarantee</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">100% free reprint if damaged in transit</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100/60 text-lg">
+            <div className="flex items-center gap-3.5 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-xl">
                 💬
               </div>
               <div>
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Direct WhatsApp</h4>
-                <p className="text-[11px] text-slate-500 mt-0.5">Coordinate custom modifications directly with makers</p>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">WhatsApp Support</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">Direct advice for slicing and model scale</p>
               </div>
             </div>
 
@@ -377,24 +525,24 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── Owner CTA ── */}
-      <section className="bg-orange-500 py-16">
+      {/* ── Studio CTA Banner ── */}
+      <section className="bg-orange-500 py-16 text-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col items-center gap-6 text-center sm:flex-row sm:text-left">
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold text-white sm:text-3xl">
-                Own a 3D printer? Put it to work.
+          <div className="flex flex-col items-center justify-between gap-6 text-center sm:flex-row sm:text-left">
+            <div>
+              <h2 className="text-2xl font-extrabold sm:text-3xl">
+                Have a 3D File Ready to Print?
               </h2>
-              <p className="mt-2 text-orange-100">
-                List your printer for free and start earning from jobs in your area.
+              <p className="mt-1 text-orange-100 text-sm">
+                Get an instant estimate now or drop a message to Qid3D Studio on WhatsApp.
               </p>
             </div>
-            <Link
-              href="/register"
-              className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-semibold text-orange-600 shadow transition hover:bg-orange-50"
+            <a
+              href="#quote"
+              className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-orange-600 shadow transition hover:bg-orange-50 active:scale-95"
             >
-              List My Printer <ArrowRight className="h-4 w-4" />
-            </Link>
+              <Upload className="h-4 w-4" /> Start Print Quote <ArrowRight className="h-4 w-4" />
+            </a>
           </div>
         </div>
       </section>
