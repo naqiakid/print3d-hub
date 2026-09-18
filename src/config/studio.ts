@@ -5,6 +5,7 @@ export interface StudioConfig {
   state: string
   country: string
   pickupAddress: string
+  email: string
   whatsappNumber: string
   whatsappLink: string
   bankDetails: {
@@ -42,6 +43,7 @@ export const STUDIO_CONFIG: StudioConfig = {
   state: 'Selangor',
   country: 'Malaysia',
   pickupAddress: 'Sekolah Kebangsaan Ampang, Ampang, Selangor',
+  email: '3mfstudio.my@gmail.com',
   whatsappNumber: '60173587894',
   whatsappLink: 'https://wa.me/60173587894',
   bankDetails: {

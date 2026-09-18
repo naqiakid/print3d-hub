@@ -254,14 +254,12 @@ export default async function HomePage() {
 
           <div className="mt-6 text-center">
             <p className="text-xs text-slate-500">
-              Need custom CAD design assistance or batch commercial discounts?{' '}
+              Need custom CAD design assistance, special materials, or batch quotes?{' '}
               <a
-                href={requestPrinter.whatsapp ? `https://wa.me/${requestPrinter.whatsapp.replace(/\D/g, '')}?text=Hi%20Qid3D%20Studio,%20I%20have%20a%20question%20about%20a%20custom%20print` : '/#contact'}
-                target="_blank"
-                rel="noopener noreferrer"
+                href="mailto:3mfstudio.my@gmail.com?subject=3MF%20Studio%20Custom%20Print%20Inquiry"
                 className="font-semibold text-orange-600 hover:text-orange-700 underline underline-offset-2"
               >
-                Chat directly with our studio on WhatsApp →
+                Email our team at 3mfstudio.my@gmail.com →
               </a>
             </p>
           </div>

@@ -66,11 +66,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <p className="text-xs text-slate-500 leading-relaxed max-w-sm">
                   Personal 3D printing studio based in Ampang, Selangor. Custom prototyping, engineering parts, and ready-to-buy catalog models delivered nationwide across Malaysia.
                 </p>
-                <div className="pt-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Studio Accepting Orders · Ampang, Selangor
-                  </span>
+                <div className="pt-2 flex flex-col gap-1.5">
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Studio Accepting Orders · Ampang, Selangor
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500 flex items-center gap-1.5 pt-0.5">
+                    <span>✉️</span>
+                    <a href="mailto:3mfstudio.my@gmail.com" className="font-medium text-slate-700 hover:text-orange-600 transition underline underline-offset-2">
+                      3mfstudio.my@gmail.com
+                    </a>
+                  </div>
                 </div>
               </div>
 
