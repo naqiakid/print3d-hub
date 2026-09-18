@@ -256,10 +256,10 @@ export default async function HomePage() {
             <p className="text-xs text-slate-500">
               Need custom CAD design assistance, special materials, or batch quotes?{' '}
               <a
-                href="mailto:3mfstudio.my@gmail.com?subject=3MF%20Studio%20Custom%20Print%20Inquiry"
+                href="mailto:3mfstudio@gmail.com?subject=3MF%20Studio%20Custom%20Print%20Inquiry"
                 className="font-semibold text-orange-600 hover:text-orange-700 underline underline-offset-2"
               >
-                Email our team at 3mfstudio.my@gmail.com →
+                Email our team at 3mfstudio@gmail.com →
               </a>
             </p>
           </div>

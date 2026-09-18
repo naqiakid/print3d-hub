@@ -75,8 +75,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   </div>
                   <div className="text-xs text-slate-500 flex items-center gap-1.5 pt-0.5">
                     <span>✉️</span>
-                    <a href="mailto:3mfstudio.my@gmail.com" className="font-medium text-slate-700 hover:text-orange-600 transition underline underline-offset-2">
-                      3mfstudio.my@gmail.com
+                    <a href="mailto:3mfstudio@gmail.com" className="font-medium text-slate-700 hover:text-orange-600 transition underline underline-offset-2">
+                      3mfstudio@gmail.com
                     </a>
                   </div>
                 </div>

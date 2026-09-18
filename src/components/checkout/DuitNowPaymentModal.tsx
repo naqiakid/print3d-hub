@@ -314,14 +314,14 @@ export default function PaymentModal({
           </a>
 
           <a
-            href={`mailto:3mfstudio.my@gmail.com?subject=${encodeURIComponent(`Payment Receipt - Order #${orderRef}`)}&body=${encodeURIComponent(`Hi 3MF Studio,\n\nI have transferred ${formatRM(amount)} for Order #${orderRef}.\nAttached is my payment receipt.\n\nOrder Link: ${typeof window !== 'undefined' ? window.location.href : ''}\n\nThank you!`)}`}
+            href={`mailto:3mfstudio@gmail.com?subject=${encodeURIComponent(`Payment Receipt - Order #${orderRef}`)}&body=${encodeURIComponent(`Hi 3MF Studio,\n\nI have transferred ${formatRM(amount)} for Order #${orderRef}.\nAttached is my payment receipt.\n\nOrder Link: ${typeof window !== 'undefined' ? window.location.href : ''}\n\nThank you!`)}`}
             onClick={() => {
               setReceiptSent(true)
               onPaymentSuccess?.()
             }}
             className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-900 py-3.5 px-4 text-xs sm:text-sm font-bold text-white shadow-md shadow-slate-900/20 transition active:scale-98 text-center"
           >
-            <span>✉️ Email Receipt (3mfstudio.my@gmail.com)</span>
+            <span>✉️ Email Receipt (3mfstudio@gmail.com)</span>
           </a>
         </div>
 
