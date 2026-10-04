@@ -19,9 +19,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }))
 
-  return [
-    { url: APP_URL, changeFrequency: 'daily', priority: 1 },
-    { url: `${APP_URL}/printers`, changeFrequency: 'daily', priority: 0.9 },
-    ...printerEntries,
+  const staticEntries: MetadataRoute.Sitemap = [
+    { url: APP_URL, changeFrequency: 'daily', priority: 1.0 },
+    { url: `${APP_URL}/request`, changeFrequency: 'daily', priority: 0.95 },
+    { url: `${APP_URL}/browse/products`, changeFrequency: 'daily', priority: 0.9 },
+    { url: `${APP_URL}/browse/ready`, changeFrequency: 'weekly', priority: 0.85 },
+    { url: `${APP_URL}/browse/custom`, changeFrequency: 'weekly', priority: 0.85 },
+    { url: `${APP_URL}/printers`, changeFrequency: 'daily', priority: 0.8 },
+    { url: `${APP_URL}/terms`, changeFrequency: 'monthly', priority: 0.3 },
+    { url: `${APP_URL}/privacy`, changeFrequency: 'monthly', priority: 0.3 },
+    { url: `${APP_URL}/refund-policy`, changeFrequency: 'monthly', priority: 0.3 },
   ]
+
+  return [...staticEntries, ...printerEntries]
 }
