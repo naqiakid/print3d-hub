@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import Navbar from '@/components/Navbar'
 import ReferralTracker from '@/components/ReferralTracker'
+import { Analytics } from '@vercel/analytics/next'
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
@@ -48,6 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ReferralTracker />
         <Navbar />
         <main className="flex-1">{children}</main>
+        <Analytics />
         
         {/* Footer */}
         <footer className="mt-auto border-t border-slate-200 bg-white py-10">
