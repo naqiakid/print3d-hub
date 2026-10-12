@@ -132,21 +132,20 @@ export default async function HomePage() {
               {/* Studio Status Badge */}
               <div className="mb-6 inline-flex self-center lg:self-start items-center gap-2 rounded-full border border-orange-500/30 bg-orange-500/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-orange-300">
                 <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>📍 Ampang, Selangor · Creality Ender-3 V3 SE Studio · Queue Open</span>
+                <span>📍 Ampang, Selangor · Custom 3D Printing Service · Queue Open</span>
               </div>
 
-              {/* Original Bold Headline with Razor-Sharp Typography */}
+              {/* Broad & Inspiring Headline */}
               <h1 className="mb-6 text-4xl font-black leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl text-white uppercase">
-                Precision{' '}
+                Your On-Demand{' '}
                 <span className="bg-clip-text text-transparent bg-gradient-to-r from-orange-400 via-amber-300 to-orange-400">
-                  3D Printing
-                </span>{' '}
-                &amp; Custom Models
+                  3D Printing Studio
+                </span>
               </h1>
 
-              {/* Original Beloved Welcome Copy */}
+              {/* Welcoming & Transparent Body Description */}
               <p className="mb-8 max-w-xl text-base sm:text-lg leading-relaxed text-neutral-300 mx-auto lg:mx-0">
-                Welcome to <strong className="text-white font-bold">3MF Studio</strong>. We fabricate your digital 3D models into durable, physical prototypes and figures. Specializing in crisp <strong className="text-white font-bold">PLA</strong>, high-strength <strong className="text-white font-bold">PETG</strong>, and flexible <strong className="text-white font-bold">TPU</strong>.
+                Welcome to <strong className="text-white font-bold">3MF Studio</strong>. Whether you need a functional prototype, a hard-to-find replacement part, or a creative project, our studio makes custom 3D fabrication simple and affordable. We believe in fair rates with open math: our interactive tool gives you a clear, transparent cost breakdown upfront so you always see what goes into your print. Crafted with precision in <strong className="text-white font-bold">PLA</strong>, <strong className="text-white font-bold">PETG</strong>, and flexible <strong className="text-white font-bold">TPU</strong>.
               </p>
 
               {/* Primary Action Buttons */}
