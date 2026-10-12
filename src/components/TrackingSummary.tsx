@@ -14,6 +14,8 @@ import {
   ShieldCheck,
   Palette,
   FileText,
+  Cpu,
+  Thermometer,
 } from 'lucide-react'
 import type { PrintRequest, FilamentMaterial } from '@/lib/types'
 import {
@@ -22,6 +24,7 @@ import {
   getColorHexByName,
 } from '@/lib/types'
 import { formatRM } from '@/lib/pricing'
+import { extractManufacturingPassport } from '@/lib/parse-gcode'
 import Ender3BedViewerWrapper from '@/components/configurator/Ender3BedViewerFromUrlsWrapper'
 import GcodeViewerWrapper from '@/components/GcodeViewerWrapper'
 import QuotePriceBreakdown from '@/components/QuotePriceBreakdown'
@@ -222,6 +225,8 @@ export default function TrackingSummary({ request, pickupAddress, catalogItemStl
     gcodeColors.push(activeColorHex || '#e07820')
   }
 
+  const passport = extractManufacturingPassport(request)
+
   return (
     <div className="space-y-4">
 
@@ -237,7 +242,9 @@ export default function TrackingSummary({ request, pickupAddress, catalogItemStl
               <h2 className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5">
                 <span>{primaryFileName}</span>
                 <span className="text-[10px] font-normal text-slate-400">
-                  · {viewerMode === 'gcode' ? 'Machine Toolpath Preview' : 'Ender-3 V3 SE Bed (220×220mm)'}
+                  · {viewerMode === 'gcode'
+                      ? `${passport.slicer || 'Machine Toolpath Preview'}${passport.layerHeight ? ` (${passport.layerHeight}mm · ${passport.infillDensity || 15}% infill)` : ''}`
+                      : 'Ender-3 V3 SE Bed (220×220mm)'}
                 </span>
               </h2>
             </div>
@@ -397,7 +404,8 @@ export default function TrackingSummary({ request, pickupAddress, catalogItemStl
 
         {/* TAB 1: Core Parameters (High-Density 4-Quadrant Grid) */}
         {activeTab === 'specs' && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 animate-fade-in">
+          <div className="space-y-3 pt-1 animate-fade-in">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {/* Box A: Material & Color */}
             <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 space-y-1.5">
               <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -464,7 +472,115 @@ export default function TrackingSummary({ request, pickupAddress, catalogItemStl
               </p>
             </div>
           </div>
-        )}
+
+          {/* Sliced G-Code Manufacturing Passport (Brim, Infill, Walls, Temps, Supports) */}
+          {passport.hasGcodeSpecs && (
+            <div className="rounded-xl border border-teal-200/90 bg-gradient-to-br from-teal-50/70 via-white to-emerald-50/30 p-3.5 space-y-2.5 mt-3 shadow-2xs animate-fade-in">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal-150 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-md bg-teal-500/10 text-teal-600">
+                    <Cpu className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="text-xs font-bold text-teal-950 uppercase tracking-wider">
+                    G-Code Slicing &amp; Manufacturing Passport
+                  </span>
+                  {passport.slicer && (
+                    <span className="text-[10px] font-semibold text-teal-800 bg-teal-100 px-2 py-0.5 rounded-full border border-teal-200/80">
+                      {passport.slicer}
+                    </span>
+                  )}
+                </div>
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 rounded-full">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                  Machine Validated
+                </span>
+              </div>
+
+              {/* 6-Parameter Micro-Card Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                {/* 1. Brim & Bed Adhesion */}
+                <div className="rounded-lg bg-white/95 border border-teal-150 p-2.5 shadow-2xs space-y-0.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Bed Adhesion / Brim
+                  </div>
+                  <p className="font-bold text-slate-900 text-xs">
+                    {passport.brimType && passport.brimType !== 'no_brim'
+                      ? `${passport.brimWidth ? `${passport.brimWidth}mm ` : ''}${passport.brimType.replace(/_/g, ' ')}`
+                      : 'Standard Skirt / None'}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Anti-warp corner adhesion</p>
+                </div>
+
+                {/* 2. Infill Architecture */}
+                <div className="rounded-lg bg-white/95 border border-teal-150 p-2.5 shadow-2xs space-y-0.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Infill Matrix
+                  </div>
+                  <p className="font-bold text-slate-900 text-xs">
+                    {passport.infillDensity ?? infillPct}% {passport.infillPattern ? `${passport.infillPattern}` : 'Structural'}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Internal rigidity matrix</p>
+                </div>
+
+                {/* 3. Perimeter Shells / Walls */}
+                <div className="rounded-lg bg-white/95 border border-teal-150 p-2.5 shadow-2xs space-y-0.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Perimeter Walls / Shell
+                  </div>
+                  <p className="font-bold text-slate-900 text-xs">
+                    {passport.wallLoops ?? 2} Walls {passport.wallGenerator ? `(${passport.wallGenerator})` : ''}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    {passport.topLayers ? `${passport.topLayers} Top / ${passport.bottomLayers || 4} Bottom` : 'Arachne perimeter walls'}
+                  </p>
+                </div>
+
+                {/* 4. Layer Resolution */}
+                <div className="rounded-lg bg-white/95 border border-teal-150 p-2.5 shadow-2xs space-y-0.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Layer Resolution
+                  </div>
+                  <p className="font-bold text-slate-900 text-xs">
+                    {passport.layerHeight ? `${passport.layerHeight}mm Layer Height` : `${nozzleMm}mm Nozzle`}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    {passport.layerCount ? `${passport.layerCount} sliced layers` : 'Calibrated step pass'}
+                  </p>
+                </div>
+
+                {/* 5. Thermal Profile */}
+                <div className="rounded-lg bg-white/95 border border-teal-150 p-2.5 shadow-2xs space-y-0.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Thermal Profile
+                  </div>
+                  <p className="font-bold text-slate-900 text-xs flex items-center gap-1">
+                    <Thermometer className="h-3 w-3 text-orange-500 shrink-0" />
+                    <span>
+                      {passport.nozzleTemp ? `${passport.nozzleTemp}°C Nozzle` : '220°C'} · {passport.bedTemp ? `${passport.bedTemp}°C Bed` : '40°C'}
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-slate-500">Regulated hotend envelope</p>
+                </div>
+
+                {/* 6. Support Structures */}
+                <div className="rounded-lg bg-white/95 border border-teal-150 p-2.5 shadow-2xs space-y-0.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Support Structures
+                  </div>
+                  <p className="font-bold text-slate-900 text-xs">
+                    {passport.supportsEnabled
+                      ? `${passport.supportType ? `${passport.supportType.toUpperCase()} ` : ''}Supports Cleaned`
+                      : 'No Supports Needed'}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    {passport.supportsEnabled ? 'Auto-detached & post-cleaned' : 'Zero overhang artifacts'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
         {/* TAB 2: Fulfillment & Notes */}
         {activeTab === 'fulfillment' && (
@@ -550,6 +666,33 @@ export default function TrackingSummary({ request, pickupAddress, catalogItemStl
                     )
                   })}
                 </div>
+
+                {passport.hasGcodeSpecs && (
+                  <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-teal-200/60 text-[10px] text-teal-900">
+                    <span className="bg-white/80 border border-teal-200 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1">
+                      <span>🎯 Infill:</span>
+                      <strong>{passport.infillDensity ?? 15}% {passport.infillPattern || 'crosshatch'}</strong>
+                    </span>
+                    <span className="bg-white/80 border border-teal-200 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1">
+                      <span>🧱 Walls:</span>
+                      <strong>{passport.wallLoops ?? 2} loops {passport.wallGenerator ? `(${passport.wallGenerator})` : ''}</strong>
+                    </span>
+                    <span className="bg-white/80 border border-teal-200 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1">
+                      <span>⚓ Brim:</span>
+                      <strong>{passport.brimType && passport.brimType !== 'no_brim' ? `${passport.brimWidth ? `${passport.brimWidth}mm ` : ''}${passport.brimType.replace(/_/g, ' ')}` : 'Standard'}</strong>
+                    </span>
+                    <span className="bg-white/80 border border-teal-200 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1">
+                      <span>🌡️ Temps:</span>
+                      <strong>{passport.nozzleTemp || 220}°C / {passport.bedTemp || 40}°C</strong>
+                    </span>
+                    {passport.supportsEnabled && (
+                      <span className="bg-white/80 border border-teal-200 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1">
+                        <span>🌳 Support:</span>
+                        <strong>{passport.supportType ? `${passport.supportType.toUpperCase()} ` : ''}Active</strong>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

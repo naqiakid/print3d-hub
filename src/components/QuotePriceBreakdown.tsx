@@ -19,6 +19,7 @@ import {
 import type { PrintRequest, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS, getColorHexByName } from '@/lib/types'
 import { formatRM } from '@/lib/pricing'
+import { extractManufacturingPassport } from '@/lib/parse-gcode'
 
 interface QuotePriceBreakdownProps {
   request: PrintRequest
@@ -29,7 +30,7 @@ interface QuotePriceBreakdownProps {
 
 export default function QuotePriceBreakdown({
   request,
-  studioName = 'Qid3D Studio',
+  studioName = '3MF Studio',
   className = '',
   defaultExpanded = true,
 }: QuotePriceBreakdownProps) {
@@ -41,6 +42,8 @@ export default function QuotePriceBreakdown({
 
   const materialKey = (request.material?.toLowerCase() || 'pla')
   const materialLabel = (MATERIAL_LABELS as Record<string, string>)[materialKey] || request.material?.toUpperCase() || 'PLA'
+
+  const passport = extractManufacturingPassport(request)
 
   // Extract specifications from notes
   const notesStr = request.notes ?? ''
@@ -205,25 +208,71 @@ export default function QuotePriceBreakdown({
               <span className="font-mono text-xs font-bold text-slate-700 shrink-0">Included</span>
             </div>
 
-            {/* C. Slicing, Infill & Add-ons */}
+            {/* C. Slicing, Infill, Brim & Add-ons */}
             <div className="rounded-xl border border-slate-150 bg-slate-50/80 p-3 flex items-start justify-between gap-3 text-xs">
-              <div className="flex items-start gap-2.5">
+              <div className="flex items-start gap-2.5 flex-1 min-w-0">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 font-bold mt-0.5">
                   <Sparkles className="h-3.5 w-3.5" />
                 </span>
-                <div>
-                  <p className="font-bold text-slate-800">Slicing &amp; Print Specs</p>
-                  <p className="text-[11px] text-slate-600 mt-0.5">
-                    {infillPct}% structural infill · {nozzleMm}mm nozzle · verified toolpaths
-                  </p>
+                <div className="space-y-1.5 flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-bold text-slate-800">Slicing &amp; Manufacturing Specs</p>
+                    {passport.slicer && (
+                      <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                        {passport.slicer}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Micro Badge Cluster */}
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {/* Infill */}
+                    <span className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 shadow-2xs">
+                      <span className="text-blue-500">🧱</span>
+                      <span>{passport.infillDensity ?? infillPct}% {passport.infillPattern ? `${passport.infillPattern} ` : ''}Infill</span>
+                    </span>
+
+                    {/* Walls */}
+                    <span className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 shadow-2xs">
+                      <span className="text-amber-500">🛡️</span>
+                      <span>{passport.wallLoops ?? 2} Walls {passport.wallGenerator ? `(${passport.wallGenerator})` : ''}</span>
+                    </span>
+
+                    {/* Brim */}
+                    <span className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 shadow-2xs">
+                      <span className="text-teal-500">⚓</span>
+                      <span>{passport.brimType && passport.brimType !== 'no_brim' ? `${passport.brimWidth ? `${passport.brimWidth}mm ` : ''}${passport.brimType.replace(/_/g, ' ')}` : 'Standard Skirt'}</span>
+                    </span>
+
+                    {/* Layer Height */}
+                    <span className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 shadow-2xs">
+                      <span className="text-purple-500">📏</span>
+                      <span>{passport.layerHeight ? `${passport.layerHeight}mm Layer` : `${nozzleMm}mm Nozzle`}</span>
+                    </span>
+
+                    {/* Thermals */}
+                    {(passport.nozzleTemp || passport.bedTemp) && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 shadow-2xs">
+                        <span className="text-red-500">🌡️</span>
+                        <span>{passport.nozzleTemp || 220}°C / {passport.bedTemp || 40}°C</span>
+                      </span>
+                    )}
+
+                    {/* Supports */}
+                    <span className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 shadow-2xs">
+                      <span className="text-emerald-500">🌳</span>
+                      <span>{passport.supportsEnabled ? (passport.supportType ? `${passport.supportType.toUpperCase()} Supports` : 'Supports Cleaned') : 'Zero Overhang Supports'}</span>
+                    </span>
+                  </div>
+
                   {request.confirmed_addons && request.confirmed_addons.length > 0 ? (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
+                    <div className="flex flex-wrap gap-1 pt-1">
                       {request.confirmed_addons.map((addon) => {
                         const info = ADDON_FRIENDLY_NAMES[addon]
                         return (
                           <span
                             key={addon}
-                            className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 shadow-2xs"
+                            className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 shadow-2xs"
                           >
                             <CheckCircle2 className="h-3 w-3 text-emerald-600" />
                             {info ? info.title : addon}
@@ -233,7 +282,7 @@ export default function QuotePriceBreakdown({
                     </div>
                   ) : (
                     <p className="text-[10px] text-slate-400 mt-0.5">
-                      Includes brim/raft removal &amp; surface cleanup
+                      Precision machine toolpaths verified &amp; ready for Ender-3 execution
                     </p>
                   )}
                 </div>

@@ -4,7 +4,7 @@ import AuthForm from '@/components/AuthForm'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Staff & Admin Portal | Qid3D Studio',
+  title: 'Staff & Admin Portal | 3MF Studio',
   robots: {
     index: false,
     follow: false,
@@ -25,7 +25,7 @@ export default function LoginPage() {
             <span>Staff &amp; Operations Access</span>
           </div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            Qid<span className="text-orange-500">3D</span> Studio Admin
+            3MF <span className="text-orange-500">Studio</span> Admin
           </h1>
           <p className="mt-1 text-xs text-slate-500 max-w-xs mx-auto">
             Authorized sign-in for studio owner, print operators, and website administrators.
@@ -64,7 +64,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-[11px] text-slate-400">
-          Qid3D Studio Internal System · Ampang, Selangor
+          3MF Studio Internal System · Ampang, Selangor
         </p>
       </div>
     </div>

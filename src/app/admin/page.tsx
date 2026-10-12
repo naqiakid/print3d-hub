@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Admin Gateway | Qid3D Studio',
+  title: 'Admin Gateway | 3MF Studio',
   robots: {
     index: false,
     follow: false,

@@ -141,7 +141,7 @@ export default async function HomePage() {
               </h1>
 
               <p className="mb-8 max-w-xl text-base sm:text-lg leading-relaxed text-slate-300 mx-auto lg:mx-0">
-                Welcome to <strong>Qid3D Studio</strong>. We fabricate your digital 3D models into durable, physical prototypes and figures. Specializing in crisp <strong>PLA</strong>, high-strength <strong>PETG</strong>, and flexible <strong>TPU</strong>.
+                Welcome to <strong>3MF Studio</strong>. We fabricate your digital 3D models into durable, physical prototypes and figures. Specializing in crisp <strong>PLA</strong>, high-strength <strong>PETG</strong>, and flexible <strong>TPU</strong>.
               </p>
 
               <div className="flex flex-col gap-3 sm:flex-row justify-center lg:justify-start">
@@ -532,7 +532,7 @@ export default async function HomePage() {
                 Have a 3D File Ready to Print?
               </h2>
               <p className="mt-1 text-orange-100 text-sm">
-                Get an instant estimate now or drop a message to Qid3D Studio on WhatsApp.
+                Get an instant estimate now or drop a message to 3MF Studio on WhatsApp.
               </p>
             </div>
             <a

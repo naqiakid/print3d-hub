@@ -3,8 +3,8 @@ import Link from 'next/link'
 import { ArrowLeft, RefreshCw, AlertTriangle, CheckCircle2, ShieldCheck } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'Refund & Reprint Policy | Qid3D Studio',
-  description: 'Reprint guarantees and refund policies for custom 3D printing and catalog orders at Qid3D Studio.',
+  title: 'Refund & Reprint Policy | 3MF Studio',
+  description: 'Reprint guarantees and refund policies for custom 3D printing and catalog orders at 3MF Studio.',
 }
 
 export default function RefundPolicyPage() {
@@ -52,7 +52,7 @@ export default function RefundPolicyPage() {
             2. 100% Free Reprint Guarantee
           </h2>
           <p>
-            At Qid3D Studio, we stand behind the structural integrity of our prints. We will provide a <strong>free reprint</strong> or a <strong>full refund</strong> under the following circumstances:
+            At 3MF Studio, we stand behind the structural integrity of our prints. We will provide a <strong>free reprint</strong> or a <strong>full refund</strong> under the following circumstances:
           </p>
           <ul className="mt-2 list-disc pl-5 space-y-2 text-slate-600">
             <li>

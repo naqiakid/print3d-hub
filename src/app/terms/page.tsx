@@ -3,8 +3,8 @@ import Link from 'next/link'
 import { ArrowLeft, ShieldCheck, Scale, FileText, AlertCircle } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'Terms of Service | Qid3D Studio',
-  description: 'Terms of service and customer agreements for custom 3D printing and e-commerce orders at Qid3D Studio (Ampang, Malaysia).',
+  title: 'Terms of Service | 3MF Studio',
+  description: 'Terms of service and customer agreements for custom 3D printing and e-commerce orders at 3MF Studio (Ampang, Malaysia).',
 }
 
 export default function TermsPage() {
@@ -41,7 +41,7 @@ export default function TermsPage() {
             In compliance with the <strong>Consumer Protection (Electronic Commerce Transactions) Regulations 2012</strong> and the <strong>Electronic Commerce Act 2006</strong> of Malaysia, this service is operated by:
           </p>
           <ul className="mt-2 list-disc pl-5 space-y-1 text-slate-600">
-            <li><strong>Trading Name:</strong> Qid3D Studio (also referred to as Qid 3D Printing / 3MF Studio)</li>
+            <li><strong>Trading Name:</strong> 3MF Studio</li>
             <li><strong>Principal Location:</strong> Ampang, Selangor Darul Ehsan, Malaysia</li>
             <li><strong>Official Contact:</strong> WhatsApp Customer Service / Email</li>
             <li><strong>Service Scope:</strong> Additive manufacturing (FDM 3D printing), rapid prototyping, and custom 3D printed model sales</li>
@@ -54,7 +54,7 @@ export default function TermsPage() {
             2. Nature of 3D Printing & Dimensional Tolerances
           </h2>
           <p>
-            3D printing is an additive layer-by-layer manufacturing process. By placing an order with Qid3D Studio, you acknowledge and agree that:
+            3D printing is an additive layer-by-layer manufacturing process. By placing an order with 3MF Studio, you acknowledge and agree that:
           </p>
           <ul className="mt-2 list-disc pl-5 space-y-1.5 text-slate-600">
             <li>
@@ -96,7 +96,7 @@ export default function TermsPage() {
             4. Pricing, Currency & Payment
           </h2>
           <p>
-            All prices on Qid3D Studio are quoted in <strong>Ringgit Malaysia (MYR)</strong>.
+            All prices on 3MF Studio are quoted in <strong>Ringgit Malaysia (MYR)</strong>.
           </p>
           <ul className="mt-2 list-disc pl-5 space-y-1 text-slate-600">
             <li>Quotes are calculated based on raw filament consumption (weight in grams), machine run-time hours, setup calibration, and power overheads.</li>

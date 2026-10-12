@@ -137,10 +137,44 @@ function calculateGeometryVolume(geometry: THREE.BufferGeometry): number {
   return Math.abs(volume)
 }
 
+export const SAMPLE_MODELS = [
+  {
+    id: 'benchy',
+    name: '3D Benchy Boat',
+    emoji: '🚤',
+    badge: 'Benchmark',
+    desc: 'Classic test boat (~12g PLA)',
+    url: '/sample-models/3DBenchy.stl',
+    filename: '3DBenchy.stl',
+    type: 'model/stl',
+  },
+  {
+    id: 'phone-stand',
+    name: 'Desk Phone Stand',
+    emoji: '📱',
+    badge: 'Functional',
+    desc: 'Ergonomic 70° angle (~22g PLA)',
+    url: '/sample-models/phone_stand.stl',
+    filename: 'phone_stand.stl',
+    type: 'model/stl',
+  },
+  {
+    id: 'assembly-drone',
+    name: 'Drone Assembly 3MF',
+    emoji: '⚙️',
+    badge: 'Multi-Part 3MF',
+    desc: '4 multi-color parts (~5.8g PLA)',
+    url: '/sample-models/assembly_drone_part.3mf',
+    filename: 'P_JB_V1_C_260311.3mf',
+    type: 'model/3mf',
+  },
+]
+
 export default function PublicPriceCalculator({ printer, filaments }: Props) {
   const router = useRouter()
   const [slicedItems, setSlicedItems] = useState<SlicedItem[]>([])
   const [parsing, setParsing] = useState(false)
+  const [loadingSample, setLoadingSample] = useState<string | null>(null)
   const [activePreviewId, setActivePreviewId] = useState<string | null>(null)
   const [selectedSubObjectMap, setSelectedSubObjectMap] = useState<Record<string, string>>({})
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false)
@@ -236,7 +270,7 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
     setIsCheckoutModalOpen(true)
   }
 
-  const handleFileChange = async (files: FileList | null) => {
+  const handleFileChange = async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return
     const fileList = Array.from(files)
 
@@ -741,6 +775,68 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
           </>
         )}
       </div>
+
+      {/* ── Try Sample Model Quick Selector ── */}
+      {slicedItems.length === 0 && (
+        <div className="rounded-2xl border border-orange-200/80 bg-gradient-to-br from-orange-50/60 via-amber-50/30 to-white p-3.5 shadow-2xs space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-950">
+              <Sparkles className="h-3.5 w-3.5 text-orange-500" />
+              Don&apos;t have a 3D file on hand?
+            </span>
+            <span className="text-[10px] font-semibold text-orange-700 bg-orange-100/80 px-2 py-0.5 rounded-full border border-orange-200/60">
+              1-Click Instant Test
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            Click any sample model below to preview it on the Ender-3 build bed, test colors, and check instant pricing:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {SAMPLE_MODELS.map((sample) => (
+              <button
+                key={sample.id}
+                type="button"
+                disabled={loadingSample !== null}
+                onClick={async () => {
+                  try {
+                    setLoadingSample(sample.id)
+                    const res = await fetch(sample.url)
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+                    const blob = await res.blob()
+                    const file = new File([blob], sample.filename, { type: sample.type })
+                    await handleFileChange([file])
+                  } catch (err) {
+                    console.error('Failed to load sample model:', err)
+                    alert(`Could not load ${sample.name}. Please try uploading your own file.`)
+                  } finally {
+                    setLoadingSample(null)
+                  }
+                }}
+                className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition relative ${
+                  loadingSample === sample.id
+                    ? 'border-orange-400 bg-orange-100/40 ring-2 ring-orange-400/30'
+                    : 'border-orange-200/70 bg-white hover:border-orange-400 hover:shadow-xs active:scale-[0.98]'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 w-full justify-between mb-1">
+                  <span className="text-base">{sample.emoji}</span>
+                  <span className="text-[9px] font-bold text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200/60">
+                    {sample.badge}
+                  </span>
+                </div>
+                <p className="font-bold text-slate-800 text-xs">{sample.name}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{sample.desc}</p>
+                {loadingSample === sample.id && (
+                  <div className="absolute inset-0 bg-white/85 backdrop-blur-2xs rounded-xl flex items-center justify-center gap-1.5 text-[11px] font-bold text-orange-600">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-orange-500" />
+                    <span>Loading...</span>
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Sliced File Queue */}
       {slicedItems.length > 0 && (
@@ -1657,7 +1753,7 @@ export default function PublicPriceCalculator({ printer, filaments }: Props) {
                 {printer.whatsapp && (
                   <a
                     href={`https://wa.me/${printer.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(
-                      `Hi Qid3D Studio! I configured a 3D print:\n• File: ${activePreviewItem?.file.name || 'Custom Model'}\n• Quantity: ${activePreviewItem?.quantity || 1} ${activePreviewItem?.subObjects && activePreviewItem.subObjects.length > 1 ? `sets (${(activePreviewItem.quantity || 1) * activePreviewItem.subObjects.length} parts total)` : 'units'}\n• Dimensions: ${activePreviewItem?.dimensions.x || 0} × ${activePreviewItem?.dimensions.y || 0} × ${activePreviewItem?.dimensions.z || 0} mm\n• Material: ${selectedMaterial.toUpperCase()}\n• Color: ${selectedColorName}\n• Est. Total Cost: RM ${estimate.price.toFixed(2)}${estimate.batchDiscountPct > 0 ? ` (Includes ${estimate.batchDiscountPct}% Batch Discount)` : ''}\n\nCan you review my order?`
+                      `Hi 3MF Studio! I configured a 3D print:\n• File: ${activePreviewItem?.file.name || 'Custom Model'}\n• Quantity: ${activePreviewItem?.quantity || 1} ${activePreviewItem?.subObjects && activePreviewItem.subObjects.length > 1 ? `sets (${(activePreviewItem.quantity || 1) * activePreviewItem.subObjects.length} parts total)` : 'units'}\n• Dimensions: ${activePreviewItem?.dimensions.x || 0} × ${activePreviewItem?.dimensions.y || 0} × ${activePreviewItem?.dimensions.z || 0} mm\n• Material: ${selectedMaterial.toUpperCase()}\n• Color: ${selectedColorName}\n• Est. Total Cost: RM ${estimate.price.toFixed(2)}${estimate.batchDiscountPct > 0 ? ` (Includes ${estimate.batchDiscountPct}% Batch Discount)` : ''}\n\nCan you review my order?`
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"

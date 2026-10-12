@@ -14,10 +14,10 @@ export default async function Navbar() {
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500 shadow-sm shadow-orange-500/30">
-            <span className="font-black text-white text-sm">Q</span>
+            <span className="font-black text-white text-xs">3MF</span>
           </div>
           <span className="text-base font-extrabold text-slate-900 tracking-tight">
-            Qid<span className="text-orange-500">3D</span> Studio
+            3MF <span className="text-orange-500">Studio</span>
           </span>
         </Link>
 

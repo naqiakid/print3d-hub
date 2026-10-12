@@ -27,7 +27,7 @@ import {
 } from '@/lib/pricing'
 import { createClient } from '@/lib/supabase/client'
 import { getPresetById } from '@/lib/printer-models'
-import { parseGcodeFile } from '@/lib/parse-gcode'
+import { parseGcodeFile, type GcodeStats } from '@/lib/parse-gcode'
 
 const STLViewer = lazy(() => import('@/components/STLViewer'))
 
@@ -44,12 +44,7 @@ type GcodeItem = {
   file: File
   parsing: boolean
   error: string
-  stats: {
-    weight_g: number | null
-    print_hours: number | null
-    layer_count: number | null
-    slicer: string | null
-  } | null
+  stats: GcodeStats | null
   material: FilamentMaterial
   color: string
   colorHex: string
@@ -260,6 +255,17 @@ export default function RequestCard({ request, printer, onCardDragStart }: { req
       setGcodeItems((prev) =>
         prev.map((i) => i.id === item.id ? { ...i, parsing: false, stats } : i),
       )
+      setQuoteMessage((prevMsg) => {
+        if (prevMsg && prevMsg.trim().length > 0) return prevMsg
+        const parts: string[] = []
+        if (stats.slicer) parts.push(`Sliced in ${stats.slicer}`)
+        if (stats.layer_height) parts.push(`${stats.layer_height}mm layer height`)
+        if (stats.infill_density) parts.push(`${stats.infill_density}% ${stats.infill_pattern || ''} infill`.trim())
+        if (stats.wall_loops) parts.push(`${stats.wall_loops} walls ${stats.wall_generator ? `(${stats.wall_generator})` : ''}`.trim())
+        if (stats.brim_type && stats.brim_type !== 'no_brim') parts.push(`${stats.brim_width ? `${stats.brim_width}mm ` : ''}${stats.brim_type.replace('_', ' ')}`)
+        if (stats.nozzle_temp) parts.push(`${stats.nozzle_temp}°C nozzle / ${stats.bed_temp || 40}°C bed`)
+        return parts.length > 0 ? parts.join(' · ') + '.' : prevMsg
+      })
     } catch {
       setGcodeItems((prev) =>
         prev.map((i) => (i.id === item.id ? { ...i, parsing: false } : i)),
@@ -362,6 +368,16 @@ export default function RequestCard({ request, printer, onCardDragStart }: { req
         color: i.color,
         color_hex: i.colorHex,
         weight_g: i.stats?.weight_g ?? null,
+        infill_density: i.stats?.infill_density ?? null,
+        infill_pattern: i.stats?.infill_pattern ?? null,
+        wall_loops: i.stats?.wall_loops ?? null,
+        wall_generator: i.stats?.wall_generator ?? null,
+        layer_height: i.stats?.layer_height ?? null,
+        brim_type: i.stats?.brim_type ?? null,
+        brim_width: i.stats?.brim_width ?? null,
+        nozzle_temp: i.stats?.nozzle_temp ?? null,
+        bed_temp: i.stats?.bed_temp ?? null,
+        slicer: i.stats?.slicer ?? null,
       }))
       // Primary material = first plate's material, or customer's requested material
       const primaryMaterial = gcodeItems[0]?.material ?? defaultMaterial
@@ -987,6 +1003,42 @@ export default function RequestCard({ request, printer, onCardDragStart }: { req
                             <X className="h-3.5 w-3.5" />
                           </button>
                         </div>
+
+                        {/* Slicer Manufacturing Specs */}
+                        {!item.parsing && item.stats && (
+                          <div className="flex flex-wrap items-center gap-1.5 px-3 py-1.5 bg-slate-50/70 border-t border-slate-100 text-[11px]">
+                            {item.stats.slicer && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-slate-200/70 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                                🏷️ {item.stats.slicer}
+                              </span>
+                            )}
+                            {item.stats.layer_height != null && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 border border-blue-200/70 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                                📐 {item.stats.layer_height}mm layer
+                              </span>
+                            )}
+                            {item.stats.infill_density != null && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200/70 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                🧱 {item.stats.infill_density}% {item.stats.infill_pattern || 'infill'}
+                              </span>
+                            )}
+                            {item.stats.wall_loops != null && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200/70 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
+                                🛡️ {item.stats.wall_loops} walls {item.stats.wall_generator ? `(${item.stats.wall_generator})` : ''}
+                              </span>
+                            )}
+                            {item.stats.brim_type && item.stats.brim_type !== 'no_brim' && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                                🧲 {item.stats.brim_width ? `${item.stats.brim_width}mm ` : ''}{item.stats.brim_type.replace('_', ' ')}
+                              </span>
+                            )}
+                            {item.stats.nozzle_temp != null && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 border border-rose-200/70 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">
+                                🌡️ {item.stats.nozzle_temp}°C{item.stats.bed_temp != null ? ` / ${item.stats.bed_temp}°C` : ''}
+                              </span>
+                            )}
+                          </div>
+                        )}
 
                         {/* Per-plate filament selector */}
                         <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2">

@@ -13,7 +13,7 @@ export const stripe = stripeSecretKey
   ? new Stripe(stripeSecretKey, {
       apiVersion: '2025-02-24.acacia' as unknown as Stripe.LatestApiVersion,
       appInfo: {
-        name: 'Print3D Hub Malaysia',
+        name: '3MF Studio Malaysia',
         version: '1.0.0',
       },
     })

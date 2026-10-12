@@ -6,8 +6,8 @@ import { PRINTER_MODELS } from '@/lib/printer-models'
 import RequestForm from '@/components/RequestFormWrapper'
 
 export const metadata: Metadata = {
-  title: 'Request a Custom 3D Print | Qid3D Studio',
-  description: 'Upload your 3D files (STL, 3MF, OBJ) for custom 3D printing in PLA, PETG, or flexible TPU at Qid3D Studio (Ampang, Selangor).',
+  title: 'Request a Custom 3D Print | 3MF Studio',
+  description: 'Upload your 3D files (STL, 3MF, OBJ) for custom 3D printing in PLA, PETG, or flexible TPU at 3MF Studio (Ampang, Selangor).',
 }
 
 import { STUDIO_CONFIG } from '@/config/studio'

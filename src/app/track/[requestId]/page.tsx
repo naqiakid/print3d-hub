@@ -355,7 +355,7 @@ export default async function TrackPage({
           <div>
             <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500 mb-0.5">
               <Link href="/" className="text-orange-600 hover:text-orange-700 transition">
-                Print3D Hub
+                3MF Studio
               </Link>
               <ChevronRight className="h-3 w-3 text-slate-300" />
               <span>Order Tracking</span>
@@ -367,7 +367,7 @@ export default async function TrackPage({
               <span>Order &amp; Print Verification</span>
             </h1>
             <p className="text-xs text-slate-500">
-              Studio: <strong className="text-slate-800 font-semibold">{printer?.name ?? 'Qid3D Studio'}</strong>
+              Studio: <strong className="text-slate-800 font-semibold">{printer?.name ?? '3MF Studio'}</strong>
               {printer?.turnaround ? ` · Turnaround: ${printer.turnaround}` : ''}
               {createdDate ? ` · Placed ${createdDate}` : ''}
             </p>
@@ -559,7 +559,7 @@ export default async function TrackPage({
                 <div className="space-y-3">
                   <QuotePriceBreakdown
                     request={request}
-                    studioName={printer?.name ?? 'Qid3D Studio'}
+                    studioName={printer?.name ?? '3MF Studio'}
                     defaultExpanded={true}
                   />
 
@@ -579,7 +579,7 @@ export default async function TrackPage({
                         printPrice={request.quoted_price ?? 0}
                         deliveryCost={request.delivery_cost ?? 0}
                         whatsapp={printer?.whatsapp}
-                        studioName={printer?.name ?? 'Qid3D Studio'}
+                        studioName={printer?.name ?? '3MF Studio'}
                       />
                     </div>
                   )}
@@ -627,7 +627,7 @@ export default async function TrackPage({
                         printPrice={request.quoted_price ?? 0}
                         deliveryCost={request.delivery_cost ?? 0}
                         whatsapp={printer?.whatsapp}
-                        studioName={printer?.name ?? 'Qid3D Studio'}
+                        studioName={printer?.name ?? '3MF Studio'}
                       />
                     </>
                   )}
@@ -752,7 +752,7 @@ export default async function TrackPage({
                 </div>
                 <div className="min-w-0 flex-1">
                   <h4 className="text-xs font-bold text-slate-900 truncate">
-                    {printer?.name || 'Qid3D Studio'}
+                    {printer?.name || '3MF Studio'}
                   </h4>
                   <p className="text-[11px] text-slate-500 truncate">
                     Turnaround: {printer?.turnaround || '24-48h'} · Direct WhatsApp active

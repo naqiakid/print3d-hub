@@ -7,7 +7,7 @@ import FilamentManager from '@/components/FilamentManager'
 import { getStudioFilamentsAsFilaments, MATERIAL_METAS } from '@/config/materials'
 
 export const metadata = {
-  title: 'Material & Color Inventory | Qid3D Studio',
+  title: 'Material & Color Inventory | 3MF Studio',
   description: 'Manage your active 3D printing filament materials, colors, and spool stock.',
 }
 

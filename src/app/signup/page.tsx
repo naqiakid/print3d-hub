@@ -4,7 +4,7 @@ import AuthForm from '@/components/AuthForm'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Setup Admin Account | Qid3D Studio',
+  title: 'Setup Admin Account | 3MF Studio',
   robots: {
     index: false,
     follow: false,
@@ -27,7 +27,7 @@ export default function SignupPage() {
             Create Admin Account
           </h1>
           <p className="mt-1 text-xs text-slate-500">
-            Register your administrator credentials for Qid3D Studio
+            Register your administrator credentials for 3MF Studio
           </p>
         </div>
 

@@ -5,8 +5,8 @@ import { fetchCatalogBrowseItems } from '@/lib/catalog-browse'
 import CatalogBrowse from '@/components/CatalogBrowse'
 
 export const metadata: Metadata = {
-  title: 'Ready-to-Buy Catalog | Qid3D Studio',
-  description: 'Shop 3D printed models, figures, and customizable functional items crafted with precision at Qid3D Studio.',
+  title: 'Ready-to-Buy Catalog | 3MF Studio',
+  description: 'Shop 3D printed models, figures, and customizable functional items crafted with precision at 3MF Studio.',
 }
 
 export default async function BrowseProductsPage() {

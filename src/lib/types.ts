@@ -83,6 +83,20 @@ export type PlateFilament = {
   color: string
   color_hex: string
   weight_g?: number | null
+  infill_density?: number | null
+  infill_pattern?: string | null
+  wall_loops?: number | null
+  wall_generator?: string | null
+  layer_height?: number | null
+  brim_type?: string | null
+  brim_width?: number | null
+  nozzle_temp?: number | null
+  bed_temp?: number | null
+  slicer?: string | null
+  top_layers?: number | null
+  bottom_layers?: number | null
+  supports_enabled?: boolean | null
+  support_type?: string | null
 }
 
 export type ColorPreference = {
@@ -583,6 +597,21 @@ export function getColorHexByName(colorName: string): string {
 export type GcodeStats = {
   weight_g: number
   hours: number
+  layer_count?: number
+  slicer?: string
+  layer_height?: number
+  infill_density?: number
+  infill_pattern?: string
+  wall_loops?: number
+  wall_generator?: string
+  top_layers?: number
+  bottom_layers?: number
+  brim_type?: string
+  brim_width?: number
+  nozzle_temp?: number
+  bed_temp?: number
+  filament_type?: string
+  support_type?: string
 }
 
 export function parseGcodeStats(description: string | null | undefined): GcodeStats | null {

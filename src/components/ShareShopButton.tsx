@@ -17,8 +17,8 @@ export default function ShareShopButton({ shopName }: Props) {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `${shopName} | 3D Printing Hub`,
-          text: `Check out ${shopName} on Print3D Hub for custom 3D printing services!`,
+          title: `${shopName} | 3MF Studio`,
+          text: `Check out ${shopName} on 3MF Studio for custom 3D printing services!`,
           url: url,
         })
         return

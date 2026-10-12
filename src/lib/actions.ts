@@ -3,9 +3,10 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from './supabase/server'
-import type { RequestStatus, PrintType, FilamentMaterial, PrintSize, FilamentCosts, PermissionStatus } from './types'
+import type { RequestStatus, PrintType, FilamentMaterial, PrintSize, FilamentCosts, PermissionStatus, PlateFilament } from './types'
 import { calculatePriceRange, calculateEstimate, DEFAULT_MACHINE_RATE } from './pricing'
 import { parseGcodeStats } from './types'
+import { STUDIO_CONFIG } from '@/config/studio'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://print3d-hub.vercel.app'
 
@@ -26,7 +27,7 @@ async function sendEmail(to: string, subject: string, html: string) {
   try {
     const { Resend } = await import('resend')
     const resend = new Resend(apiKey)
-    await resend.emails.send({ from: 'Print3D Hub <onboarding@resend.dev>', to, subject, html })
+    await resend.emails.send({ from: '3MF Studio <onboarding@resend.dev>', to, subject, html })
   } catch (err: any) {
     console.error('❌ Resend failed to send email:', err?.message || err)
   }
@@ -41,8 +42,7 @@ async function sendOwnerNotification(data: {
   deadline: string
   shop_name: string
 }) {
-  const toEmail = process.env.NOTIFICATION_EMAIL
-  if (!toEmail) return
+  const toEmail = process.env.NOTIFICATION_EMAIL || STUDIO_CONFIG.email || '3mfstudio@gmail.com'
   await sendEmail(
     toEmail,
     `New print request from ${data.customer_name}`,
@@ -1052,7 +1052,7 @@ export async function sendQuote(
   weightG?: number | null,
   printHours?: number | null,
   material?: string,
-  plateFilaments?: { material: string; color: string; color_hex: string; weight_g?: number | null }[],
+  plateFilaments?: PlateFilament[],
   confirmedAddons?: string[],
   deliveryCost?: number | null,
   stlUrlsToMerge?: string[],

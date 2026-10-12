@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   CheckCircle, Upload, X, Loader2, FileBox, Plus, Ruler,
   Link2, FileUp, ExternalLink, Download, HelpCircle, Camera, ChevronDown,
@@ -566,6 +567,7 @@ export default function RequestForm({
   buildVolume: string | null
   filaments: Filament[]
 }) {
+  const router = useRouter()
   const [requestId, setRequestId]     = useState<string | null>(null)
   const [customerEmail, setCustomerEmail] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -970,6 +972,7 @@ export default function RequestForm({
     if ('error' in result) { setSubmitError(result.error); return }
     setCustomerEmail(submittedEmail)
     setRequestId(result.id)
+    router.push(`/thank-you?id=${result.id}&email=${encodeURIComponent(submittedEmail)}`)
   }
 
   // ── Success screen ───────────────────────────────────────────────

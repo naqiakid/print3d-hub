@@ -5,7 +5,7 @@ import { fetchCatalogBrowseItems } from '@/lib/catalog-browse'
 import CatalogBrowse from '@/components/CatalogBrowse'
 
 export const metadata: Metadata = {
-  title: 'Customisable Products | Print3D Hub',
+  title: 'Customisable Products | 3MF Studio',
   description: 'Browse 3D printed products you can personalise — custom text, color, size, and more.',
 }
 

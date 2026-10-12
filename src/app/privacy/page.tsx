@@ -3,8 +3,8 @@ import Link from 'next/link'
 import { ArrowLeft, Lock, ShieldCheck, Database, EyeOff } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy (PDPA Notice) | Qid3D Studio',
-  description: 'PDPA 2010 compliant Privacy Policy explaining how Qid3D Studio protects customer data and intellectual property.',
+  title: 'Privacy Policy (PDPA Notice) | 3MF Studio',
+  description: 'PDPA 2010 compliant Privacy Policy explaining how 3MF Studio protects customer data and intellectual property.',
 }
 
 export default function PrivacyPage() {
@@ -38,7 +38,7 @@ export default function PrivacyPage() {
             1. Personal Data Protection Act 2010 Compliance
           </h2>
           <p>
-            Qid3D Studio respects your privacy and is committed to complying with the <strong>Personal Data Protection Act 2010 (PDPA)</strong> of Malaysia. This Privacy Policy informs you how we collect, process, manage, and safeguard your personal details and 3D files.
+            3MF Studio respects your privacy and is committed to complying with the <strong>Personal Data Protection Act 2010 (PDPA)</strong> of Malaysia. This Privacy Policy informs you how we collect, process, manage, and safeguard your personal details and 3D files.
           </p>
         </section>
 

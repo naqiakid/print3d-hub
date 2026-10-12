@@ -8,6 +8,8 @@ import type { RequestPrinterView, FilamentMaterial } from '@/lib/types'
 import { MATERIAL_LABELS } from '@/lib/types'
 import type { SubObjectItem, PartConfig } from './PriceConfigurator'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { STUDIO_CONFIG } from '@/config/studio'
 
 interface Props {
   isOpen: boolean
@@ -53,6 +55,7 @@ export default function RequestCheckoutModal({
   activePromo,
 }: Props) {
   // Form States
+  const router = useRouter()
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
@@ -197,6 +200,8 @@ export default function RequestCheckoutModal({
       }
 
       setCreatedRequestId(res.id)
+      const generatedRef = `3MF-${res.id.slice(0, 8).toUpperCase()}`
+      router.push(`/thank-you?id=${res.id}&ref=${generatedRef}&amount=${estimate.price.toFixed(2)}&email=${encodeURIComponent(customerEmail.trim())}`)
     } catch (err: any) {
       console.error('Failed to submit order:', err)
       setErrorMessage(err?.message || 'Failed to submit request. Please try again or reach out via WhatsApp.')
@@ -206,8 +211,8 @@ export default function RequestCheckoutModal({
     }
   }
 
-  const cleanWhatsApp = (printer.whatsapp || '60123456789').replace(/\D/g, '')
-  const orderRef = createdRequestId ? `QID-${createdRequestId.slice(0, 8).toUpperCase()}` : ''
+  const cleanWhatsApp = (printer.whatsapp || STUDIO_CONFIG.whatsappNumber || '60173587894').replace(/\D/g, '')
+  const orderRef = createdRequestId ? `3MF-${createdRequestId.slice(0, 8).toUpperCase()}` : ''
   const totalPartsCount = subObjects && subObjects.length > 1
     ? quantity * subObjects.length
     : quantity
@@ -217,7 +222,7 @@ export default function RequestCheckoutModal({
 
   const waConfirmationUrl = createdRequestId
     ? `https://wa.me/${cleanWhatsApp}?text=${encodeURIComponent(
-        `Hi Qid3D Studio! I just submitted a 3D print request:\n- Order Ref: ${orderRef}\n- Name: ${customerName}\n- File: ${files.map((f) => f.name).join(', ')}\n- Quantity: ${qtyLabel}\n- Est. Cost: RM ${estimate.price.toFixed(2)}\n\nPlease review my 3D model!`
+        `Hi 3MF Studio! I just submitted a 3D print request:\n- Order Ref: ${orderRef}\n- Customer: ${customerName}\n- File(s): ${files.map((f) => f.name).join(', ')}\n- Quantity: ${qtyLabel}\n- Est. Cost: RM ${estimate.price.toFixed(2)}\n\nPlease review my 3D file and send the formal quote!`
       )}`
     : '#'
 
@@ -236,7 +241,7 @@ export default function RequestCheckoutModal({
               </h3>
               <p className="text-[11px] text-slate-500 mt-1">
                 {createdRequestId
-                  ? 'Your 3D CAD files have been received by Qid3D Studio.'
+                  ? 'Your 3D CAD files have been received by 3MF Studio.'
                   : 'Fast turnaround in Ampang, Selangor · No upfront payment required to quote'}
               </p>
             </div>
