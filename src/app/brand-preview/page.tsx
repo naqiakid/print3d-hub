@@ -22,13 +22,13 @@ interface AssetMeta {
 const BRAND_ASSETS: AssetMeta[] = [
   {
     id: 'hero-banner-wide',
-    name: '16:9 Hero Banner (1920 Full-HD)',
+    name: '16:9 Hero Banner (2.5K Ultra-Sharp)',
     path: '/brand/hero-banner-wide.jpg',
-    dimensions: '1920 × 1071 px',
-    format: 'JPEG (Lanczos3 Upscale)',
-    size: '139.9 KB',
+    dimensions: '2560 × 1428 px',
+    format: 'JPEG (Lanczos3 + Unsharp Mask)',
+    size: '540.6 KB',
     usage: 'Homepage Hero Showcase (Full Bleed Edge-to-Edge)',
-    description: 'High-DPI upscale of the dedicated 16:9 3MF Studio hero banner featuring illuminated calibration die and creative typography.',
+    description: 'High-clarity 2.5K upscale of the 3MF Studio hero banner with edge-preserving unsharp mask filter to minimize raster softness on desktop screens.',
     hasTransparency: false,
     isWide: true,
   },
@@ -420,7 +420,7 @@ export default function BrandPreviewPage() {
               rel="noopener noreferrer"
               className="text-xs font-mono text-orange-400 hover:text-orange-300 flex items-center gap-1.5 transition"
             >
-              <span>Inspect 1920×1071 Banner</span>
+              <span>Inspect 2560×1428 Banner</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>
@@ -443,7 +443,7 @@ export default function BrandPreviewPage() {
                 </h3>
               </div>
               <span className="text-xs font-mono text-neutral-400 bg-neutral-950/80 px-2 py-1 rounded hidden sm:inline-block">
-                1920 × 1071 px (Lanczos3 Upscale)
+                2560 × 1428 px (2.5K Ultra-Sharp)
               </span>
             </div>
           </div>

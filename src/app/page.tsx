@@ -122,6 +122,7 @@ export default async function HomePage() {
               alt="Welcome to 3MF Studio - Creative Design & Innovation"
               fill
               priority
+              unoptimized
               className="object-cover object-center w-full h-full"
             />
           </div>
