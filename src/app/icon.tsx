@@ -18,9 +18,7 @@ export default function Icon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#09090b',
-          borderRadius: 6,
-          overflow: 'hidden',
+          background: 'transparent',
         }}
       >
         {/* Exact 3D cube render from user's asset */}
