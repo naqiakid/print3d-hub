@@ -116,7 +116,7 @@ export default async function HomePage() {
       <section className="relative w-full overflow-hidden border-b border-neutral-900 bg-neutral-950">
         {/* Full-Bleed 100% Width Panoramic Hero Banner Covering Entire Screen Width */}
         <div className="relative w-full overflow-hidden bg-neutral-950">
-          <div className="relative w-full aspect-[944/278] sm:aspect-[1920/565] max-h-[75vh]">
+          <div className="relative w-full aspect-[1024/571] sm:aspect-[1920/1071] max-h-[78vh]">
             <Image
               src="/brand/hero-banner-wide.jpg"
               alt="Welcome to 3MF Studio - Creative Design & Innovation"
@@ -126,7 +126,7 @@ export default async function HomePage() {
             />
           </div>
           {/* Subtle bottom edge gradient seamlessly transitioning into content */}
-          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-neutral-950 to-transparent pointer-events-none" />
+          <div className="absolute inset-x-0 bottom-0 h-16 sm:h-24 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-transparent pointer-events-none" />
         </div>
 
         {/* Quick Action Bar & Studio Credentials across broad max-w-7xl */}

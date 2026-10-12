@@ -22,25 +22,25 @@ interface AssetMeta {
 const BRAND_ASSETS: AssetMeta[] = [
   {
     id: 'hero-banner-wide',
-    name: 'Panoramic Hero Banner (1920 Full-HD)',
+    name: '16:9 Hero Banner (1920 Full-HD)',
     path: '/brand/hero-banner-wide.jpg',
-    dimensions: '1920 × 565 px',
+    dimensions: '1920 × 1071 px',
     format: 'JPEG (Lanczos3 Upscale)',
-    size: '74.2 KB',
+    size: '139.9 KB',
     usage: 'Homepage Hero Showcase (Full Bleed Edge-to-Edge)',
-    description: 'Extracted from the top panoramic hero render of the brand sheet. Upscaled to 1920px with edge-to-edge zero side gutters.',
+    description: 'High-DPI upscale of the dedicated 16:9 3MF Studio hero banner featuring illuminated calibration die and creative typography.',
     hasTransparency: false,
     isWide: true,
   },
   {
     id: 'hero-banner',
-    name: 'Panoramic Hero Banner (Original Crop)',
+    name: '16:9 Hero Banner (Native High-Res)',
     path: '/brand/hero-banner.jpg',
-    dimensions: '944 × 278 px',
-    format: 'JPEG',
-    size: '28.2 KB',
+    dimensions: '1024 × 571 px',
+    format: 'JPEG (mozjpeg 95%)',
+    size: '58.8 KB',
     usage: 'Mobile / Tablet Responsive Banner Fallback',
-    description: 'Original high-res direct crop from the 3MF Studio brand guidelines sheet header.',
+    description: 'Direct high-fidelity output from the user-supplied 16:9 hero banner asset.',
     hasTransparency: false,
     isWide: true,
   },
@@ -420,12 +420,12 @@ export default function BrandPreviewPage() {
               rel="noopener noreferrer"
               className="text-xs font-mono text-orange-400 hover:text-orange-300 flex items-center gap-1.5 transition"
             >
-              <span>Inspect 1920×565 Banner</span>
+              <span>Inspect 1920×1071 Banner</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>
 
-          <div className="relative w-full aspect-[1920/565] rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl">
+          <div className="relative w-full aspect-[1920/1071] rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/brand/hero-banner-wide.jpg"
@@ -439,11 +439,11 @@ export default function BrandPreviewPage() {
                   Full Bleed 16:9 Showcase
                 </span>
                 <h3 className="text-lg md:text-2xl font-bold text-white mt-2 drop-shadow-md">
-                  Precision 3D Printing &amp; 3MF Fabrication
+                  Welcome to 3MF Studio
                 </h3>
               </div>
               <span className="text-xs font-mono text-neutral-400 bg-neutral-950/80 px-2 py-1 rounded hidden sm:inline-block">
-                1920 × 565 px (Lanczos3 Upscale)
+                1920 × 1071 px (Lanczos3 Upscale)
               </span>
             </div>
           </div>
