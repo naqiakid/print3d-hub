@@ -112,60 +112,117 @@ export default async function HomePage() {
   return (
     <div className="flex flex-col bg-neutral-950 text-neutral-100">
 
-      {/* ── 1. Hero Banner (Full-Bleed Edge-to-Edge Panoramic Showcase) ── */}
-      <section className="relative w-full overflow-hidden border-b border-neutral-900 bg-neutral-950">
-        {/* Full-Bleed 100% Width Panoramic Hero Banner Covering Entire Screen Width */}
-        <div className="relative w-full overflow-hidden bg-neutral-950">
-          <div className="relative w-full aspect-[1024/571] sm:aspect-[1920/1071] max-h-[78vh]">
-            <Image
-              src="/brand/hero-banner-wide.jpg"
-              alt="Welcome to 3MF Studio - Creative Design & Innovation"
-              fill
-              priority
-              unoptimized
-              className="object-cover object-center w-full h-full"
-            />
-          </div>
-          {/* Subtle bottom edge gradient seamlessly transitioning into content */}
-          <div className="absolute inset-x-0 bottom-0 h-16 sm:h-24 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-transparent pointer-events-none" />
-        </div>
+      {/* ── 1. Hero Showcase (Razor-Sharp Live Typography + 3D Calibration Die) ── */}
+      <section className="relative w-full overflow-hidden border-b border-neutral-900 bg-neutral-950 py-16 sm:py-20 lg:py-28 text-white">
+        
+        {/* Subtle Brand Dot Matrix Pattern in Corners (Matching 3MF Studio Identity) */}
+        <div className="absolute top-4 left-4 sm:top-8 sm:left-8 w-24 h-24 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:12px_12px] opacity-15 pointer-events-none" />
+        <div className="absolute bottom-4 right-4 sm:bottom-8 sm:right-8 w-28 h-28 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:12px_12px] opacity-15 pointer-events-none" />
 
-        {/* Quick Action Bar & Studio Credentials across broad max-w-7xl */}
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+        {/* Ambient Studio Lighting Glow */}
+        <div className="absolute -left-1/4 top-0 h-96 w-96 rounded-full bg-orange-500/10 blur-[130px] pointer-events-none" />
+        <div className="absolute right-0 top-1/4 h-96 w-96 rounded-full bg-amber-500/5 blur-[140px] pointer-events-none" />
+
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
             
-            {/* Studio Location & Machine Chips */}
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5 text-xs text-neutral-400">
-              <span className="rounded-xl bg-neutral-900/90 border border-neutral-800 px-3.5 py-2 flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Ampang Studio · Queue Open</span>
-              </span>
-              <span className="rounded-xl bg-neutral-900/90 border border-neutral-800 px-3.5 py-2 flex items-center gap-2">
-                <Zap className="h-3.5 w-3.5 text-orange-400" />
-                <span>Rapid Prototyping (24–48h)</span>
-              </span>
-              <span className="rounded-xl bg-neutral-900/90 border border-neutral-800 px-3.5 py-2 flex items-center gap-2">
-                <Layers className="h-3.5 w-3.5 text-neutral-300" />
-                <span>PLA · PETG · TPU · Carbon</span>
-              </span>
+            {/* Left Column: Studio Pitch & Original Welcome Copy */}
+            <div className="lg:col-span-7 flex flex-col justify-center text-center lg:text-left">
+              
+              {/* Studio Status Badge */}
+              <div className="mb-6 inline-flex self-center lg:self-start items-center gap-2 rounded-full border border-orange-500/30 bg-orange-500/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-orange-300">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>📍 Ampang, Selangor · Creality Ender-3 V3 SE Studio · Queue Open</span>
+              </div>
+
+              {/* Original Bold Headline with Razor-Sharp Typography */}
+              <h1 className="mb-6 text-4xl font-black leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl text-white uppercase">
+                Precision{' '}
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-orange-400 via-amber-300 to-orange-400">
+                  3D Printing
+                </span>{' '}
+                &amp; Custom Models
+              </h1>
+
+              {/* Original Beloved Welcome Copy */}
+              <p className="mb-8 max-w-xl text-base sm:text-lg leading-relaxed text-neutral-300 mx-auto lg:mx-0">
+                Welcome to <strong className="text-white font-bold">3MF Studio</strong>. We fabricate your digital 3D models into durable, physical prototypes and figures. Specializing in crisp <strong className="text-white font-bold">PLA</strong>, high-strength <strong className="text-white font-bold">PETG</strong>, and flexible <strong className="text-white font-bold">TPU</strong>.
+              </p>
+
+              {/* Primary Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3.5 justify-center lg:justify-start">
+                <a
+                  href="#quote"
+                  className="inline-flex items-center justify-center gap-2.5 rounded-xl bg-orange-500 px-7 py-4 text-sm font-bold text-neutral-950 shadow-xl shadow-orange-500/20 transition duration-200 hover:bg-orange-400 hover:shadow-orange-500/35 hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  <Upload className="h-4 w-4" />
+                  <span>Instant 3D Quote &amp; Preview</span>
+                </a>
+                <Link
+                  href="/browse/products"
+                  className="inline-flex items-center justify-center gap-2.5 rounded-xl border border-neutral-800 bg-neutral-900/80 px-7 py-4 text-sm font-semibold text-neutral-200 transition duration-200 hover:border-neutral-700 hover:bg-neutral-800 hover:text-white hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  <ShoppingBag className="h-4 w-4" />
+                  <span>Browse Shop Catalog</span>
+                </Link>
+              </div>
+
+              {/* Technical Machine Highlights Chips */}
+              <div className="mt-10 flex flex-wrap items-center justify-center lg:justify-start gap-2.5 text-xs text-neutral-400">
+                <span className="rounded-xl bg-neutral-900/90 border border-neutral-800 px-3.5 py-2 flex items-center gap-2">
+                  <Zap className="h-3.5 w-3.5 text-orange-400" />
+                  <span>Direct-Drive Sprite Extruder</span>
+                </span>
+                <span className="rounded-xl bg-neutral-900/90 border border-neutral-800 px-3.5 py-2 flex items-center gap-2">
+                  <Layers className="h-3.5 w-3.5 text-orange-400" />
+                  <span>220 × 220 × 250 mm Volume</span>
+                </span>
+                <span className="rounded-xl bg-neutral-900/90 border border-neutral-800 px-3.5 py-2 flex items-center gap-2">
+                  <Truck className="h-3.5 w-3.5 text-orange-400" />
+                  <span>Local Pickup &amp; Nationwide Courier</span>
+                </span>
+              </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <a
-                href="#quote"
-                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 rounded-xl bg-white px-7 py-3 text-xs font-bold uppercase tracking-wider text-black shadow-lg transition hover:bg-neutral-200 active:scale-98"
-              >
-                <Upload className="h-4 w-4" />
-                <span>Instant Slicing Quote</span>
-              </a>
-              <Link
-                href="/browse/products"
-                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-7 py-3 text-xs font-bold uppercase tracking-wider text-neutral-200 transition hover:border-neutral-700 hover:text-white active:scale-98"
-              >
-                <ShoppingBag className="h-4 w-4" />
-                <span>Shop Designs</span>
-              </Link>
+            {/* Right Column: Authentic 3D Calibration Die Showcase */}
+            <div className="lg:col-span-5 relative flex items-center justify-center">
+              {/* Radial Backdrop Spotlight */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-72 h-72 sm:w-96 sm:h-96 rounded-full bg-gradient-to-tr from-orange-500/10 via-amber-400/5 to-transparent blur-3xl" />
+              </div>
+
+              {/* Centered Die Container with Floating Badges */}
+              <div className="relative flex flex-col items-center">
+                {/* Top Badge: 3 Pips Apex */}
+                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/90 px-3.5 py-1 text-[11px] font-mono uppercase tracking-wider text-neutral-300 shadow-xl backdrop-blur-md">
+                  <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                  <span>3 Pips Apex · ±0.1mm Accuracy</span>
+                </div>
+
+                {/* 3D Calibration Die Mark (512x512 with pristine alpha) */}
+                <div className="relative w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96 flex items-center justify-center">
+                  <Image
+                    src="/brand/dice-cube-transparent.png"
+                    alt="3MF Studio Calibration Die"
+                    width={420}
+                    height={420}
+                    priority
+                    unoptimized
+                    className="object-contain drop-shadow-[0_30px_50px_rgba(0,0,0,0.9)] transition-transform duration-500 hover:scale-105"
+                  />
+                </div>
+
+                {/* Bottom Spec Badge Lockup */}
+                <div className="mt-3 flex items-center gap-2 text-[11px] font-mono text-neutral-400">
+                  <span className="rounded-lg bg-neutral-900/80 border border-neutral-800 px-2.5 py-1">
+                    M &amp; F Facets
+                  </span>
+                  <span>·</span>
+                  <span className="rounded-lg bg-neutral-900/80 border border-neutral-800 px-2.5 py-1 text-emerald-400">
+                    100% Infill Ready
+                  </span>
+                </div>
+              </div>
             </div>
 
           </div>
