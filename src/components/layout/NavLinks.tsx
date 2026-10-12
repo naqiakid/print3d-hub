@@ -13,18 +13,23 @@ const links = [
 export default function NavLinks() {
   const pathname = usePathname()
   return (
-    <nav className="hidden items-center gap-6 sm:flex">
-      {links.map(({ href, label }) => (
-        <Link
-          key={href}
-          href={href}
-          className={`text-sm font-medium transition-colors hover:text-orange-500 ${
-            pathname.startsWith(href) ? 'text-orange-500' : 'text-slate-600'
-          }`}
-        >
-          {label}
-        </Link>
-      ))}
+    <nav className="hidden items-center gap-7 sm:flex">
+      {links.map(({ href, label }) => {
+        const isActive = pathname === href || (href !== '/' && pathname.startsWith(href))
+        return (
+          <Link
+            key={href}
+            href={href}
+            className={`text-xs uppercase tracking-[0.15em] font-medium transition-all duration-200 ${
+              isActive
+                ? 'text-white font-semibold'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            {label}
+          </Link>
+        )
+      })}
     </nav>
   )
 }

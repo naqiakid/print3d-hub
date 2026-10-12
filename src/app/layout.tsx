@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import Navbar from '@/components/Navbar'
+import StudioLogo from '@/components/layout/StudioLogo'
 import ReferralTracker from '@/components/ReferralTracker'
 import { Analytics } from '@vercel/analytics/react'
 import { SpeedInsights } from '@vercel/speed-insights/next'
@@ -45,39 +46,33 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col bg-slate-50 text-slate-900">
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}>
+      <body className="flex min-h-full flex-col bg-neutral-950 text-neutral-100 antialiased selection:bg-orange-500/25 selection:text-orange-200">
         <ReferralTracker />
         <Navbar />
         <main className="flex-1">{children}</main>
         
-        {/* Footer */}
-        <footer className="mt-auto border-t border-slate-200 bg-white py-10">
+        {/* ── Dark Luxury Footer (Website Footer Monochrome Guidelines) ── */}
+        <footer className="mt-auto border-t border-neutral-900 bg-neutral-950 text-neutral-300 py-14">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-10">
+              
               {/* Col 1: Brand & Bio */}
-              <div className="md:col-span-2 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-600 text-white font-black text-xs">
-                    3D
-                  </span>
-                  <span className="font-bold text-slate-900 tracking-tight text-base">
-                    3MF Studio
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 leading-relaxed max-w-sm">
-                  Personal 3D printing studio based in Ampang, Selangor. Custom prototyping, engineering parts, and ready-to-buy catalog models delivered nationwide across Malaysia.
+              <div className="md:col-span-2 space-y-4">
+                <StudioLogo size="md" variant="flat" />
+                <p className="text-xs text-neutral-400 leading-relaxed max-w-sm">
+                  Personal additive manufacturing studio based in Ampang, Selangor. Specializing in rapid prototyping, functional engineering parts, and custom 3MF/STL models with nationwide delivery.
                 </p>
-                <div className="pt-2 flex flex-col gap-1.5">
+                <div className="pt-2 flex flex-col gap-2">
                   <div>
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Studio Accepting Orders · Ampang, Selangor
+                    <span className="inline-flex items-center gap-2 rounded-full bg-neutral-900 border border-neutral-800 px-3 py-1 text-[11px] font-semibold text-neutral-200">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                      Studio Active &amp; Queue Open · Ampang, Selangor
                     </span>
                   </div>
-                  <div className="text-xs text-slate-500 flex items-center gap-1.5 pt-0.5">
+                  <div className="text-xs text-neutral-400 flex items-center gap-2 pt-0.5">
                     <span>✉️</span>
-                    <a href="mailto:3mfstudio@gmail.com" className="font-medium text-slate-700 hover:text-orange-600 transition underline underline-offset-2">
+                    <a href="mailto:3mfstudio@gmail.com" className="font-medium text-neutral-200 hover:text-orange-400 transition underline underline-offset-4">
                       3mfstudio@gmail.com
                     </a>
                   </div>
@@ -85,39 +80,39 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
 
               {/* Col 2: Navigation Links */}
-              <div className="space-y-2.5 text-xs text-slate-600">
-                <p className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">Quick Links</p>
+              <div className="space-y-3 text-xs text-neutral-400">
+                <p className="font-bold text-white uppercase tracking-[0.2em] text-[11px]">Explore</p>
                 <ul className="space-y-2">
-                  <li><a href="/" className="hover:text-orange-600 transition">Instant Price Estimator</a></li>
-                  <li><a href="/catalog" className="hover:text-orange-600 transition">Ready-to-Order Catalog</a></li>
-                  <li><a href="/request" className="hover:text-orange-600 transition">Request Custom Print</a></li>
-                  <li><a href="/track" className="hover:text-orange-600 transition">Track Your Order</a></li>
+                  <li><a href="/#quote" className="hover:text-white transition">Instant 3D Slicing &amp; Quote</a></li>
+                  <li><a href="/browse/products" className="hover:text-white transition">Ready-to-Print Shop</a></li>
+                  <li><a href="/#materials" className="hover:text-white transition">Supported Materials &amp; Specs</a></li>
+                  <li><a href="/track" className="hover:text-white transition">Track Active Print Order</a></li>
                 </ul>
               </div>
 
-              {/* Col 3: Compliance & Logistics */}
-              <div className="space-y-2.5 text-xs text-slate-600">
-                <p className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">Customer &amp; Legal</p>
+              {/* Col 3: Customer & Payment */}
+              <div className="space-y-3 text-xs text-neutral-400">
+                <p className="font-bold text-white uppercase tracking-[0.2em] text-[11px]">Customer &amp; Legal</p>
                 <ul className="space-y-2">
-                  <li><a href="/terms" className="hover:text-orange-600 transition">Terms of Service</a></li>
-                  <li><a href="/privacy" className="hover:text-orange-600 transition">Privacy Policy (PDPA)</a></li>
-                  <li><a href="/refund-policy" className="hover:text-orange-600 transition">Refund &amp; Reprint Policy</a></li>
+                  <li><a href="/terms" className="hover:text-white transition">Terms of Service</a></li>
+                  <li><a href="/privacy" className="hover:text-white transition">Privacy Policy (PDPA)</a></li>
+                  <li><a href="/refund-policy" className="hover:text-white transition">Reprint &amp; Guarantee Policy</a></li>
                 </ul>
                 <div className="pt-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Supported Payments</p>
-                  <div className="flex flex-wrap gap-1 text-[10px] font-medium text-slate-600">
-                    <span className="rounded bg-slate-100 px-2 py-0.5 border border-slate-200">DuitNow QR</span>
-                    <span className="rounded bg-slate-100 px-2 py-0.5 border border-slate-200">FPX Online Banking</span>
-                    <span className="rounded bg-slate-100 px-2 py-0.5 border border-slate-200">GrabPay</span>
-                    <span className="rounded bg-slate-100 px-2 py-0.5 border border-slate-200">Visa / Mastercard</span>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500 mb-1.5">Payment Channels</p>
+                  <div className="flex flex-wrap gap-1 text-[10px] font-medium text-neutral-300">
+                    <span className="rounded-md bg-neutral-900 px-2 py-0.5 border border-neutral-800">DuitNow QR</span>
+                    <span className="rounded-md bg-neutral-900 px-2 py-0.5 border border-neutral-800">FPX Online</span>
+                    <span className="rounded-md bg-neutral-900 px-2 py-0.5 border border-neutral-800">GrabPay</span>
+                    <span className="rounded-md bg-neutral-900 px-2 py-0.5 border border-neutral-800">Card</span>
                   </div>
                 </div>
                 <div className="pt-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Domestic Couriers</p>
-                  <div className="flex flex-wrap gap-1 text-[10px] font-medium text-slate-600">
-                    <span className="rounded bg-slate-100 px-2 py-0.5 border border-slate-200">J&amp;T Express</span>
-                    <span className="rounded bg-slate-100 px-2 py-0.5 border border-slate-200">Pos Laju</span>
-                    <span className="rounded bg-slate-100 px-2 py-0.5 border border-slate-200">Ninja Van</span>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500 mb-1.5">Dispatch Couriers</p>
+                  <div className="flex flex-wrap gap-1 text-[10px] font-medium text-neutral-300">
+                    <span className="rounded-md bg-neutral-900 px-2 py-0.5 border border-neutral-800">J&amp;T Express</span>
+                    <span className="rounded-md bg-neutral-900 px-2 py-0.5 border border-neutral-800">Pos Laju</span>
+                    <span className="rounded-md bg-neutral-900 px-2 py-0.5 border border-neutral-800">Runner</span>
                   </div>
                 </div>
               </div>
@@ -125,13 +120,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
 
             {/* Bottom Bar */}
-            <div className="border-t border-slate-100 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
-              <p>© {new Date().getFullYear()} 3MF Studio. All rights reserved.</p>
+            <div className="border-t border-neutral-900 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
+              <p>© {new Date().getFullYear()} 3MF Studio. Precision Additive Manufacturing.</p>
               <div className="flex items-center gap-3">
                 <span>Handcrafted with precision in Ampang, Malaysia</span>
                 <span>•</span>
-                <a href="/admin" className="hover:text-slate-600 transition flex items-center gap-1">
-                  <span>Staff Access</span>
+                <a href="/admin" className="hover:text-neutral-300 transition flex items-center gap-1">
+                  <span>Staff Portal</span>
                   <span className="text-[10px]">🔒</span>
                 </a>
               </div>

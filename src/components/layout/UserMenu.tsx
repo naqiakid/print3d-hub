@@ -20,82 +20,77 @@ export default function UserMenu({ email }: { email: string }) {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1.5 text-sm font-medium text-orange-700 hover:bg-orange-100 transition"
+        className="flex items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-xs font-medium text-neutral-200 hover:border-neutral-700 hover:bg-neutral-850 transition"
       >
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-xs font-bold text-white">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-black text-black">
           {initial}
         </span>
-        <ChevronDown className={`h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-3 w-3 text-neutral-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
-            <div className="border-b border-slate-100 px-3 py-2.5">
-              <p className="text-xs text-slate-400">Signed in as</p>
-              <p className="truncate text-sm font-medium text-slate-700">{email}</p>
+          <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-2xl border border-neutral-800 bg-neutral-950 py-1.5 shadow-2xl backdrop-blur-md">
+            <div className="border-b border-neutral-900 px-3.5 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Staff Account</p>
+              <p className="truncate text-xs font-medium text-neutral-200 mt-0.5">{email}</p>
             </div>
 
-            <Link
-              href="/dashboard"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
-            >
-              <LayoutDashboard className="h-4 w-4 text-slate-400" /> Dashboard
-            </Link>
-            <Link
-              href="/dashboard/listing"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
-            >
-              <Store className="h-4 w-4 text-slate-400" /> My Listing
-            </Link>
-            <Link
-              href="/dashboard/catalog"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
-            >
-              <ShoppingBag className="h-4 w-4 text-slate-400" /> My Products
-            </Link>
-            <Link
-              href="/dashboard/equipment"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
-            >
-              <Wrench className="h-4 w-4 text-slate-400" /> Equipment
-            </Link>
-            <Link
-              href="/dashboard/affiliates"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
-            >
-              <Users className="h-4 w-4 text-slate-400" /> Affiliates
-            </Link>
-            <Link
-              href="/dashboard/account"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
-            >
-              <Settings className="h-4 w-4 text-slate-400" /> Account settings
-            </Link>
-            <Link
-              href="/dashboard/help"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
-            >
-              <HelpCircle className="h-4 w-4 text-slate-400" /> Help & Guide
-            </Link>
+            <div className="py-1">
+              <Link
+                href="/dashboard"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-neutral-300 hover:bg-neutral-900 hover:text-white transition"
+              >
+                <LayoutDashboard className="h-3.5 w-3.5 text-neutral-400" /> Console Dashboard
+              </Link>
+              <Link
+                href="/dashboard/listing"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-neutral-300 hover:bg-neutral-900 hover:text-white transition"
+              >
+                <Store className="h-3.5 w-3.5 text-neutral-400" /> Studio Profile
+              </Link>
+              <Link
+                href="/dashboard/catalog"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-neutral-300 hover:bg-neutral-900 hover:text-white transition"
+              >
+                <ShoppingBag className="h-3.5 w-3.5 text-neutral-400" /> Catalog Inventory
+              </Link>
+              <Link
+                href="/dashboard/equipment"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-neutral-300 hover:bg-neutral-900 hover:text-white transition"
+              >
+                <Wrench className="h-3.5 w-3.5 text-neutral-400" /> Ender-3 Equipment
+              </Link>
+              <Link
+                href="/dashboard/account"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-neutral-300 hover:bg-neutral-900 hover:text-white transition"
+              >
+                <Settings className="h-3.5 w-3.5 text-neutral-400" /> Studio Settings
+              </Link>
+              <Link
+                href="/dashboard/help"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-neutral-300 hover:bg-neutral-900 hover:text-white transition"
+              >
+                <HelpCircle className="h-3.5 w-3.5 text-neutral-400" /> Help &amp; Slicing Guide
+              </Link>
+            </div>
 
-            <div className="my-1 border-t border-slate-100" />
+            <div className="my-1 border-t border-neutral-900" />
 
             <button
               onClick={handleLogout}
               disabled={isPending}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+              className="flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-red-400 hover:bg-red-950/30 transition disabled:opacity-50"
             >
-              <LogOut className="h-4 w-4" />
-              {isPending ? 'Logging out…' : 'Log out'}
+              <LogOut className="h-3.5 w-3.5" />
+              {isPending ? 'Signing out…' : 'Sign out'}
             </button>
           </div>
         </>

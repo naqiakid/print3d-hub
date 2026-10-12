@@ -15,16 +15,16 @@ type RequestRow = {
 }
 
 const STATUS_COLORS: Record<RequestStatus, string> = {
-  new:       'bg-slate-100 text-slate-600',
-  quoted:    'bg-amber-100 text-amber-700',
-  accepted:  'bg-blue-100 text-blue-700',
-  printing:  'bg-indigo-100 text-indigo-700',
-  done:      'bg-green-100 text-green-700',
-  shipping:  'bg-blue-100 text-blue-700',
-  collected: 'bg-green-100 text-green-700',
-  reviewed:  'bg-green-100 text-green-700',
-  declined:  'bg-red-100 text-red-600',
-  cancelled: 'bg-slate-100 text-slate-500',
+  new:       'border border-neutral-700 bg-neutral-900 text-neutral-300',
+  quoted:    'border border-amber-500/30 bg-amber-950/40 text-amber-300',
+  accepted:  'border border-blue-500/30 bg-blue-950/40 text-blue-300',
+  printing:  'border border-purple-500/30 bg-purple-950/40 text-purple-300',
+  done:      'border border-emerald-500/30 bg-emerald-950/40 text-emerald-300',
+  shipping:  'border border-cyan-500/30 bg-cyan-950/40 text-cyan-300',
+  collected: 'border border-emerald-500/30 bg-emerald-950/40 text-emerald-300',
+  reviewed:  'border border-emerald-500/30 bg-emerald-950/40 text-emerald-300',
+  declined:  'border border-rose-500/30 bg-rose-950/40 text-rose-300',
+  cancelled: 'border border-neutral-800 bg-neutral-950 text-neutral-500',
 }
 
 export default async function TrackLookupPage({
@@ -50,14 +50,14 @@ export default async function TrackLookupPage({
   }
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-12 sm:px-6">
+    <div className="mx-auto max-w-lg px-4 py-16 sm:px-6">
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100">
-          <Package className="h-6 w-6 text-orange-500" />
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-neutral-800 bg-neutral-900 text-orange-400 shadow-xl">
+          <Package className="h-6 w-6" />
         </div>
-        <h1 className="text-2xl font-bold text-slate-900">Track your orders</h1>
-        <p className="mt-2 text-sm text-slate-500">
-          Enter the email address you used when placing your request.
+        <h1 className="text-2xl font-bold tracking-tight text-white">Track Order Status</h1>
+        <p className="mt-1.5 text-xs text-neutral-400">
+          Enter the email address you used when requesting your 3D print quote.
         </p>
       </div>
 
@@ -68,59 +68,59 @@ export default async function TrackLookupPage({
           required
           defaultValue={email}
           placeholder="your@email.com"
-          className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition"
+          className="flex-1 rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-xs text-white placeholder:text-neutral-500 focus:border-neutral-600 focus:bg-neutral-950 focus:outline-none focus:ring-1 focus:ring-neutral-600 transition"
         />
         <button
           type="submit"
-          className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 transition"
+          className="flex items-center gap-1.5 rounded-xl bg-white px-5 py-2.5 text-xs font-semibold text-neutral-950 hover:bg-neutral-200 transition cursor-pointer shadow-lg"
         >
-          <Search className="h-4 w-4" />
+          <Search className="h-3.5 w-3.5" />
           Look up
         </button>
       </form>
 
       {queried && requests.length === 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-6 py-10 text-center">
-          <p className="text-sm font-medium text-slate-700">No orders found</p>
-          <p className="mt-1 text-xs text-slate-400">
-            No requests submitted with <span className="font-medium">{trimmedEmail}</span>.
+        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 px-6 py-10 text-center">
+          <p className="text-xs font-medium text-neutral-300">No orders found</p>
+          <p className="mt-1 text-[11px] text-neutral-500">
+            No print requests associated with <span className="font-mono text-neutral-400">{trimmedEmail}</span>.
             <br />
-            Check you used the same email when placing your order.
+            Ensure you entered the exact email address used at submission.
           </p>
         </div>
       )}
 
       {requests.length > 0 && (
         <div className="space-y-3">
-          <p className="text-xs text-slate-400">
-            {requests.length} order{requests.length !== 1 ? 's' : ''} for {trimmedEmail}
+          <p className="text-[11px] font-mono uppercase tracking-wider text-neutral-500">
+            {requests.length} order{requests.length !== 1 ? 's' : ''} found
           </p>
           {requests.map((req) => (
             <Link
               key={req.id}
               href={`/track/${req.id}`}
-              className="block rounded-2xl border border-slate-200 bg-white p-4 hover:border-orange-300 hover:shadow-sm transition"
+              className="block rounded-2xl border border-neutral-800 bg-neutral-900/70 p-4 hover:border-neutral-700 hover:bg-neutral-900 transition shadow-sm"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-xs text-slate-400 mb-0.5">
-                    {req.printers?.name ?? 'Unknown printer'} ·{' '}
+                  <p className="text-[11px] font-mono text-neutral-400 mb-1">
+                    {req.printers?.name ?? 'Studio Core'} ·{' '}
                     {new Date(req.created_at).toLocaleDateString('en-MY', {
                       day: 'numeric', month: 'short', year: 'numeric',
                     })}
                   </p>
-                  <p className="text-sm font-medium text-slate-900 line-clamp-1">{req.description}</p>
+                  <p className="text-xs font-medium text-white line-clamp-1">{req.description}</p>
                   {req.quoted_price && (
-                    <p className="mt-0.5 text-xs text-slate-500">Quote: {formatRM(req.quoted_price)}</p>
+                    <p className="mt-1 text-[11px] font-mono text-neutral-300">Quote: {formatRM(req.quoted_price)}</p>
                   )}
                 </div>
                 <span
-                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[req.status as RequestStatus] ?? 'bg-slate-100 text-slate-600'}`}
+                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-mono uppercase tracking-wider ${STATUS_COLORS[req.status as RequestStatus] ?? 'border border-neutral-800 bg-neutral-900 text-neutral-400'}`}
                 >
                   {getStatusLabel(req.status as RequestStatus, req.fulfillment) ?? req.status}
                 </span>
               </div>
-              <p className="mt-2 text-xs font-medium text-orange-500">View details →</p>
+              <p className="mt-2 text-[11px] font-mono text-orange-400 hover:underline">View live details →</p>
             </Link>
           ))}
         </div>

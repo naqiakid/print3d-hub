@@ -1,9 +1,14 @@
 import { ImageResponse } from 'next/og'
+import fs from 'fs'
+import path from 'path'
 
 export const size = { width: 180, height: 180 }
 export const contentType = 'image/png'
 
 export default function AppleIcon() {
+  const iconBuffer = fs.readFileSync(path.join(process.cwd(), 'public/brand/dice-cube-square.png'))
+  const base64 = `data:image/png;base64,${iconBuffer.toString('base64')}`
+
   return new ImageResponse(
     (
       <div
@@ -13,15 +18,19 @@ export default function AppleIcon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#f97316',
-          borderRadius: 40,
+          background: '#09090b',
+          borderRadius: 36,
+          padding: 16,
+          overflow: 'hidden',
         }}
       >
-        <svg width="108" height="108" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-          <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6" />
-          <rect x="6" y="14" width="12" height="8" rx="1" />
-        </svg>
+        {/* Exact 3D cube render from user's asset */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={base64}
+          alt="3MF Studio Icon"
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+        />
       </div>
     ),
     { ...size },

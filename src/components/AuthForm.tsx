@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 const inputClass =
-  'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition'
+  'w-full rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:border-neutral-600 focus:bg-neutral-950 focus:outline-none focus:ring-1 focus:ring-neutral-600 transition'
 
 export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
   const router = useRouter()
@@ -54,7 +54,7 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     <form onSubmit={handleSubmit} className="space-y-4">
       {mode === 'signup' && (
         <div>
-          <label htmlFor="name" className="mb-1 block text-xs font-medium text-slate-600">
+          <label htmlFor="name" className="mb-1 block text-xs font-mono uppercase tracking-wider text-neutral-400">
             Full name
           </label>
           <input id="name" name="name" type="text" required placeholder="Ahmad Farid" className={inputClass} />
@@ -62,14 +62,14 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
       )}
 
       <div>
-        <label htmlFor="email" className="mb-1 block text-xs font-medium text-slate-600">
-          Email
+        <label htmlFor="email" className="mb-1 block text-xs font-mono uppercase tracking-wider text-neutral-400">
+          Email address
         </label>
-        <input id="email" name="email" type="email" required placeholder="you@example.com" className={inputClass} />
+        <input id="email" name="email" type="email" required placeholder="you@3mfstudio.com" className={inputClass} />
       </div>
 
       <div>
-        <label htmlFor="password" className="mb-1 block text-xs font-medium text-slate-600">
+        <label htmlFor="password" className="mb-1 block text-xs font-mono uppercase tracking-wider text-neutral-400">
           Password
         </label>
         <input
@@ -83,20 +83,20 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         />
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
+      {error && <p className="rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-xs text-red-300">{error}</p>}
 
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-60"
+        className="w-full rounded-xl bg-white py-3 text-sm font-semibold text-neutral-950 transition hover:bg-neutral-200 disabled:opacity-60 cursor-pointer shadow-lg active:scale-98"
       >
         {pending
           ? mode === 'login'
-            ? 'Logging in...'
-            : 'Creating account...'
+            ? 'Authenticating...'
+            : 'Registering...'
           : mode === 'login'
-          ? 'Log in'
-          : 'Create account'}
+          ? 'Sign in to Console'
+          : 'Create Studio Account'}
       </button>
     </form>
   )
