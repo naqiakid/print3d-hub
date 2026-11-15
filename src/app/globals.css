@@ -30,3 +30,20 @@ body {
   background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
   background-size: 16px 16px;
 }
+
+/* Dashboard Theme Scoping - ensures crisp dark-slate text & controls on light cards */
+.dashboard-theme {
+  color-scheme: light;
+  color: #0f172a;
+}
+
+.dashboard-theme input:not([type="checkbox"]):not([type="radio"]),
+.dashboard-theme textarea,
+.dashboard-theme select {
+  color: #0f172a !important;
+}
+
+.dashboard-theme input::placeholder,
+.dashboard-theme textarea::placeholder {
+  color: #94a3b8 !important;
+}

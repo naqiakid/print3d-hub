@@ -17,7 +17,7 @@ export default async function AccountPage() {
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <Link
         href="/dashboard"
-        className="mb-8 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
+        className="mb-8 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition font-medium"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
       </Link>
@@ -28,12 +28,12 @@ export default async function AccountPage() {
       <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
         <h2 className="font-semibold text-slate-900">Profile</h2>
         <div>
-          <p className="text-xs text-slate-400">Email address</p>
-          <p className="mt-0.5 text-sm font-medium text-slate-900">{user.email}</p>
+          <p className="text-xs text-slate-500">Email address</p>
+          <p className="mt-0.5 text-sm font-semibold text-slate-900">{user.email}</p>
         </div>
         <div>
-          <p className="text-xs text-slate-400">Member since</p>
-          <p className="mt-0.5 text-sm font-medium text-slate-900">{createdAt}</p>
+          <p className="text-xs text-slate-500">Member since</p>
+          <p className="mt-0.5 text-sm font-semibold text-slate-900">{createdAt}</p>
         </div>
       </div>
 

@@ -63,13 +63,13 @@ export default async function AffiliatesPage() {
       <div className="mb-8">
         <Link
           href="/dashboard"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition font-medium"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
         </Link>
         <h1 className="text-2xl font-bold text-slate-900">Affiliate Program</h1>
-        <p className="mt-1 text-sm text-slate-500">{shop.name}</p>
-        <p className="mt-3 text-sm text-slate-500 max-w-2xl">
+        <p className="mt-1 text-sm text-slate-600 font-medium">{shop.name}</p>
+        <p className="mt-3 text-sm text-slate-600 max-w-2xl">
           Generate custom promo codes for designers, creators, or promoters. 
           When customers order using their code, they get a discount and the promoter earns a commission.
         </p>

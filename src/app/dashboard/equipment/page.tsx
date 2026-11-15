@@ -61,12 +61,12 @@ export default async function EquipmentPage() {
       <div className="mb-8">
         <Link
           href="/dashboard"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-655 transition"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition font-medium"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
         </Link>
         <h1 className="text-2xl font-bold text-slate-900">Equipment &amp; Filaments</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-600 font-medium">
           Manage your active printers, profiles, and material inventory stock.
         </p>
       </div>

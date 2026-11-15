@@ -137,32 +137,32 @@ export default async function DashboardPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/dashboard/materials"
-            className="rounded-lg border border-orange-200 bg-orange-50/50 px-3 py-1.5 text-sm font-bold text-orange-700 hover:bg-orange-100/70 transition text-center flex-1 sm:flex-initial"
+            className="rounded-lg border border-orange-300 bg-orange-100/60 px-3 py-1.5 text-sm font-bold text-orange-800 hover:bg-orange-200/80 transition text-center flex-1 sm:flex-initial"
           >
             🧵 Materials &amp; Spools
           </Link>
           <Link
             href="/dashboard/catalog"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition text-center flex-1 sm:flex-initial"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition text-center flex-1 sm:flex-initial shadow-xs"
           >
             🛍️ Catalog
           </Link>
           <Link
             href="/dashboard/equipment"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition text-center flex-1 sm:flex-initial"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition text-center flex-1 sm:flex-initial shadow-xs"
           >
             ⚙️ Machine Specs
           </Link>
           <Link
             href="/dashboard/affiliates"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition text-center flex-1 sm:flex-initial"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition text-center flex-1 sm:flex-initial shadow-xs"
           >
             🏷️ Promo Codes
           </Link>
           <Link
             href="/request"
             target="_blank"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition text-center flex-1 sm:flex-initial"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition text-center flex-1 sm:flex-initial shadow-xs"
           >
             View Request Page ↗
           </Link>

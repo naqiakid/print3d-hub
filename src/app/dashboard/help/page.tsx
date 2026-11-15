@@ -71,13 +71,13 @@ export default async function HelpPage() {
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
       <Link
         href="/dashboard"
-        className="mb-8 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
+        className="mb-8 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition font-medium"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
       </Link>
 
       <h1 className="mb-2 text-2xl font-bold text-slate-900">Help & Guide</h1>
-      <p className="mb-8 text-sm text-slate-500">
+      <p className="mb-8 text-sm text-slate-600">
         A quick walkthrough of everything on your dashboard.
       </p>
 

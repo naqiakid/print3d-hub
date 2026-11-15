@@ -54,13 +54,13 @@ export default async function PriceCalculatorPage() {
       <div className="mb-8">
         <Link
           href="/dashboard"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition font-medium"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
         </Link>
         <h1 className="text-2xl font-bold text-slate-900">Price Calculator</h1>
-        <p className="mt-1 text-sm text-slate-500">{shop.name}</p>
-        <p className="mt-3 text-sm text-slate-500 max-w-lg">
+        <p className="mt-1 text-sm text-slate-600 font-medium">{shop.name}</p>
+        <p className="mt-3 text-sm text-slate-600 max-w-lg">
           Upload a G-code file for an accurate cost breakdown, or choose size and material for a quick rough estimate.
         </p>
       </div>

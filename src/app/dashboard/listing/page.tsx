@@ -56,7 +56,7 @@ export default async function ListingPage() {
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
       <Link
         href="/dashboard"
-        className="mb-8 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
+        className="mb-8 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition font-medium"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
       </Link>

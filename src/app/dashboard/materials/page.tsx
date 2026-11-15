@@ -37,7 +37,7 @@ export default async function MaterialsDashboardPage() {
         <div>
           <Link
             href="/dashboard"
-            className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-600 transition"
+            className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
           </Link>
@@ -49,7 +49,7 @@ export default async function MaterialsDashboardPage() {
               {inStockCount} Active Colors
             </span>
           </div>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-600">
             Control which filaments and color swatches appear live on your public 3D configurator and request forms.
           </p>
         </div>

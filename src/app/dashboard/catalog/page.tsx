@@ -64,7 +64,7 @@ export default async function CatalogPage() {
       <div className="mb-6">
         <Link
           href="/dashboard"
-          className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition"
+          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition font-medium"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
         </Link>
